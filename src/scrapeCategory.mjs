@@ -518,6 +518,7 @@ function parseDiscountPercentFromPpi(ppi) {
     const t = String(fmt)
       .trim()
       .replace(/\s/g, "")
+      .replace(/^[−-]/, "")
       .replace(",", ".");
     const m = t.match(/^(\d+\.?\d*)\s*%$/) || t.match(/(\d+\.?\d*)\s*%/);
     if (m) {
@@ -544,6 +545,58 @@ function parseDiscountPercentFromPpi(ppi) {
   return null;
 }
 
+/** Tenta extrair valor numérico de strings "R$ 59,90" / "BRL 86.00" usadas no feed OEC. */
+function parseBrlishMoneyString(s) {
+  if (s == null) {
+    return null;
+  }
+  if (typeof s === "number" && !Number.isNaN(s)) {
+    return s;
+  }
+  if (typeof s !== "string") {
+    return null;
+  }
+  const t = s.replace(/\s/g, "").replace(/\u00A0/g, "");
+  const m = t.match(/R\$?([0-9.]+,\d{1,2}|[0-9]+[.,]\d{1,2}|[0-9]+)(?!\d)/i);
+  if (m) {
+    const g = m[1];
+    const n =
+      g.includes(",") && !g.includes(".")
+        ? parseFloat(g.replace(/\./g, "").replace(",", "."))
+        : g.includes(".") && g.includes(",")
+          ? parseFloat(g.replace(/\./g, "").replace(",", "."))
+          : parseFloat(g.replace(",", "."));
+    if (!Number.isNaN(n) && n > 0) {
+      return n;
+    }
+  }
+  return null;
+}
+
+/**
+ * preço a partir de campos "format" (product_price_info / price_info) — muitas vezes batem com o card.
+ * @param {object | undefined} p
+ */
+function pickPriceFromFormatStrings(p) {
+  if (!p || typeof p !== "object") {
+    return null;
+  }
+  const keys = [
+    p.sale_format_price,
+    p.sale_price_format,
+    p.show_price,
+    p.format_price,
+    p.selling_price
+  ];
+  for (const v of keys) {
+    const n = parseBrlishMoneyString(v);
+    if (n != null) {
+      return n;
+    }
+  }
+  return null;
+}
+
 function extractImages(p) {
   const imgs = new Set();
   const pushUrl = (u) => {
@@ -565,6 +618,9 @@ function mergeProductLayers(rawIn) {
   if (o.product_info && typeof o.product_info === "object") o = { ...o, ...o.product_info };
   if (o.card && typeof o.card === "object") o = { ...o, ...o.card };
   if (o.product_meta && typeof o.product_meta === "object") o = { ...o, ...o.product_meta };
+  if (o.product_marketing_info && typeof o.product_marketing_info === "object") {
+    o = { ...o, ...o.product_marketing_info };
+  }
   return o;
 }
 
@@ -699,21 +755,33 @@ function normalizeItem(rawIn, categoriaUrl = "") {
       raw.sale_count_value
     );
 
+  const sku0 =
+    Array.isArray(raw.sku_list) && raw.sku_list[0] && typeof raw.sku_list[0] === "object"
+      ? raw.sku_list[0]
+      : null;
+  const fromFormatStr =
+    pickPriceFromFormatStrings(ppi) ??
+    pickPriceFromFormatStrings(raw) ??
+    (raw.price_info && typeof raw.price_info === "object" ? pickPriceFromFormatStrings(raw.price_info) : null);
   const price =
+    fromFormatStr ??
     pickNumber(
+      sku0?.sale_price,
+      sku0?.price,
       pm?.sale_price,
-      pm?.min_price,
       ppi?.sale_price,
-      ppi?.min_price,
       ppi?.price,
       ppi?.sale_price_decimal,
+      pm?.min_price,
+      ppi?.min_price,
       raw.price,
       raw.min_price,
       raw.sale_price,
       raw.salePrice,
       raw.price_info?.price,
       raw.price_info?.sale_price
-    ) ?? null;
+    ) ??
+    null;
 
   const originalPrice = pickNumber(
     ppi?.origin_price,
@@ -725,14 +793,15 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     raw.price_info?.origin_price
   );
 
-  let discountFromApi = pickNumber(
-    raw.discount,
-    raw.discount_rate,
-    ppi?.discount,
-    ppi?.rate_discount
-  );
+  // discount_format = badge do card; evitar ppi.discount "agregado" a sobrepor a percentagem de UI.
+  let discountFromApi = parseDiscountPercentFromPpi(ppi) ?? parseDiscountPercentFromPpi(raw);
   if (discountFromApi == null) {
-    discountFromApi = parseDiscountPercentFromPpi(ppi);
+    discountFromApi = pickNumber(
+      raw.discount,
+      raw.discount_rate,
+      ppi?.discount,
+      ppi?.rate_discount
+    );
   }
   let discountPercent = discountFromApi;
   if (
@@ -764,7 +833,7 @@ function normalizeItem(rawIn, categoriaUrl = "") {
         : null
     ) ?? id;
 
-  const discountFormatText = ppi?.discount_format != null ? String(ppi.discount_format).trim() : null;
+  const discountFormatText = pickString(ppi?.discount_format, raw?.discount_format);
 
   const product_url = pickProductPdpUrl(id, raw, categoriaUrl);
 
@@ -1021,6 +1090,28 @@ async function main() {
   const browser = await puppeteer.launch(launchOpts);
 
   const page = await browser.newPage();
+  // Perfil (userDataDir) restaura abas anteriores; a loja abre alvos com _blank. Ficar só com esta aba
+  // para a coleta; não mexe na lógica de rede nem no goto.
+  for (const p of await browser.pages()) {
+    if (p !== page) {
+      await p.close().catch(() => {});
+    }
+  }
+  page.on("popup", (popup) => {
+    void popup.close().catch(() => {});
+  });
+  browser.on("targetcreated", (target) => {
+    if (target.type() !== "page") {
+      return;
+    }
+    void (async () => {
+      const p = await target.page();
+      if (p && p !== page) {
+        await p.close().catch(() => {});
+      }
+    })();
+  });
+
   const netLogFile = path.join(OUT_DIR, "rede_ultima_execucao.log");
   if (netLog) {
     await fs.writeFile(netLogFile, `inicio ${new Date().toISOString()}\n${"=".repeat(80)}\n`, "utf8");
