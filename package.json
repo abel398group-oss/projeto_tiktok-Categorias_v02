@@ -1,0 +1,24 @@
+{
+  "name": "projeto-tiktok-categorias",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape:category": "node src/scrapeCategory.mjs",
+    "scrape:category:debug": "node src/scrapeCategory.mjs --debug",
+    "scrape:category:headed": "cross-env HEADED=1 node src/scrapeCategory.mjs --debug",
+    "scrape:category:longlogin": "cross-env HEADED=1 LOGIN_WAIT_MAX_MS=1800000 node src/scrapeCategory.mjs --debug",
+    "scrape:category:snap": "cross-env HEADED=1 JSON_SNAPSHOT=1 node src/scrapeCategory.mjs --debug",
+    "scrape:category:discover": "cross-env HEADED=1 DISCOVER=1 node src/scrapeCategory.mjs --debug",
+    "scrape:category:caca": "cross-env HEADED=1 HUNT_LOG=1 NET_LOG=1 node src/scrapeCategory.mjs --hunt",
+    "scrape:category:peek": "cross-env HEADED=1 ROUTER_PEEK_LEN=12000 node src/scrapeCategory.mjs --debug"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  },
+  "dependencies": {
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "puppeteer": "^24.6.0"
+  }
+}
