@@ -68,7 +68,7 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
     assert.equal(n?.discount_percent, 57);
   });
 
-  test("desconto do badge (discount_format) vence ppi.discount numérico divergente", () => {
+  test("com par riscado + preço, desconto = matemática do par (ignora ppi.discount 34)", () => {
     const n = normalizeItem(
       minimalProduct({
         product_price_info: {
@@ -83,7 +83,8 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
       brUrl
     );
     assert.equal(n?.price, 59.9);
-    assert.equal(n?.discount_percent, 25);
+    // Alinhado ao par (riscado + preço de venda), não ao badge 25%: (79.98-59.9)/79.98 ≈ 25,1
+    assert.equal(n?.discount_percent, 25.1);
   });
 
   test("string format_price vence min_price se existir", () => {
@@ -100,7 +101,8 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
       brUrl
     );
     assert.equal(n?.price, 49.99);
-    assert.equal(n?.discount_percent, 29);
+    // Par 49,99/69,99 — desconto implícito ≈ 28,6% (badge 29% do feed deixa de sobrepor a matemática)
+    assert.equal(n?.discount_percent, 28.6);
   });
 });
 

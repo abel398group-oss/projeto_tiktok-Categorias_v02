@@ -564,6 +564,40 @@ function parseDiscountPercentFromPpi(ppi) {
   return null;
 }
 
+/**
+ * Desconto % alinhado ao par (riscado, à vista) — 1 casa decimal, consistente com `price` e `original_price`.
+ * @param {number} original
+ * @param {number} sale
+ * @returns {number | null} ex. 25.1 ou null se não houver desconto por par
+ */
+function impliedPercentFromOrigAndSale(original, sale) {
+  if (original == null || sale == null || !Number.isFinite(original) || !Number.isFinite(sale)) {
+    return null;
+  }
+  if (original <= 0) {
+    return null;
+  }
+  if (sale > original) {
+    return null;
+  }
+  if (sale === original) {
+    return 0;
+  }
+  return Math.round(((original - sale) / original) * 1000) / 10;
+}
+
+/** "57%" / "25.1%" alinhado ao número (sem forçar badge do feed). */
+function formatDiscountPercentText(percent) {
+  if (percent == null || Number.isNaN(percent)) {
+    return null;
+  }
+  const r = Math.round(percent * 10) / 10;
+  if (r % 1 === 0) {
+    return `${r}%`;
+  }
+  return `${r.toFixed(1)}%`;
+}
+
 /** Tenta extrair valor numérico de strings "R$ 59,90" / "BRL 86.00" usadas no feed OEC. */
 function parseBrlishMoneyString(s) {
   if (s == null) {
@@ -605,7 +639,8 @@ function pickPriceFromFormatStrings(p) {
     p.sale_price_format,
     p.show_price,
     p.format_price,
-    p.selling_price
+    p.selling_price,
+    p.list_format_price
   ];
   for (const v of keys) {
     const n = parseBrlishMoneyString(v);
@@ -971,17 +1006,21 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     pickPriceFromFormatStrings(ppi) ??
     pickPriceFromFormatStrings(raw) ??
     (raw.price_info && typeof raw.price_info === "object" ? pickPriceFromFormatStrings(raw.price_info) : null);
+  // Preço de grelha: `product_price_info` / `product_meta` = vitrine. `sku_list[0]` muitas vezes é a variante mais
+  // barata; `min_price` é piso de SKUs. Format strings primeiro, depois números ao nível de produto, depois 1.º
+  // sku, e min_price / raw por último (evita 22,58 com badge 66% no site: 23,77).
   const price =
     fromFormatStr ??
     pickNumber(
-      sku0?.sale_price,
-      sku0?.price,
-      pm?.sale_price,
       ppi?.sale_price,
       ppi?.price,
       ppi?.sale_price_decimal,
-      pm?.min_price,
+      pm?.sale_price,
+      pm?.price,
+      sku0?.sale_price,
+      sku0?.price,
       ppi?.min_price,
+      pm?.min_price,
       raw.price,
       raw.min_price,
       raw.sale_price,
@@ -1001,25 +1040,29 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     raw.price_info?.origin_price
   );
 
-  // discount_format = badge do card; evitar ppi.discount "agregado" a sobrepor a percentagem de UI.
-  let discountFromApi = parseDiscountPercentFromPpi(ppi) ?? parseDiscountPercentFromPpi(raw);
-  if (discountFromApi == null) {
-    discountFromApi = pickNumber(
-      raw.discount,
-      raw.discount_rate,
-      ppi?.discount,
-      ppi?.rate_discount
-    );
-  }
-  let discountPercent = discountFromApi;
-  if (
-    discountPercent == null &&
-    originalPrice != null &&
-    price != null &&
-    originalPrice > 0 &&
-    originalPrice > price
-  ) {
-    discountPercent = Math.round(((originalPrice - price) / originalPrice) * 1000) / 10;
+  // Uma regra: com `original_price` + `price` (ambos conhecidos), desconto = só a matemática do par (alinhado ao riscado+à
+  // vista do feed; evita 68% no badge vs 66% reais, etc.). Sem par completo: badge/ppi.discount.
+  const impliedByPair = impliedPercentFromOrigAndSale(originalPrice, price);
+  let discountPercent;
+  let discountFormatText;
+  if (impliedByPair != null) {
+    discountPercent = impliedByPair;
+    discountFormatText = formatDiscountPercentText(impliedByPair);
+  } else {
+    let discountFromApi = parseDiscountPercentFromPpi(ppi) ?? parseDiscountPercentFromPpi(raw);
+    if (discountFromApi == null) {
+      discountFromApi = pickNumber(
+        raw.discount,
+        raw.discount_rate,
+        ppi?.discount,
+        ppi?.rate_discount
+      );
+    }
+    discountPercent = discountFromApi;
+    discountFormatText = pickString(ppi?.discount_format, raw?.discount_format) || null;
+    if (discountFormatText == null && discountPercent != null) {
+      discountFormatText = formatDiscountPercentText(discountPercent);
+    }
   }
 
   const currency = pickString(
@@ -1040,8 +1083,6 @@ function normalizeItem(rawIn, categoriaUrl = "") {
         ? raw.sku_list[0].sku_id ?? raw.sku_list[0].id
         : null
     ) ?? id;
-
-  const discountFormatText = pickString(ppi?.discount_format, raw?.discount_format);
 
   const product_url = pickProductPdpUrl(id, raw, categoriaUrl);
 
@@ -1997,6 +2038,8 @@ if (isRunAsCli()) {
 
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
+  formatDiscountPercentText,
+  impliedPercentFromOrigAndSale,
   mergeLojaFromNormalized,
   mergeProductById,
   mergeProductLayers,
