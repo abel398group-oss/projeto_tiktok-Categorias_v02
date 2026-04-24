@@ -4,6 +4,7 @@
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
  * Teste do loader no HTML: `output/modern_router_peek.json` (chaves + amostra de `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
+ * Regressão do normalizador: `npm test` (não regredir preço grelha, desconto badge, dedupe por id, filtro de review).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,7 +14,8 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 puppeteer.use(StealthPlugin());
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "output");
 const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
@@ -1704,8 +1706,33 @@ async function main() {
   );
 }
 
-main().catch((e) => {
-  // eslint-disable-next-line no-console
-  console.error(e);
-  process.exit(1);
-});
+function isRunAsCli() {
+  try {
+    if (!process.argv[1]) {
+      return false;
+    }
+    return path.resolve(process.argv[1]) === path.resolve(__filename);
+  } catch {
+    return false;
+  }
+}
+
+if (isRunAsCli()) {
+  main().catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exit(1);
+  });
+}
+
+/* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
+export {
+  mergeProductById,
+  mergeProductLayers,
+  normalizeItem,
+  parseBrlishMoneyString,
+  parseDiscountPercentFromPpi,
+  pickPriceFromFormatStrings,
+  isReviewOnlyProductNode,
+  productRowRichness
+};

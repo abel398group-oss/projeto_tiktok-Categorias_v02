@@ -8,6 +8,7 @@ alwaysApply: false
 
 - Novos campos de produto: preferir reutilizar **`normalizeItem`** e **`toDadosProdutoClean`**, a não ser que a API exija caminho totalmente distinto.  
 - URLs: **`pickProductPdpUrl`** — preferir `seo_url.canonical_url`; região do fallback a partir de `CATEGORY_URL` / `pathRegionFromCategoryUrl`.  
-- Mapeamento `Map` usa `sku` como chave; atenção a **duplicatas** (reviews). Para limpeza futura, considerar merge por `product_id`.  
+- Mapeamento: **`Map` por `product_id`** com **`mergeProductById`** (linha “mais rica”); nós de review têm `review_id` e são ignorados em **`normalizeItem`**. Não reintroduzir dedupe por `sku` sozinho.  
+- **Regressão:** após alterar preço, desconto, merge ou filtro de review, correr **`npm test`**. Contratos vivem em **`test/scrape-regression.test.mjs`**; exportações de teste no fim de `scrapeCategory.mjs` não remover sem atualizar testes.  
 - Conferir ficheiros em `OUT_DIR` (`output/`) e **não** adicionar paths hardcoded fora de `package.json` / constantes do topo.  
 - Env documentados: ver `docs/ARCHITECTURE.md` (tabela).

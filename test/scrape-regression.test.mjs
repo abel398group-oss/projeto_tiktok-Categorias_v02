@@ -1,0 +1,165 @@
+/**
+ * Contrato do parser de categoria: preço de vitrine, desconto do badge, dedupe, reviews.
+ * Correr: npm test
+ */
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import {
+  mergeProductById,
+  normalizeItem,
+  parseBrlishMoneyString,
+  parseDiscountPercentFromPpi,
+  pickPriceFromFormatStrings,
+  isReviewOnlyProductNode,
+  productRowRichness
+} from "../src/scrapeCategory.mjs";
+
+const brUrl = "https://shop.tiktok.com/br/c/test/1";
+
+function minimalProduct(overrides = {}) {
+  return {
+    product_id: "1732000000000000001",
+    title: "Produto de teste",
+    image: { url: "https://p16-oec-sg.ibyteimg.com/placeholder~tplv.jpg" },
+    ...overrides
+  };
+}
+
+describe("parseDiscountPercentFromPpi", () => {
+  test("lê badge com sinal -", () => {
+    assert.equal(parseDiscountPercentFromPpi({ discount_format: "-57%" }), 57);
+  });
+  test("lê % sem sinal", () => {
+    assert.equal(parseDiscountPercentFromPpi({ discount_format: "25%" }), 25);
+  });
+  test("discount_decimal 0,25 = 25%", () => {
+    assert.equal(parseDiscountPercentFromPpi({ discount_decimal: 0.25 }), 25);
+  });
+});
+
+describe("parseBrlishMoneyString / pickPriceFromFormatStrings", () => {
+  test("BRL com vírgula decimal", () => {
+    assert.equal(parseBrlishMoneyString("R$ 59,90"), 59.9);
+  });
+  test("format em object", () => {
+    const n = pickPriceFromFormatStrings({ format_price: "R$ 49,99" });
+    assert.equal(n, 49.99);
+  });
+});
+
+describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () => {
+  test("prefere product_price_info.price ao min_price (variante mais barata)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "1732671611141915996",
+        product_price_info: {
+          origin_price: 199.99,
+          min_price: 67,
+          price: 86,
+          discount_format: "-57%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 86);
+    assert.equal(n?.original_price, 199.99);
+    assert.equal(n?.discount_percent, 57);
+  });
+
+  test("desconto do badge (discount_format) vence ppi.discount numérico divergente", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 79.98,
+          min_price: 52.71,
+          price: 59.9,
+          discount: 34,
+          discount_format: "25%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 59.9);
+    assert.equal(n?.discount_percent, 25);
+  });
+
+  test("string format_price vence min_price se existir", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 69.99,
+          min_price: 43.99,
+          format_price: "R$ 49,99",
+          discount_format: "29%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 49.99);
+    assert.equal(n?.discount_percent, 29);
+  });
+});
+
+describe("reviews e dedupe", () => {
+  test("nó com review_id não vira produto", () => {
+    assert.equal(
+      normalizeItem(
+        minimalProduct({
+          review_id: "r1",
+          product_name: "Título de review"
+        }),
+        brUrl
+      ),
+      null
+    );
+  });
+  test("isReviewOnlyProductNode", () => {
+    assert.equal(isReviewOnlyProductNode({ review_id: 1 }), true);
+    assert.equal(isReviewOnlyProductNode({ product_id: "1" }), false);
+  });
+
+  test("mergeProductById mantém a linha mais rica (preço+original)", () => {
+    const m = new Map();
+    const poor = normalizeItem(
+      minimalProduct({ product_id: "same", product_price_info: { price: 1, currency: "BRL" } }),
+      brUrl
+    );
+    const rich = normalizeItem(
+      minimalProduct({
+        product_id: "same",
+        product_price_info: {
+          origin_price: 100,
+          price: 50,
+          discount_format: "50%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.ok(poor && rich);
+    mergeProductById(m, poor);
+    mergeProductById(m, rich);
+    assert.equal(m.size, 1);
+    assert.equal(m.get("same")?.price, 50);
+    assert.equal(m.get("same")?.original_price, 100);
+  });
+
+  test("productRowRichness: linha com preço+original > só preço mínimo", () => {
+    const a = normalizeItem(
+      minimalProduct({ product_id: "p", product_price_info: { price: 1, currency: "BRL" } }),
+      brUrl
+    );
+    const b = normalizeItem(
+      minimalProduct({
+        product_id: "p",
+        product_price_info: { origin_price: 10, price: 5, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(a && b);
+    assert.ok(productRowRichness(b) > productRowRichness(a));
+  });
+});

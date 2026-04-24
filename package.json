@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test test/scrape-regression.test.mjs",
     "scrape:category": "node src/scrapeCategory.mjs",
     "scrape:category:debug": "node src/scrapeCategory.mjs --debug",
     "scrape:category:headed": "cross-env HEADED=1 node src/scrapeCategory.mjs --debug",
