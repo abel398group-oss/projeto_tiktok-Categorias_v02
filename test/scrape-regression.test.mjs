@@ -1,5 +1,5 @@
 /**
- * Contrato do parser de categoria: preço de vitrine, desconto do badge, dedupe, reviews.
+ * Contrato do parser de categoria: preço de vitrine, dedupe, reviews, loja (sem % de desconto na saída).
  * Correr: npm test
  */
 import assert from "node:assert/strict";
@@ -48,7 +48,7 @@ describe("parseBrlishMoneyString / pickPriceFromFormatStrings", () => {
   });
 });
 
-describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () => {
+describe("normalizeItem — preço (grelha, sem desconto % na saída)", () => {
   test("prefere product_price_info.price ao min_price (variante mais barata)", () => {
     const n = normalizeItem(
       minimalProduct({
@@ -65,10 +65,10 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
     );
     assert.equal(n?.price, 86);
     assert.equal(n?.original_price, 199.99);
-    assert.equal(n?.discount_percent, 57);
+    assert.ok(n && !("discount_percent" in n) && !("discount_format_text" in n));
   });
 
-  test("com par riscado + preço, desconto = matemática do par (ignora ppi.discount 34)", () => {
+  test("par riscado + preço: ppi vence, desconto não exportado", () => {
     const n = normalizeItem(
       minimalProduct({
         product_price_info: {
@@ -83,8 +83,8 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
       brUrl
     );
     assert.equal(n?.price, 59.9);
-    // Alinhado ao par (riscado + preço de venda), não ao badge 25%: (79.98-59.9)/79.98 ≈ 25,1
-    assert.equal(n?.discount_percent, 25.1);
+    assert.equal(n?.original_price, 79.98);
+    assert.ok(n && !("discount_percent" in n));
   });
 
   test("string format_price vence min_price se existir", () => {
@@ -101,8 +101,7 @@ describe("normalizeItem — preço e desconto (alinhado à grelha do site)", () 
       brUrl
     );
     assert.equal(n?.price, 49.99);
-    // Par 49,99/69,99 — desconto implícito ≈ 28,6% (badge 29% do feed deixa de sobrepor a matemática)
-    assert.equal(n?.discount_percent, 28.6);
+    assert.ok(n && !("discount_percent" in n));
   });
 });
 

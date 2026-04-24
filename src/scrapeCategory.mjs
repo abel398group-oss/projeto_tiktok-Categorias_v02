@@ -4,7 +4,7 @@
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
  * Teste do loader no HTML: `output/modern_router_peek.json` (chaves + amostra de `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
- * Regressão do normalizador: `npm test` (não regredir preço grelha, desconto badge, dedupe por id, filtro de review).
+ * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -167,8 +167,6 @@ function toDadosProdutoClean(n, categoriaUrl) {
     nome: n.title,
     preco: n.price,
     moeda: n.currency,
-    desconto_percent: n.discount_percent,
-    desconto_texto: n.discount_format_text ?? null,
     preco_original: n.original_price,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
@@ -564,40 +562,6 @@ function parseDiscountPercentFromPpi(ppi) {
   return null;
 }
 
-/**
- * Desconto % alinhado ao par (riscado, à vista) — 1 casa decimal, consistente com `price` e `original_price`.
- * @param {number} original
- * @param {number} sale
- * @returns {number | null} ex. 25.1 ou null se não houver desconto por par
- */
-function impliedPercentFromOrigAndSale(original, sale) {
-  if (original == null || sale == null || !Number.isFinite(original) || !Number.isFinite(sale)) {
-    return null;
-  }
-  if (original <= 0) {
-    return null;
-  }
-  if (sale > original) {
-    return null;
-  }
-  if (sale === original) {
-    return 0;
-  }
-  return Math.round(((original - sale) / original) * 1000) / 10;
-}
-
-/** "57%" / "25.1%" alinhado ao número (sem forçar badge do feed). */
-function formatDiscountPercentText(percent) {
-  if (percent == null || Number.isNaN(percent)) {
-    return null;
-  }
-  const r = Math.round(percent * 10) / 10;
-  if (r % 1 === 0) {
-    return `${r}%`;
-  }
-  return `${r.toFixed(1)}%`;
-}
-
 /** Tenta extrair valor numérico de strings "R$ 59,90" / "BRL 86.00" usadas no feed OEC. */
 function parseBrlishMoneyString(s) {
   if (s == null) {
@@ -884,7 +848,7 @@ function productRowRichness(n) {
   if (n.original_price != null) {
     s += 400;
   }
-  if (n.discount_percent != null) {
+  if (n.original_price != null && n.price != null && n.original_price > n.price) {
     s += 200;
   }
   if (n.currency) {
@@ -1040,31 +1004,6 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     raw.price_info?.origin_price
   );
 
-  // Uma regra: com `original_price` + `price` (ambos conhecidos), desconto = só a matemática do par (alinhado ao riscado+à
-  // vista do feed; evita 68% no badge vs 66% reais, etc.). Sem par completo: badge/ppi.discount.
-  const impliedByPair = impliedPercentFromOrigAndSale(originalPrice, price);
-  let discountPercent;
-  let discountFormatText;
-  if (impliedByPair != null) {
-    discountPercent = impliedByPair;
-    discountFormatText = formatDiscountPercentText(impliedByPair);
-  } else {
-    let discountFromApi = parseDiscountPercentFromPpi(ppi) ?? parseDiscountPercentFromPpi(raw);
-    if (discountFromApi == null) {
-      discountFromApi = pickNumber(
-        raw.discount,
-        raw.discount_rate,
-        ppi?.discount,
-        ppi?.rate_discount
-      );
-    }
-    discountPercent = discountFromApi;
-    discountFormatText = pickString(ppi?.discount_format, raw?.discount_format) || null;
-    if (discountFormatText == null && discountPercent != null) {
-      discountFormatText = formatDiscountPercentText(discountPercent);
-    }
-  }
-
   const currency = pickString(
     ppi?.currency,
     ppi?.currency_code,
@@ -1096,8 +1035,6 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     title,
     price,
     original_price: originalPrice,
-    discount_percent: discountPercent,
-    discount_format_text: discountFormatText || null,
     currency,
     sales_count: salesParsed,
     sales_display: salesRaw,
@@ -2038,8 +1975,6 @@ if (isRunAsCli()) {
 
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
-  formatDiscountPercentText,
-  impliedPercentFromOrigAndSale,
   mergeLojaFromNormalized,
   mergeProductById,
   mergeProductLayers,
