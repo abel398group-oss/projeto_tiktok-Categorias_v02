@@ -1,0 +1,13 @@
+---
+description: Contexto do projeto — scraper TikTok Shop categoria (Puppeteer)
+alwaysApply: true
+---
+
+# Projeto: categorias TikTok Shop
+
+- **Foco:** Uma categoria por execução; **não** abrir PDP; dados via **XHR + `__MODERN_ROUTER_DATA__`**.  
+- **Entregável humano:** `output/dados_produtos.json` (não committar `output/*`).  
+- **Tarefas:** `docs/ROADMAP.md` é a fonte única (ver regra `task-management`).  
+- **Linguagem:** respostas ao utilizador em **português** quando pedido.  
+- **Alterações:** manter o script **focado** em `src/scrapeCategory.mjs`; evitar refactors alargados sem pedido explícito.  
+- **Privacidade:** amostras de router / rede podem conter user id e tokens; não versionar `output/`.

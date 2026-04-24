@@ -1,0 +1,26 @@
+---
+description: Contexto de arquitetura — onde estão definições e ADRs (projeto TikTok categoria)
+alwaysApply: true
+---
+
+# Arquitetura — projeto TikTok Shop (categorias)
+
+Não monorepo: um módulo Node (`src/scrapeCategory.mjs`). Não há API Nest, Prisma, nem apps/.
+
+## Onde está documentado
+
+- **`docs/ARCHITECTURE.md`** — stack, fluxo, variáveis de ambiente, saídas, limitações.
+- **`docs/ROADMAP.md`** — tarefas (fonte única) e metodologia de estados.
+- **`docs/adr/`** — Architecture Decision Records (ver `docs/adr/README.md`).
+- **`.cursor/docs/README.md`** — índice rápido para a IA.
+- **`.cursor/rules/scrape-mjs-patterns.mdc`** — padrões ao editar o scraper (quando `scrapeCategory.mjs` estiver no contexto).
+
+## Evolutivo e consistência
+
+- Antes de mudar o contrato de `dados_produtos.json` ou a estratégia de coleta, ler `docs/ARCHITECTURE.md` e o ROADMAP.
+- Decisões que alterem o “contrato” ou a abordagem: preferir ADR e referência no ROADMAP.
+
+## O que **não** aplica a este repo
+
+- Migrations, reset de base de dados, tabelas `tenant_` / `system_` — **outro** projeto (ex. Hipervias); ignorar se sugerido por engano.
+- Estrutura `apps/api/**/*.ts` — não existem neste repositório.

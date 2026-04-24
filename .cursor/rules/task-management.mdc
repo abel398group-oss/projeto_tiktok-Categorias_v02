@@ -1,0 +1,24 @@
+---
+description: Gestão de tarefas — registo único em docs/ROADMAP.md
+alwaysApply: true
+---
+
+# Gestão de tarefas
+
+O ficheiro `docs/ROADMAP.md` é a **fonte única** de tarefas do projeto. Não criar ficheiros isolados de plano, checklist ou backlog em paralelo (ex.: `PLANO_*.md`, `CHECKLIST_*.md`, `TODO_*.md` na raiz).
+
+## Regras
+
+1. Toda tarefa objetiva deve constar em **`docs/ROADMAP.md`**, com marcadores padronizados (ver esse ficheiro: `[ ]`, `[~]`, `[!]`, `[x]`).
+2. Documentos de **análise** em `docs/` são permitidos; as tarefas que deles resultem devem ser **copiadas** para o ROADMAP.
+3. **Decisões arquiteturais** que importem para o futuro: criar **ADR** em `docs/adr/`, com status (ver `docs/adr/README.md`).
+
+## Âmbito deste repositório
+
+Não existe base de dados nem Prisma; **não** aplicar regras de migrations ou nomenclatura de tabelas de outros projetos. Foco: scraper, `output/`, `src/scrapeCategory.mjs`.
+
+## Ao concluir uma tarefa
+
+1. Atualizar a marcação no `docs/ROADMAP.md`.
+2. Se houver decisão arquitetural, adicionar ADR.
+3. Não deixar rastos de checklist temporário fora do ROADMAP.
