@@ -2,3 +2,5 @@ node_modules/
 .chrome-tiktok-profile/
 output/*
 !output/.gitkeep
+output/extra/**
+!output/extra/.gitkeep

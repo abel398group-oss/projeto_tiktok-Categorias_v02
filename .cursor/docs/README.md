@@ -12,7 +12,7 @@ Esta pasta é um **índice para a IA do Cursor** neste repositório. A documenta
 | Decisões (ADR) | `docs/adr/` e `docs/adr/README.md` |
 | Código do scraper (único ponto lógico) | `src/scrapeCategory.mjs` |
 | Saída “final” (campos em PT) | `output/dados_produtos.json` (gerado; não em git) |
-| Saída técnica / debug | `output/teste_categoria.json`, `output/modern_router_peek.json`, `output/caca_*.jsonl`, `output/rede_ultima_execucao.log` |
+| Técnica / debug / lojas / caça | `output/extra/*` (ex. `teste_categoria.json`, `modern_router_peek.json`, `caca_*.jsonl`, `rede_ultima_execucao.log`) |
 | Scripts npm (headed, debug, caça, peek) | `package.json` |
 | Perfil de login (local, não committar) | `.chrome-tiktok-profile/` (ignorado no git) |
 | Itens a ignorar no commit | `.gitignore` (incl. `output/*` exc. `.gitkeep`) |

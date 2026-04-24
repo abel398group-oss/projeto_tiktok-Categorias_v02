@@ -3,8 +3,9 @@
  * `PDP_GALLERY=1`: após a grelha, abre N PDPs (PDP_GALLERY_MAX) e recolhe `fotos_pdp` (DOM + #__MODERN_ROUTER_DATA__).
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
- * Rastreio p/ descoberta de origem: `output/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
- * Teste do loader no HTML: `output/modern_router_peek.json` (chaves + amostra de `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
+ * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
+ * Dados de produto (entrega): só `output/dados_produtos.json` na raiz de `output/`; o resto vai para `output/extra/`.
+ * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  */
 import fs from "node:fs/promises";
@@ -19,12 +20,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "output");
+/** Só ficheiro “dados reais” (produtos) na raiz de `output/`. Técnica, debug, lojas, caça, etc. em `output/extra/`. */
+const OUT_AUX = path.join(OUT_DIR, "extra");
 const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
-const DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
-const DEBUG_SELLER_SOURCES = path.join(OUT_DIR, "debug_seller_sources.json");
-const MODERN_ROUTER_PEEK = path.join(OUT_DIR, "modern_router_peek.json");
+const DADOS_LOJAS_OUT = path.join(OUT_AUX, "dados_lojas.json");
+const DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
+const MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
 
-/** Só ativo durante `main` — `debug_seller_sources.json` (máx. 20) */
+/** Só ativo durante `main` — `output/extra/debug_seller_sources.json` (máx. 20) */
 let recordSellerDebug = false;
 const sellerDebugSamples = [];
 
@@ -38,14 +41,14 @@ const netLog =
   (process.argv.includes("--net-log") || process.env.NET_LOG === "1" || process.argv.includes("--debug"));
 const netLogVerbose = process.env.NET_LOG === "verbose" || process.env.NET_LOG === "2";
 /**
- * Modo "caça": `output/caca_dados.jsonl` (pistas JSON + sondagem do HTML do document) + `caca_xhr_fetch_urls.txt` (URLs únicas).
+ * Modo "caça": `output/extra/caca_dados.jsonl` + `output/extra/caca_xhr_fetch_urls.txt` (URLs únicas).
  * Ligar: `--hunt` ou HUNT_LOG=1 (padrão com `--debug`); desligar: HUNT_LOG=0
  */
 const huntLog =
   process.env.HUNT_LOG !== "0" &&
   (process.argv.includes("--hunt") || process.env.HUNT_LOG === "1" || process.argv.includes("--debug"));
-const CACA_DADOS_JSONL = path.join(OUT_DIR, "caca_dados.jsonl");
-const CACA_XHR_FILE = path.join(OUT_DIR, "caca_xhr_fetch_urls.txt");
+const CACA_DADOS_JSONL = path.join(OUT_AUX, "caca_dados.jsonl");
+const CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
 /** Se o corpo JSON tiver tamanho acima do limite, regista as primeiras chaves (ajuda a achar o feed) */
 const HUNT_BIG_JSON = Math.max(2000, Number(process.env.HUNT_MIN_BYTES) || 3000);
 /** No console, só pistas com score a partir do indicado (reduz barulho) */
@@ -1576,8 +1579,9 @@ async function main() {
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
   await fs.mkdir(OUT_DIR, { recursive: true });
-  const outFile = path.join(OUT_DIR, "teste_categoria.json");
-  const debugFile = path.join(OUT_DIR, "debug_responses.log");
+  await fs.mkdir(OUT_AUX, { recursive: true });
+  const outFile = path.join(OUT_AUX, "teste_categoria.json");
+  const debugFile = path.join(OUT_AUX, "debug_responses.log");
   const fresh = process.env.FRESH_SESSION === "1";
   let userDataDir = process.env.CHROME_USER_DATA?.trim() || null;
   if (!userDataDir && !fresh) {
@@ -1638,7 +1642,7 @@ async function main() {
     })();
   });
 
-  const netLogFile = path.join(OUT_DIR, "rede_ultima_execucao.log");
+  const netLogFile = path.join(OUT_AUX, "rede_ultima_execucao.log");
   if (netLog) {
     await fs.writeFile(netLogFile, `inicio ${new Date().toISOString()}\n${"=".repeat(80)}\n`, "utf8");
     // eslint-disable-next-line no-console
@@ -1731,7 +1735,7 @@ async function main() {
   let jsonSnapshotN = 0;
   const doJsonSnapshot = process.env.JSON_SNAPSHOT === "1";
   const isDiscover = process.env.DISCOVER === "1";
-  const discoverPath = path.join(OUT_DIR, "descoberta_redes.jsonl");
+  const discoverPath = path.join(OUT_AUX, "descoberta_redes.jsonl");
   const discoverMax = 400;
   let discoverCount = 0;
 
@@ -2032,7 +2036,7 @@ async function main() {
           /(oec|pigeon|mason|product|category|list|feed)/.test(u) &&
           /tiktok|byte|oec|ibyteimg|shop\.tiktok/i.test(u)
         ) {
-          const dir = path.join(OUT_DIR, "debug_snapshots");
+          const dir = path.join(OUT_AUX, "debug_snapshots");
           try {
             await fs.mkdir(dir, { recursive: true });
             const file = path.join(dir, `snap_${jsonSnapshotN++}.json`);
@@ -2184,7 +2188,7 @@ async function main() {
   if (byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
-      "Nenhum produto mapeado (XHR + loader). Abra output/modern_router_peek.json (chaves e amostra) e debug_responses.log com --debug; ajuste o parser se o feed vier só em loaderData aninhado.";
+      "Nenhum produto mapeado (XHR + loader). Abra output/extra/modern_router_peek.json (chaves e amostra) e output/extra/debug_responses.log com --debug; ajuste o parser se o feed vier só em loaderData aninhado.";
   }
 
   const products = Object.fromEntries(

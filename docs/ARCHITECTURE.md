@@ -24,8 +24,8 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 4. Heurísticas em respostas JSON (URLs com `oec`, `list`, `shop.tiktok`, etc.), filtrando **telemetria** (MCS, Slardar, monitor, batch 204, …).
 5. Dados iniciais no DOM: leitura de `#__MODERN_ROUTER_DATA__` → `loaderData` (rota `…/c/…/page`) fundido no mesmo mapa de produtos.
 6. Normalização: `normalizeItem` (preço, desconto %, `seo_url` → `product_url`, imagens, etc.).
-7. **Saída “final” para uso:** `output/dados_produtos.json` (PT‑BR, inclui `categoria_url`, `link_produto`).
-8. **Saída técnica:** `output/teste_categoria.json` (mapa `products` com mais campos internos).
+7. **Saída “final” para uso:** `output/dados_produtos.json` (PT‑BR, inclui `categoria_url`, `link_produto`) — único ficheiro de dados de produto na raiz de `output/`.
+8. **Saída técnica e auxiliares:** `output/teste_categoria.json`, `modern_router_peek.json`, logs, `dados_lojas.json`, `caca_*`, etc. em `output/extra/`.
 9. **Debug / descoberta:** `modern_router_peek.json`, `caca_dados.jsonl`, `rede_ultima_execucao.log`, `debug_responses.log`, `debug_snapshots/`, `descoberta_redes.jsonl` (quando ativo).
 
 A pasta `output/*` **não** deve ser commitada (ver `.gitignore`); mantém-se `output/.gitkeep`.

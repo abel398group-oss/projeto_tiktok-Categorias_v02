@@ -13,5 +13,5 @@ alwaysApply: false
 - **Desconto %:** não exportar (omitir chaves de desconto em `dados_produtos` e no objeto de `normalizeItem` / `teste_categoria`); manter lógica de preço, loja, dedupe.  
 - **Fotos PDP (opcional):** `PDP_GALLERY=1` e opcional `PDP_GALLERY_MAX` (padrão 25) — abre `product_url` e grava `images_pdp` / `fotos_pdp` (DOM `img`/`source` + `__MODERN_ROUTER_DATA__`); a grelha continua a preencher `images` / `fotos`.  
 - **Avaliações (produto):** `rate_info` → `review_avg` / `review_count_total` / `review_star_votes` em `normalizeItem`; `toDadosProdutoClean` → `avaliacao_media` / `avaliacoes_total` / `votos_por_estrela`. No **`mergeProductById`**, as avaliações de ambas as linhas são fundidas (preenche o que faltar) sem mudar a regra de “linha mais rica” do preço.  
-- Conferir ficheiros em `OUT_DIR` (`output/`) e **não** adicionar paths hardcoded fora de `package.json` / constantes do topo.  
+- Conferir saída: `output/dados_produtos.json` (dados) e `output/extra/*` (técnica/debug). **Não** adicionar paths fora de `package.json` / constantes do topo de `scrapeCategory.mjs`.  
 - Env documentados: ver `docs/ARCHITECTURE.md` (tabela).
