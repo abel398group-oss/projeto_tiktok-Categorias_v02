@@ -19,7 +19,13 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "output");
 const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
+const DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
+const DEBUG_SELLER_SOURCES = path.join(OUT_DIR, "debug_seller_sources.json");
 const MODERN_ROUTER_PEEK = path.join(OUT_DIR, "modern_router_peek.json");
+
+/** Só ativo durante `main` — `debug_seller_sources.json` (máx. 20) */
+let recordSellerDebug = false;
+const sellerDebugSamples = [];
 
 const DEFAULT_URL =
   "https://shop.tiktok.com/br/c/womenswear-underwear/601152?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo";
@@ -166,7 +172,18 @@ function toDadosProdutoClean(n, categoriaUrl) {
     preco_original: n.original_price,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
-    fotos: n.images
+    fotos: n.images,
+    seller_id: n.seller_id ?? null,
+    global_seller_id: n.global_seller_id ?? null,
+    nome_loja: n.nome_loja ?? null,
+    loja_vendas_total: n.loja_vendas_total ?? null,
+    loja_produtos_ativos: n.loja_produtos_ativos ?? null,
+    loja_reviews_total: n.loja_reviews_total ?? null,
+    loja_seguidores: n.loja_seguidores ?? null,
+    loja_videos: n.loja_videos ?? null,
+    loja_enable_follow: n.loja_enable_follow ?? null,
+    loja_logo_uri: n.loja_logo_uri ?? null,
+    loja_logo_urls: n.loja_logo_urls ?? null
   };
 }
 
@@ -634,6 +651,186 @@ function isReviewOnlyProductNode(raw) {
   return raw.review_id != null;
 }
 
+const LOJA_FIELD_DEFAULTS = {
+  seller_id: null,
+  global_seller_id: null,
+  nome_loja: null,
+  loja_vendas_total: null,
+  loja_produtos_ativos: null,
+  loja_reviews_total: null,
+  loja_seguidores: null,
+  loja_videos: null,
+  loja_enable_follow: null,
+  loja_logo_uri: null,
+  loja_logo_urls: null
+};
+
+/** `shop_logo`: uri e url_list. */
+function readShopLogo(logo) {
+  if (!logo || typeof logo !== "object") {
+    return { uri: null, urls: [] };
+  }
+  const uri = logo.uri != null && String(logo.uri).trim() !== "" ? String(logo.uri).trim() : null;
+  const urls = Array.isArray(logo.url_list)
+    ? logo.url_list.filter((u) => typeof u === "string" && (u.startsWith("http") || u.startsWith("//")))
+    : [];
+  return { uri, urls };
+}
+
+/**
+ * Dados de loja a partir de `seller_info` e/ou `shop_info` (não usa reviewer_name, review_id, review_text).
+ * @param {object} node
+ * @returns {Record<string, unknown> | null}
+ */
+function normalizeSellerInfo(node) {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  if (isReviewOnlyProductNode(node)) {
+    return null;
+  }
+  const hasSe = node.seller_info && typeof node.seller_info === "object";
+  const hasSh = node.shop_info && typeof node.shop_info === "object";
+  if (!hasSe && !hasSh) {
+    return null;
+  }
+  const se = hasSe ? node.seller_info : null;
+  const sh = hasSh ? node.shop_info : null;
+  const logSe = se ? readShopLogo(se.shop_logo) : { uri: null, urls: [] };
+  const logSh = sh ? readShopLogo(sh.shop_logo) : { uri: null, urls: [] };
+  const uri = logSh.uri || logSe.uri || null;
+  const urlsMerged = [
+    ...new Set([...logSe.urls, ...logSh.urls].filter((u) => typeof u === "string" && u.startsWith("http")))
+  ];
+
+  return {
+    seller_id: pickString(sh?.seller_id, se?.seller_id) || null,
+    global_seller_id: sh?.global_seller_id != null ? String(sh.global_seller_id) : null,
+    nome_loja: pickString(sh?.shop_name, se?.shop_name) || null,
+    loja_vendas_total: pickNumber(sh?.sold_count, sh?.global_sold_count) ?? null,
+    loja_produtos_ativos: pickNumber(sh?.on_sell_product_count) ?? null,
+    loja_reviews_total: pickNumber(sh?.review_count) ?? null,
+    loja_seguidores: pickNumber(sh?.followers_count) ?? null,
+    loja_videos: pickNumber(sh?.video_count) ?? null,
+    loja_enable_follow:
+      sh && typeof sh.enable_follow === "boolean"
+        ? sh.enable_follow
+        : sh && sh.enable_follow != null
+          ? Boolean(sh.enable_follow)
+          : null,
+    loja_logo_uri: uri,
+    loja_logo_urls: urlsMerged.length > 0 ? urlsMerged : null
+  };
+}
+
+function coalesceLojaString(a, b) {
+  if (b != null && String(b).trim() !== "") {
+    return String(b).trim();
+  }
+  if (a != null && String(a).trim() !== "") {
+    return String(a).trim();
+  }
+  return null;
+}
+
+function coalesceLojaNumber(a, b) {
+  if (b != null && !Number.isNaN(Number(b))) {
+    return Number(b);
+  }
+  if (a != null && !Number.isNaN(Number(a))) {
+    return Number(a);
+  }
+  return null;
+}
+
+function coalesceLojaBool(a, b) {
+  if (typeof b === "boolean") {
+    return b;
+  }
+  if (typeof a === "boolean") {
+    return a;
+  }
+  return null;
+}
+
+/**
+ * @param {object} row
+ */
+function extractLojaFromNormalized(row) {
+  if (!row || typeof row !== "object") {
+    return { ...LOJA_FIELD_DEFAULTS };
+  }
+  const urls = row.loja_logo_urls;
+  return {
+    seller_id: row.seller_id ?? null,
+    global_seller_id: row.global_seller_id ?? null,
+    nome_loja: row.nome_loja ?? null,
+    loja_vendas_total: row.loja_vendas_total ?? null,
+    loja_produtos_ativos: row.loja_produtos_ativos ?? null,
+    loja_reviews_total: row.loja_reviews_total ?? null,
+    loja_seguidores: row.loja_seguidores ?? null,
+    loja_videos: row.loja_videos ?? null,
+    loja_enable_follow: row.loja_enable_follow ?? null,
+    loja_logo_uri: row.loja_logo_uri ?? null,
+    loja_logo_urls: Array.isArray(urls) ? [...urls] : null
+  };
+}
+
+function lojaToRowFields(merged) {
+  return { ...LOJA_FIELD_DEFAULTS, ...merged };
+}
+
+/**
+ * Campos de loja: o novo nunca apaga o antigo com null; URLs de logo unem sem duplicar.
+ */
+function mergeLojaFromNormalized(prevRow, nextRow) {
+  const p = extractLojaFromNormalized(prevRow);
+  const n = extractLojaFromNormalized(nextRow);
+  const pUrls = p.loja_logo_urls || [];
+  const nUrls = n.loja_logo_urls || [];
+  const mergedUrls = [
+    ...new Set(
+      [...pUrls, ...nUrls].filter((u) => typeof u === "string" && (u.startsWith("http") || u.startsWith("//")))
+    )
+  ];
+  return {
+    seller_id: coalesceLojaString(p.seller_id, n.seller_id),
+    global_seller_id: coalesceLojaString(p.global_seller_id, n.global_seller_id),
+    nome_loja: coalesceLojaString(p.nome_loja, n.nome_loja),
+    loja_vendas_total: coalesceLojaNumber(p.loja_vendas_total, n.loja_vendas_total),
+    loja_produtos_ativos: coalesceLojaNumber(p.loja_produtos_ativos, n.loja_produtos_ativos),
+    loja_reviews_total: coalesceLojaNumber(p.loja_reviews_total, n.loja_reviews_total),
+    loja_seguidores: coalesceLojaNumber(p.loja_seguidores, n.loja_seguidores),
+    loja_videos: coalesceLojaNumber(p.loja_videos, n.loja_videos),
+    loja_enable_follow: coalesceLojaBool(p.loja_enable_follow, n.loja_enable_follow),
+    loja_logo_uri: coalesceLojaString(p.loja_logo_uri, n.loja_logo_uri),
+    loja_logo_urls:
+      mergedUrls.length > 0
+        ? mergedUrls
+        : p.loja_logo_urls != null || n.loja_logo_urls != null
+          ? mergedUrls
+          : null
+  };
+}
+
+function tryRecordSellerDebugSource(raw) {
+  if (!recordSellerDebug || sellerDebugSamples.length >= 20) {
+    return;
+  }
+  const hasS = raw?.seller_info && typeof raw.seller_info === "object";
+  const hasSh = raw?.shop_info && typeof raw.shop_info === "object";
+  if (!hasS && !hasSh) {
+    return;
+  }
+  sellerDebugSamples.push({
+    product_id: raw?.product_id != null ? String(raw.product_id) : null,
+    has_seller_info: hasS,
+    has_shop_info: hasSh,
+    seller_info_keys: hasS ? Object.keys(raw.seller_info).slice(0, 30) : [],
+    shop_info_keys: hasSh ? Object.keys(raw.shop_info).slice(0, 35) : []
+  });
+}
+
 /**
  * Colisão no mesmo `product_id`: fica a linha com mais dados (grelha com product_price_info ganha a reviews).
  * @param {ReturnType<normalizeItem> | null | undefined} n
@@ -673,8 +870,17 @@ function productRowRichness(n) {
  */
 function mergeProductById(byProductId, n) {
   const key = String(n.product_id);
-  if (!byProductId.has(key) || productRowRichness(n) > productRowRichness(byProductId.get(key))) {
-    byProductId.set(key, n);
+  const prev = byProductId.get(key);
+  const mergedLoja = prev ? mergeLojaFromNormalized(prev, n) : extractLojaFromNormalized(n);
+  const lojaBlock = lojaToRowFields(mergedLoja);
+  if (!prev) {
+    byProductId.set(key, { ...n, ...lojaBlock });
+    return;
+  }
+  if (productRowRichness(n) > productRowRichness(prev)) {
+    byProductId.set(key, { ...n, ...lojaBlock });
+  } else {
+    byProductId.set(key, { ...prev, ...lojaBlock });
   }
 }
 
@@ -839,6 +1045,9 @@ function normalizeItem(rawIn, categoriaUrl = "") {
 
   const product_url = pickProductPdpUrl(id, raw, categoriaUrl);
 
+  const lojaBlob = normalizeSellerInfo(raw) || { ...LOJA_FIELD_DEFAULTS };
+  tryRecordSellerDebugSource(raw);
+
   return {
     sku,
     product_id: id,
@@ -852,7 +1061,8 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     sales_count: salesParsed,
     sales_display: salesRaw,
     images: extractImages(raw),
-    source_keys: Object.keys(raw).slice(0, 25)
+    source_keys: Object.keys(raw).slice(0, 25),
+    ...lojaToRowFields(lojaBlob)
   };
 }
 
@@ -1051,6 +1261,29 @@ async function scrollToLoadGrid(page) {
 
 const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
 
+/**
+ * Deduplica lojas por `seller_id` a partir do mapa de produtos.
+ * @param {Map<string, object>} byProductId
+ * @returns {Map<string, object>} valores = campos de loja (sem campos de produto)
+ */
+function buildLojasMapBySeller(byProductId) {
+  const m = new Map();
+  for (const p of byProductId.values()) {
+    const sid = p.seller_id;
+    if (sid == null || String(sid).trim() === "") {
+      continue;
+    }
+    const k = String(sid);
+    if (!m.has(k)) {
+      m.set(k, extractLojaFromNormalized(p));
+    } else {
+      const merged = mergeLojaFromNormalized(m.get(k), p);
+      m.set(k, merged);
+    }
+  }
+  return m;
+}
+
 async function main() {
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   await fs.mkdir(OUT_DIR, { recursive: true });
@@ -1073,6 +1306,8 @@ async function main() {
 
   /** chave = product_id; dedupe: mantém a linha mais "rica" (preço, imagens) */
   const byProductId = new Map();
+  recordSellerDebug = true;
+  sellerDebugSamples.length = 0;
   const debugLines = [];
 
   const launchOpts = {
@@ -1680,6 +1915,39 @@ async function main() {
   };
   await fs.writeFile(DADOS_OUT, JSON.stringify(dadosPayload, null, 2), "utf8");
 
+  const lojasMap = buildLojasMapBySeller(byProductId);
+  const lojasArr = [...lojasMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, v]) => lojaToRowFields(v));
+  await fs.writeFile(
+    DADOS_LOJAS_OUT,
+    JSON.stringify(
+      {
+        coletado_em: new Date().toISOString(),
+        total: lojasArr.length,
+        lojas: lojasArr
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await fs.writeFile(
+    DEBUG_SELLER_SOURCES,
+    JSON.stringify(
+      {
+        coletado_em: new Date().toISOString(),
+        max_samples: 20,
+        amostras_coletadas: sellerDebugSamples.length,
+        amostras: sellerDebugSamples
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  recordSellerDebug = false;
+
   if (debug) {
     const head = `final_url=${finalUrl}\njson_peeks≈${jsonPeeksTried}\n`;
     const body = debugLines.length
@@ -1694,6 +1962,8 @@ async function main() {
       {
         out: outFile,
         dados_produtos: DADOS_OUT,
+        dados_lojas: DADOS_LOJAS_OUT,
+        debug_seller_sources: DEBUG_SELLER_SOURCES,
         count: byProductId.size,
         debug: debug ? debugFile : null,
         caca_dados: huntLog ? CACA_DADOS_JSONL : null,
@@ -1727,9 +1997,11 @@ if (isRunAsCli()) {
 
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
+  mergeLojaFromNormalized,
   mergeProductById,
   mergeProductLayers,
   normalizeItem,
+  normalizeSellerInfo,
   parseBrlishMoneyString,
   parseDiscountPercentFromPpi,
   pickPriceFromFormatStrings,
