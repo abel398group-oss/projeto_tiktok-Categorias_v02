@@ -11,5 +11,6 @@ alwaysApply: false
 - Mapeamento: **`Map` por `product_id`** com **`mergeProductById`** (linha “mais rica”); nós de review têm `review_id` e são ignorados em **`normalizeItem`**. Não reintroduzir dedupe por `sku` sozinho.  
 - **Regressão:** após alterar preço, merge ou filtro de review, correr **`npm test`**. Contratos vivem em **`test/scrape-regression.test.mjs`**; exportações de teste no fim de `scrapeCategory.mjs` não remover sem atualizar testes.  
 - **Desconto %:** não exportar (omitir chaves de desconto em `dados_produtos` e no objeto de `normalizeItem` / `teste_categoria`); manter lógica de preço, loja, dedupe.  
+- **Avaliações (produto):** `rate_info` → `review_avg` / `review_count_total` / `review_star_votes` em `normalizeItem`; `toDadosProdutoClean` → `avaliacao_media` / `avaliacoes_total` / `votos_por_estrela`. No **`mergeProductById`**, as avaliações de ambas as linhas são fundidas (preenche o que faltar) sem mudar a regra de “linha mais rica” do preço.  
 - Conferir ficheiros em `OUT_DIR` (`output/`) e **não** adicionar paths hardcoded fora de `package.json` / constantes do topo.  
 - Env documentados: ver `docs/ARCHITECTURE.md` (tabela).

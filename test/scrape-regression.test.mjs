@@ -105,6 +105,49 @@ describe("normalizeItem — preço (grelha, sem desconto % na saída)", () => {
   });
 });
 
+describe("avaliações (rate_info)", () => {
+  test("média, total e votos por estrela (campos five_star_count…)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        rate_info: {
+          score: 4.5,
+          review_count: 1041,
+          five_star_count: 800,
+          four_star_count: 100,
+          three_star_count: 68,
+          two_star_count: 28,
+          one_star_count: 45
+        }
+      }),
+      brUrl
+    );
+    assert.ok(n);
+    assert.equal(n.review_avg, 4.5);
+    assert.equal(n.review_count_total, 1041);
+    assert.deepEqual(n.review_star_votes, { 1: 45, 2: 28, 3: 68, 4: 100, 5: 800 });
+  });
+
+  test("histograma em array (level + count)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        rate_info: {
+          score: 4,
+          review_count: 10,
+          review_start_level: [
+            { level: 5, count: 3 },
+            { level: 4, count: 2 },
+            { level: 1, count: 1 }
+          ]
+        }
+      }),
+      brUrl
+    );
+    assert.ok(n);
+    assert.equal(n.review_count_total, 10);
+    assert.deepEqual(n.review_star_votes, { 1: 1, 4: 2, 5: 3 });
+  });
+});
+
 describe("reviews e dedupe", () => {
   test("nó com review_id não vira produto", () => {
     assert.equal(
@@ -147,6 +190,34 @@ describe("reviews e dedupe", () => {
     assert.equal(m.size, 1);
     assert.equal(m.get("same")?.price, 50);
     assert.equal(m.get("same")?.original_price, 100);
+  });
+
+  test("mergeProductById: junta avaliações se só uma linha tiver rate_info", () => {
+    const m = new Map();
+    const comAval = normalizeItem(
+      minimalProduct({
+        product_id: "rmerge-1",
+        product_price_info: { price: 1, currency: "BRL" },
+        rate_info: { score: 4.2, review_count: 99, five_star_count: 10 }
+      }),
+      brUrl
+    );
+    const ricoPreco = normalizeItem(
+      minimalProduct({
+        product_id: "rmerge-1",
+        product_price_info: { origin_price: 100, price: 50, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(comAval && ricoPreco);
+    mergeProductById(m, comAval);
+    mergeProductById(m, ricoPreco);
+    const r = m.get("rmerge-1");
+    assert.equal(r?.price, 50);
+    assert.equal(r?.original_price, 100);
+    assert.equal(r?.review_avg, 4.2);
+    assert.equal(r?.review_count_total, 99);
+    assert.equal(r?.review_star_votes?.[5], 10);
   });
 
   test("productRowRichness: linha com preço+original > só preço mínimo", () => {

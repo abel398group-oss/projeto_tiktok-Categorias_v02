@@ -167,6 +167,9 @@ function toDadosProdutoClean(n, categoriaUrl) {
     nome: n.title,
     preco: n.price,
     moeda: n.currency,
+    avaliacao_media: n.review_avg ?? null,
+    avaliacoes_total: n.review_count_total ?? null,
+    votos_por_estrela: n.review_star_votes ?? null,
     preco_original: n.original_price,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
@@ -521,6 +524,154 @@ function pickNumber(...vals) {
   return null;
 }
 
+/** Média 0–5 a partir de número ou string "4,5". */
+function pickScore0to5(...vals) {
+  for (const v of vals) {
+    if (v == null || v === "") continue;
+    if (typeof v === "number" && !Number.isNaN(v) && v >= 0 && v <= 5) {
+      return Math.round(v * 10) / 10;
+    }
+    const f = parseFloat(String(v).replace(",", ".").trim());
+    if (!Number.isNaN(f) && f >= 0 && f <= 5) {
+      return Math.round(f * 10) / 10;
+    }
+  }
+  return null;
+}
+
+/**
+ * Bloco `rate_info` do cartão OEC (média, total, histograma por estrela). Estrutura varia entre feeds.
+ * @param {object | undefined} ri
+ * @returns {{ review_avg: number | null, review_count_total: number | null, review_star_votes: Record<number, number> | null }}
+ */
+function parseRateInfoObject(ri) {
+  const empty = { review_avg: null, review_count_total: null, review_star_votes: null };
+  if (!ri || typeof ri !== "object" || Array.isArray(ri)) {
+    return empty;
+  }
+  const review_avg = pickScore0to5(
+    ri.score,
+    ri.avg_score,
+    ri.average_score,
+    ri.product_score,
+    ri.star,
+    ri.rate
+  );
+  const review_count_total = pickNumber(
+    ri.review_count,
+    ri.review_num,
+    ri.total_count,
+    ri.total_review_count,
+    ri.global_review_count,
+    ri.rating_count,
+    ri.count,
+    ri.total
+  );
+  const starFromFields = () => {
+    const out = {};
+    const set = (star, ...keys) => {
+      const v = pickNumber(...keys.map((k) => ri[k]));
+      if (v != null && v >= 0) {
+        out[star] = Math.round(v);
+      }
+    };
+    set(5, "five_star_count", "five_star", "star5_count", "star_5_count", "n5_star", "s5", "5_star");
+    set(4, "four_star_count", "four_star", "star4_count", "star_4_count", "n4_star", "s4", "4_star");
+    set(3, "three_star_count", "three_star", "star3_count", "star_3_count", "n3_star", "s3", "3_star");
+    set(2, "two_star_count", "two_star", "star2_count", "star_2_count", "n2_star", "s2", "2_star");
+    set(1, "one_star_count", "one_star", "star1_count", "star_1_count", "n1_star", "s1", "1_star");
+    return Object.keys(out).length ? out : null;
+  };
+  const starFromArrays = () => {
+    const candidates = [
+      ri.review_star_level,
+      ri.review_start_level,
+      ri.star_level_list,
+      ri.star_reviews,
+      ri.rate_level_list,
+      ri.score_detail,
+      ri.scores
+    ].filter((a) => Array.isArray(a));
+    for (const arr of candidates) {
+      const out = {};
+      for (const row of arr) {
+        if (!row || typeof row !== "object") continue;
+        const level = pickNumber(row.level, row.star, row.star_num, row.grade, row.star_level);
+        const cnt = pickNumber(row.count, row.num, row.cnt, row.review_count);
+        if (level != null && level >= 1 && level <= 5 && cnt != null && cnt >= 0) {
+          out[level] = Math.round(cnt);
+        }
+      }
+      if (Object.keys(out).length) {
+        return out;
+      }
+    }
+    return null;
+  };
+  const review_star_votes = starFromFields() || starFromArrays();
+  if (review_avg == null && review_count_total == null && !review_star_votes) {
+    return empty;
+  }
+  return { review_avg, review_count_total, review_star_votes };
+}
+
+/**
+ * Junta histogramas por estrela (mesmo `product_id` vindo de respostas diferentes).
+ * @param {Record<number, number> | null | undefined} a
+ * @param {Record<number, number> | null | undefined} b
+ */
+function mergeStarVotes(a, b) {
+  if (!a && !b) {
+    return null;
+  }
+  const out = {};
+  for (const k of [1, 2, 3, 4, 5]) {
+    const v = (a && (a[k] ?? a[String(k)])) ?? (b && (b[k] ?? b[String(k)]));
+    if (v != null && !Number.isNaN(Number(v))) {
+      out[k] = Math.round(Number(v));
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * @param {object | null | undefined} a
+ * @param {object | null | undefined} b
+ */
+function coalesceProductRatings(a, b) {
+  if (!a && !b) {
+    return { review_avg: null, review_count_total: null, review_star_votes: null };
+  }
+  return {
+    review_avg: (a && a.review_avg) ?? (b && b.review_avg) ?? null,
+    review_count_total: (a && a.review_count_total) ?? (b && b.review_count_total) ?? null,
+    review_star_votes: mergeStarVotes(
+      a && a.review_star_votes,
+      b && b.review_star_votes
+    )
+  };
+}
+
+/**
+ * Lê o primeiro bloco útil entre `rate_info`, `review_rate_info`, etc.
+ * @param {object} raw — tipicamente após `mergeProductLayers`
+ */
+function extractProductRatings(raw) {
+  const empty = { review_avg: null, review_count_total: null, review_star_votes: null };
+  if (!raw || typeof raw !== "object") {
+    return empty;
+  }
+  const blobs = [raw.rate_info, raw.review_rate_info, raw.product_rate_info, raw.review_info].filter(
+    (x) => x && typeof x === "object" && !Array.isArray(x)
+  );
+  let merged = { ...empty };
+  for (const ri of blobs) {
+    const p = parseRateInfoObject(ri);
+    merged = coalesceProductRatings(merged, p);
+  }
+  return merged;
+}
+
 /**
  * Desconto em % a partir de `product_price_info` (Shop: discount_format "40%" e/ou discount_decimal "0.4").
  * @param {object | undefined} ppi
@@ -872,14 +1023,15 @@ function mergeProductById(byProductId, n) {
   const prev = byProductId.get(key);
   const mergedLoja = prev ? mergeLojaFromNormalized(prev, n) : extractLojaFromNormalized(n);
   const lojaBlock = lojaToRowFields(mergedLoja);
+  const rateBlock = prev ? coalesceProductRatings(n, prev) : null;
   if (!prev) {
     byProductId.set(key, { ...n, ...lojaBlock });
     return;
   }
   if (productRowRichness(n) > productRowRichness(prev)) {
-    byProductId.set(key, { ...n, ...lojaBlock });
+    byProductId.set(key, { ...n, ...lojaBlock, ...rateBlock });
   } else {
-    byProductId.set(key, { ...prev, ...lojaBlock });
+    byProductId.set(key, { ...prev, ...lojaBlock, ...rateBlock });
   }
 }
 
@@ -1040,6 +1192,7 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     sales_display: salesRaw,
     images: extractImages(raw),
     source_keys: Object.keys(raw).slice(0, 25),
+    ...extractProductRatings(raw),
     ...lojaToRowFields(lojaBlob)
   };
 }
@@ -1975,6 +2128,8 @@ if (isRunAsCli()) {
 
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
+  coalesceProductRatings,
+  extractProductRatings,
   mergeLojaFromNormalized,
   mergeProductById,
   mergeProductLayers,
@@ -1982,6 +2137,7 @@ export {
   normalizeSellerInfo,
   parseBrlishMoneyString,
   parseDiscountPercentFromPpi,
+  parseRateInfoObject,
   pickPriceFromFormatStrings,
   isReviewOnlyProductNode,
   productRowRichness
