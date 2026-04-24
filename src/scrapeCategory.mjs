@@ -1,5 +1,6 @@
 /**
- * Fase 1: coleta estável de UMA categoria — dados via page.on("response") + setRequestInterception(continue), sem abrir PDP (evita puzzle).
+ * Fase 1: coleta estável de UMA categoria — dados via page.on("response") + setRequestInterception(continue).
+ * `PDP_GALLERY=1`: após a grelha, abre N PDPs (PDP_GALLERY_MAX) e recolhe `fotos_pdp` (DOM + #__MODERN_ROUTER_DATA__).
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
@@ -174,6 +175,7 @@ function toDadosProdutoClean(n, categoriaUrl) {
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
     fotos: n.images,
+    fotos_pdp: Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null,
     seller_id: n.seller_id ?? null,
     global_seller_id: n.global_seller_id ?? null,
     nome_loja: n.nome_loja ?? null,
@@ -779,6 +781,160 @@ function extractImages(p) {
   if (p.cover) pushUrl(typeof p.cover === "string" ? p.cover : p.cover?.url);
   if (p.main_image?.url) pushUrl(p.main_image.url);
   return [...imgs];
+}
+
+/**
+ * Deduplica URLs de imagem da galeria PDP (ordem estável, URL completa).
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function dedupePdpImageUrls(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (typeof u !== "string") continue;
+    const t = u.trim();
+    if (t.length < 12) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Grelha/JSON da categoria traz poucas fotos; no PDP existem + URLs (hero, setinhas, miniaturas, embed).
+ * Executado no browser. Filtra avatares / assets óbvios de utilizador.
+ */
+function collectPdpGalleryUrlsInBrowser() {
+  const list = [];
+  const seen = new Set();
+  const add = (u) => {
+    if (typeof u !== "string" || u.length < 20) {
+      return;
+    }
+    const t = u.trim();
+    if (!t.startsWith("http")) {
+      return;
+    }
+    if (!/p16-|p19-|ibyteimg|tiktokcdn\.com/i.test(t)) {
+      return;
+    }
+    if (/\/(avt|sign\/)/i.test(t) || /aweme-avt|user_?avator|user_avatar|common-sign|user_nick/i.test(t)) {
+      return;
+    }
+    if (seen.has(t)) {
+      return;
+    }
+    seen.add(t);
+    list.push(t);
+  };
+  const parseSrcset = (s) => {
+    if (!s || typeof s !== "string") {
+      return;
+    }
+    for (const part of s.split(",")) {
+      const w = part.trim().split(/\s+/)[0];
+      if (w) {
+        add(w);
+      }
+    }
+  };
+  for (const el of document.querySelectorAll("img[src], source[srcset], picture > source")) {
+    if (el.tagName === "IMG" && el.src) {
+      add(el.src);
+    }
+    if (el.srcset) {
+      parseSrcset(el.srcset);
+    }
+  }
+  const script = document.getElementById("__MODERN_ROUTER_DATA__");
+  if (script && script.textContent) {
+    try {
+      const data = JSON.parse(script.textContent);
+      (function walk(o, depth) {
+        if (depth > 28) {
+          return;
+        }
+        if (typeof o === "string") {
+          if (o.startsWith("http") && /ibyteimg|p16-|p19-/i.test(o)) {
+            add(o);
+          }
+          return;
+        }
+        if (o == null || typeof o !== "object") {
+          return;
+        }
+        if (Array.isArray(o)) {
+          for (const x of o) {
+            walk(x, depth + 1);
+          }
+          return;
+        }
+        for (const v of Object.values(o)) {
+          walk(v, depth + 1);
+        }
+      })(data, 0);
+    } catch {
+      // ignora
+    }
+  }
+  return list;
+}
+
+/**
+ * @param {import("puppeteer").Page} page
+ * @returns {Promise<string[]>}
+ */
+async function collectPdpGalleryUrlsFromPage(page) {
+  return page.evaluate(collectPdpGalleryUrlsInBrowser);
+}
+
+/**
+ * Abre `product_url` (PDP) e preenche `images_pdp` no mapa. Opcional: env `PDP_GALLERY=1`.
+ * @param {import("puppeteer").Page} page
+ * @param {Map<string, object>} byProductId
+ * @param {{ max: number, debugLines?: string[] }} opts
+ * @returns {Promise<{ visited: number, max: number, eligible: number }>}
+ */
+async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
+  const max = Math.max(0, Math.min(500, opts.max));
+  const debugLines = opts.debugLines;
+  const withPdp = [...byProductId.values()].filter(
+    (n) => n?.product_url && String(n.product_url).includes("/pdp/")
+  );
+  let visited = 0;
+  for (const n of withPdp) {
+    if (visited >= max) {
+      break;
+    }
+    try {
+      await page.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
+      await humanPause(page, 1800, 3600);
+      const raw = await collectPdpGalleryUrlsFromPage(page);
+      const cleaned = dedupePdpImageUrls(raw);
+      n.images_pdp = cleaned.length > 0 ? cleaned : null;
+      visited += 1;
+      if (debugLines && cleaned.length) {
+        debugLines.push(`[pdp_gallery] ${n.product_id} → ${cleaned.length} url(s)`);
+      }
+    } catch (e) {
+      n.images_pdp = null;
+      if (debugLines) {
+        debugLines.push(
+          `[pdp_gallery] ${n.product_id} falhou: ${(e && e.message) || String(e)}`
+        );
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(`[pdp_gallery] ${n.product_id}: ${(e && e.message) || e}`);
+      }
+    }
+    await humanPause(page, 500, 1400);
+  }
+  return { visited, max, eligible: withPdp.length };
 }
 
 function mergeProductLayers(rawIn) {
@@ -1417,6 +1573,8 @@ function buildLojasMapBySeller(byProductId) {
 
 async function main() {
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
+  const pdpGalleryEnv =
+    process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
   await fs.mkdir(OUT_DIR, { recursive: true });
   const outFile = path.join(OUT_DIR, "teste_categoria.json");
   const debugFile = path.join(OUT_DIR, "debug_responses.log");
@@ -2002,6 +2160,22 @@ async function main() {
           );
         }
       }
+
+      if (pdpGalleryEnv && byProductId.size > 0) {
+        const pdpMax = Math.min(500, Math.max(0, Number(process.env.PDP_GALLERY_MAX) || 25));
+        // eslint-disable-next-line no-console
+        console.log(
+          `[pdp_gallery] A abrir PDPs (máx ${pdpMax} produtos) para recolher fotos — desligar: omitir PDP_GALLERY`
+        );
+        const pr = await enrichByProductIdWithPdpGallery(page, byProductId, {
+          max: pdpMax,
+          debugLines: debug ? debugLines : undefined
+        });
+        // eslint-disable-next-line no-console
+        console.log(
+          `[pdp_gallery] Concluído: ${pr.visited} visita(s) (elegíveis com /pdp/: ${pr.eligible}, teto ${pr.max}).`
+        );
+      }
     }
   } finally {
     await browser.close();
@@ -2040,8 +2214,9 @@ async function main() {
     final_url: finalUrl,
     status,
     total: itensDados.length,
-    filtro:
-      "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
+    filtro: pdpGalleryEnv
+      ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos em tiktok.com/.../pdp/...)"
+      : "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
     itens: itensDados
   };
   await fs.writeFile(DADOS_OUT, JSON.stringify(dadosPayload, null, 2), "utf8");
@@ -2129,6 +2304,7 @@ if (isRunAsCli()) {
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
   coalesceProductRatings,
+  dedupePdpImageUrls,
   extractProductRatings,
   mergeLojaFromNormalized,
   mergeProductById,

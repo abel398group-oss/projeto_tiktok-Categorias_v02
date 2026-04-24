@@ -8,6 +8,7 @@ import {
   mergeProductById,
   normalizeItem,
   normalizeSellerInfo,
+  dedupePdpImageUrls,
   parseBrlishMoneyString,
   parseDiscountPercentFromPpi,
   pickPriceFromFormatStrings,
@@ -102,6 +103,22 @@ describe("normalizeItem — preço (grelha, sem desconto % na saída)", () => {
     );
     assert.equal(n?.price, 49.99);
     assert.ok(n && !("discount_percent" in n));
+  });
+});
+
+describe("dedupePdpImageUrls", () => {
+  test("remove duplicados e mantém ordem", () => {
+    assert.deepEqual(
+      dedupePdpImageUrls([
+        "https://p16-oec-sg.example.com/a.webp?q=1",
+        "https://p16-oec-sg.example.com/a.webp?q=1",
+        "https://p19-oec-sg.example.com/b.webp"
+      ]),
+      [
+        "https://p16-oec-sg.example.com/a.webp?q=1",
+        "https://p19-oec-sg.example.com/b.webp"
+      ]
+    );
   });
 });
 
