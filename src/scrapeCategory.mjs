@@ -568,6 +568,58 @@ function mergeProductLayers(rawIn) {
   return o;
 }
 
+/** Blocos de review no `loaderData` têm `review_id` e repetem o mesmo product_id sem preço — não são cartão de grelha. */
+function isReviewOnlyProductNode(raw) {
+  if (!raw || typeof raw !== "object") {
+    return false;
+  }
+  return raw.review_id != null;
+}
+
+/**
+ * Colisão no mesmo `product_id`: fica a linha com mais dados (grelha com product_price_info ganha a reviews).
+ * @param {ReturnType<normalizeItem> | null | undefined} n
+ */
+function productRowRichness(n) {
+  if (!n) {
+    return 0;
+  }
+  let s = 0;
+  if (n.price != null && !Number.isNaN(Number(n.price))) {
+    s += 5_000;
+  }
+  if (n.images?.length) {
+    s += n.images.length * 200;
+  }
+  if (n.original_price != null) {
+    s += 400;
+  }
+  if (n.discount_percent != null) {
+    s += 200;
+  }
+  if (n.currency) {
+    s += 100;
+  }
+  if (n.sales_count != null) {
+    s += 50;
+  }
+  if (n.title) {
+    s += 1;
+  }
+  return s;
+}
+
+/**
+ * @param {Map<string, object>} byProductId chave = product_id
+ * @param {ReturnType<normalizeItem>} n
+ */
+function mergeProductById(byProductId, n) {
+  const key = String(n.product_id);
+  if (!byProductId.has(key) || productRowRichness(n) > productRowRichness(byProductId.get(key))) {
+    byProductId.set(key, n);
+  }
+}
+
 /** ex.: br, us, gb — a partir de `https://shop.tiktok.com/br/c/...` */
 function pathRegionFromCategoryUrl(categoriaUrl) {
   if (!categoriaUrl) {
@@ -620,6 +672,10 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     raw.productIdStr
   );
   if (!id) return null;
+
+  if (isReviewOnlyProductNode(raw)) {
+    return null;
+  }
 
   const title = pickString(raw.title, raw.name, raw.product_name);
   const si = raw.sold_info;
@@ -847,18 +903,18 @@ function summarizerLoaderDataKeys(ld) {
 /**
  * Tenta o mesmo extract que os XHR: item_list, arrays nomeados, nós soltos, sobre loaderData.
  * @param {object} rootData
- * @param {Map} bySku
+ * @param {Map<string, object>} byProductId chave = product_id
  * @param {string} categoriaUrl URL da categoria (região do PDP)
  * @returns {{ newCount: number, routeKey: string | null, loaderDataKeys: string[], errors?: unknown, merge: object }}
  */
-function mergeProductsFromModernRouter(rootData, bySku, categoriaUrl) {
+function mergeProductsFromModernRouter(rootData, byProductId, categoriaUrl) {
   if (!rootData || typeof rootData !== "object") {
     return {
       newCount: 0,
       routeKey: null,
       loaderDataKeys: [],
       errors: (rootData && rootData.errors) ?? undefined,
-      merge: { novos: 0, antes: bySku.size, depois: bySku.size }
+      merge: { novos: 0, antes: byProductId.size, depois: byProductId.size }
     };
   }
   const err = rootData.errors;
@@ -869,7 +925,7 @@ function mergeProductsFromModernRouter(rootData, bySku, categoriaUrl) {
       routeKey: null,
       loaderDataKeys: [],
       errors: err,
-      merge: { novos: 0, antes: bySku.size, depois: bySku.size, motivo: "sem_loaderData" }
+      merge: { novos: 0, antes: byProductId.size, depois: byProductId.size, motivo: "sem_loaderData" }
     };
   }
   const keys = Object.keys(ld);
@@ -877,38 +933,32 @@ function mergeProductsFromModernRouter(rootData, bySku, categoriaUrl) {
     keys.find((k) => k.includes("(category_id)")) ||
     keys.find((k) => k.includes("/c/") && k.includes("page")) ||
     null;
-  const before = bySku.size;
+  const before = byProductId.size;
   const root = ld;
   const oec = collectOecItemListOrProductInfo(root);
   for (const it of oec) {
     const n = normalizeItem(it, categoriaUrl);
     if (!n) continue;
-    if (!bySku.has(n.sku) || (n.images?.length ?? 0) > (bySku.get(n.sku).images?.length ?? 0)) {
-      bySku.set(n.sku, n);
-    }
+    mergeProductById(byProductId, n);
   }
   for (const arr of [...findProductArrays(root, 0, []), ...findNamedProductArrays(root)]) {
     for (const item of arr) {
       const n = normalizeItem(item, categoriaUrl);
       if (!n) continue;
-      if (!bySku.has(n.sku) || (n.images?.length ?? 0) > (bySku.get(n.sku).images?.length ?? 0)) {
-        bySku.set(n.sku, n);
-      }
+      mergeProductById(byProductId, n);
     }
   }
   for (const item of findLooseProductNodes(root, 0, [])) {
     const n = normalizeItem(item, categoriaUrl);
     if (!n) continue;
-    if (!bySku.has(n.sku) || (n.images?.length ?? 0) > (bySku.get(n.sku).images?.length ?? 0)) {
-      bySku.set(n.sku, n);
-    }
+    mergeProductById(byProductId, n);
   }
   return {
-    newCount: bySku.size - before,
+    newCount: byProductId.size - before,
     routeKey,
     loaderDataKeys: keys,
     errors: err,
-    merge: { novos: bySku.size - before, antes: before, depois: bySku.size, routeKey }
+    merge: { novos: byProductId.size - before, antes: before, depois: byProductId.size, routeKey }
   };
 }
 
@@ -950,7 +1000,8 @@ async function main() {
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
   const headless = isHeaded ? false : "new";
 
-  const bySku = new Map();
+  /** chave = product_id; dedupe: mantém a linha mais "rica" (preço, imagens) */
+  const byProductId = new Map();
   const debugLines = [];
 
   const launchOpts = {
@@ -1318,10 +1369,7 @@ async function main() {
       for (const it of oec) {
         const n = normalizeItem(it, startUrl);
         if (!n) continue;
-        const key = n.sku;
-        if (!bySku.has(key) || (n.images?.length ?? 0) > (bySku.get(key).images?.length ?? 0)) {
-          bySku.set(key, n);
-        }
+        mergeProductById(byProductId, n);
       }
       if (debug) {
         debugLines.push(
@@ -1389,10 +1437,7 @@ async function main() {
       for (const item of arr) {
         const n = normalizeItem(item, startUrl);
         if (!n) continue;
-        const key = n.sku;
-        if (!bySku.has(key) || (n.images?.length ?? 0) > (bySku.get(key).images?.length ?? 0)) {
-          bySku.set(key, n);
-        }
+        mergeProductById(byProductId, n);
       }
     }
     if (debug) {
@@ -1473,7 +1518,7 @@ async function main() {
           "utf8"
         );
       } else {
-        const mergedInfo = mergeProductsFromModernRouter(modernRouter, bySku, startUrl);
+        const mergedInfo = mergeProductsFromModernRouter(modernRouter, byProductId, startUrl);
         const ld = modernRouter.loaderData;
         const sample =
           routerPeekLen > 0 && ld
@@ -1503,14 +1548,14 @@ async function main() {
     await browser.close();
   }
 
-  if (bySku.size === 0 && status === "ok") {
+  if (byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
       "Nenhum produto mapeado (XHR + loader). Abra output/modern_router_peek.json (chaves e amostra) e debug_responses.log com --debug; ajuste o parser se o feed vier só em loaderData aninhado.";
   }
 
   const products = Object.fromEntries(
-    [...bySku.entries()]
+    [...byProductId.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([k, n]) => [k, { ...n, categoria_url: startUrl }])
   );
@@ -1521,13 +1566,13 @@ async function main() {
     status,
     note,
     collected_at: new Date().toISOString(),
-    count: bySku.size,
+    count: byProductId.size,
     products
   };
 
   await fs.writeFile(outFile, JSON.stringify(payload, null, 2), "utf8");
 
-  const itensDados = [...bySku.values()]
+  const itensDados = [...byProductId.values()]
     .map((n) => toDadosProdutoClean(n, startUrl))
     .sort((a, b) => String(a.product_id ?? "").localeCompare(String(b.product_id ?? "")));
   const dadosPayload = {
@@ -1556,7 +1601,7 @@ async function main() {
       {
         out: outFile,
         dados_produtos: DADOS_OUT,
-        count: bySku.size,
+        count: byProductId.size,
         debug: debug ? debugFile : null,
         caca_dados: huntLog ? CACA_DADOS_JSONL : null,
         caca_xhr_fetch: huntLog ? CACA_XHR_FILE : null,
