@@ -809,8 +809,9 @@ function dedupePdpImageUrls(urls) {
 }
 
 /**
- * Grelha/JSON da categoria traz poucas fotos; no PDP existem + URLs (hero, setinhas, miniaturas, embed).
- * Executado no browser. Filtra avatares / assets óbvios de utilizador.
+ * Só a grelha de miniaturas do produto (overflow-x-scroll + células w-66/h-66 no PDP).
+ * Não varre a página toda nem o JSON do router (isso trazia fotos de avaliações e outro ruído).
+ * Executado no browser.
  */
 function collectPdpGalleryUrlsInBrowser() {
   const list = [];
@@ -835,54 +836,64 @@ function collectPdpGalleryUrlsInBrowser() {
     seen.add(t);
     list.push(t);
   };
-  const parseSrcset = (s) => {
-    if (!s || typeof s !== "string") {
-      return;
-    }
-    for (const part of s.split(",")) {
-      const w = part.trim().split(/\s+/)[0];
-      if (w) {
-        add(w);
+  const inReviewLikeSection = (el) => {
+    let a = el;
+    for (let d = 0; d < 14 && a; d++) {
+      const id = a.id != null ? String(a.id) : "";
+      const cn = a.className != null ? String(a.className) : "";
+      const e2e = a.getAttribute && a.getAttribute("data-e2e");
+      const blob = `${id} ${cn} ${e2e || ""}`.toLowerCase();
+      if (
+        /review|avalia|comment|uploader|ugc|buyer|photo-?review|user-?media|image-?list-?review/.test(blob)
+      ) {
+        return true;
       }
+      a = a.parentElement;
     }
+    return false;
   };
-  for (const el of document.querySelectorAll("img[src], source[srcset], picture > source")) {
-    if (el.tagName === "IMG" && el.src) {
-      add(el.src);
+  const isUnderProductThumbStrip = (img) => {
+    if (!img || !img.parentElement) {
+      return false;
     }
-    if (el.srcset) {
-      parseSrcset(el.srcset);
+    if (inReviewLikeSection(img)) {
+      return false;
     }
+    const p = img.parentElement;
+    const cnP = p.className != null ? String(p.className) : "";
+    const parentIsThumbCell = cnP.includes("w-66") && cnP.includes("h-66");
+    if (!parentIsThumbCell) {
+      return false;
+    }
+    let a = p.parentElement;
+    for (let d = 0; d < 8 && a; d++) {
+      const cn = a.className != null ? String(a.className) : "";
+      if (cn.includes("overflow-x-scroll") && cn.includes("flex")) {
+        return !inReviewLikeSection(a);
+      }
+      a = a.parentElement;
+    }
+    return false;
+  };
+  for (const img of document.querySelectorAll("img[src]")) {
+    if (!isUnderProductThumbStrip(img) || !img.src) {
+      continue;
+    }
+    add(img.src);
   }
-  const script = document.getElementById("__MODERN_ROUTER_DATA__");
-  if (script && script.textContent) {
-    try {
-      const data = JSON.parse(script.textContent);
-      (function walk(o, depth) {
-        if (depth > 28) {
-          return;
-        }
-        if (typeof o === "string") {
-          if (o.startsWith("http") && /ibyteimg|p16-|p19-/i.test(o)) {
-            add(o);
-          }
-          return;
-        }
-        if (o == null || typeof o !== "object") {
-          return;
-        }
-        if (Array.isArray(o)) {
-          for (const x of o) {
-            walk(x, depth + 1);
-          }
-          return;
-        }
-        for (const v of Object.values(o)) {
-          walk(v, depth + 1);
-        }
-      })(data, 0);
-    } catch {
-      // ignora
+  if (list.length > 0) {
+    return list;
+  }
+  for (const strip of document.querySelectorAll("div[class*='overflow-x-scroll']")) {
+    const cn = strip.className != null ? String(strip.className) : "";
+    if (!cn.includes("flex") || inReviewLikeSection(strip)) {
+      continue;
+    }
+    for (const img of strip.querySelectorAll("img[src]")) {
+      if (inReviewLikeSection(img) || !img.src) {
+        continue;
+      }
+      add(img.src);
     }
   }
   return list;
