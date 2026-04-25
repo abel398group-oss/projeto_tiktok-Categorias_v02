@@ -3,6 +3,8 @@
 Documento para contexto: **como o projeto funciona**, **nível de profissionalismo**, **segurança**, **lacunas** e **melhorias** sugeridas.  
 Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — repositório `projeto_tiktok-Categorias_v02`.
 
+**Branches:** `main` (principal) e `backup` (segurança / referência). Desenvolvimento pode decorrer em qualquer uma; usar `git branch` / `git status` para saber a branch activa.
+
 ---
 
 ## 1. Como está a funcionar (técnico)
