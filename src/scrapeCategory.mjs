@@ -932,6 +932,25 @@ function dedupePdpImageUrls(urls) {
 }
 
 /**
+ * `shop_logo.url_list` traz o mesmo ficheiro em p16 e p19 (e por vezes resoluções tplv) — alinhar a `fotos`/`fotos_pdp`.
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function normalizeAndDedupeLogoUrlList(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const abs = urls
+    .filter((u) => typeof u === "string")
+    .map((u) => {
+      const t = u.trim();
+      return t.startsWith("//") ? `https:${t}` : t;
+    })
+    .filter((u) => u.startsWith("http"));
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(abs));
+}
+
+/**
  * Só a grelha de miniaturas do produto (overflow-x-scroll + células w-66/h-66 no PDP).
  * Não varre a página toda nem o JSON do router (isso trazia fotos de avaliações e outro ruído).
  * Executado no browser.
@@ -1114,9 +1133,10 @@ function readShopLogo(logo) {
     return { uri: null, urls: [] };
   }
   const uri = logo.uri != null && String(logo.uri).trim() !== "" ? String(logo.uri).trim() : null;
-  const urls = Array.isArray(logo.url_list)
+  const raw = Array.isArray(logo.url_list)
     ? logo.url_list.filter((u) => typeof u === "string" && (u.startsWith("http") || u.startsWith("//")))
     : [];
+  const urls = normalizeAndDedupeLogoUrlList(raw);
   return { uri, urls };
 }
 
@@ -1142,9 +1162,7 @@ function normalizeSellerInfo(node) {
   const logSe = se ? readShopLogo(se.shop_logo) : { uri: null, urls: [] };
   const logSh = sh ? readShopLogo(sh.shop_logo) : { uri: null, urls: [] };
   const uri = logSh.uri || logSe.uri || null;
-  const urlsMerged = [
-    ...new Set([...logSe.urls, ...logSh.urls].filter((u) => typeof u === "string" && u.startsWith("http")))
-  ];
+  const urlsMerged = normalizeAndDedupeLogoUrlList([...logSe.urls, ...logSh.urls]);
 
   return {
     seller_id: pickString(sh?.seller_id, se?.seller_id) || null,
@@ -1204,6 +1222,7 @@ function extractLojaFromNormalized(row) {
     return { ...LOJA_FIELD_DEFAULTS };
   }
   const urls = row.loja_logo_urls;
+  const logoList = Array.isArray(urls) ? normalizeAndDedupeLogoUrlList(urls) : [];
   return {
     seller_id: row.seller_id ?? null,
     global_seller_id: row.global_seller_id ?? null,
@@ -1215,7 +1234,7 @@ function extractLojaFromNormalized(row) {
     loja_videos: row.loja_videos ?? null,
     loja_enable_follow: row.loja_enable_follow ?? null,
     loja_logo_uri: row.loja_logo_uri ?? null,
-    loja_logo_urls: Array.isArray(urls) ? [...urls] : null
+    loja_logo_urls: logoList.length > 0 ? logoList : null
   };
 }
 
@@ -1231,11 +1250,7 @@ function mergeLojaFromNormalized(prevRow, nextRow) {
   const n = extractLojaFromNormalized(nextRow);
   const pUrls = p.loja_logo_urls || [];
   const nUrls = n.loja_logo_urls || [];
-  const mergedUrls = [
-    ...new Set(
-      [...pUrls, ...nUrls].filter((u) => typeof u === "string" && (u.startsWith("http") || u.startsWith("//")))
-    )
-  ];
+  const mergedUrls = normalizeAndDedupeLogoUrlList([...pUrls, ...nUrls]);
   return {
     seller_id: coalesceLojaString(p.seller_id, n.seller_id),
     global_seller_id: coalesceLojaString(p.global_seller_id, n.global_seller_id),

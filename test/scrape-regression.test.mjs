@@ -297,6 +297,19 @@ describe("normalizeSellerInfo / loja", () => {
     assert.deepEqual(o?.loja_logo_urls, ["https://a.com/1.png", "https://a.com/2.png"]);
     assert.equal(o?.loja_logo_uri, "u1");
   });
+  test("loja_logo_urls: deduplica p16 e p19 (mesmo pathname)", () => {
+    const p16 = "https://p16-oec-sg.ibyteimg.com/tos-alisg-i-x/abc.png";
+    const p19 = "https://p19-oec-sg.ibyteimg.com/tos-alisg-i-x/abc.png";
+    const o = normalizeSellerInfo({
+      product_id: "1",
+      seller_info: {
+        seller_id: "x",
+        shop_name: "L",
+        shop_logo: { uri: "u1", url_list: [p16, p19] }
+      }
+    });
+    assert.deepEqual(o?.loja_logo_urls, [p16]);
+  });
   test("shop_info: sold_count → loja_vendas_total", () => {
     const o = normalizeSellerInfo({
       product_id: "1",
