@@ -102,6 +102,12 @@ npm test
 
 ---
 
+### 8. Branches no Git
+
+O repositório usa **`main`** (linha principal) e **`backup`** (cópia de segurança). Trabalha na que estiveres a usar; com **`git branch`** vês em qual estás.
+
+---
+
 ### Resumo em três frases
 
 Instala com **`npm install`**, corre **`npm run coleta`** (rápida) ou **`npm run coleta:completa`** (categoria + `fotos_pdp`), lê **`output/dados_produtos.json`**.  

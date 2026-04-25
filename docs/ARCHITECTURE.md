@@ -62,3 +62,5 @@ A pasta `output/*` **não** deve ser commitada (ver `.gitignore`); mantém-se `o
 ## Repositório remoto
 
 Organização: **abel398group-oss** — [projeto_tiktok-Categorias_v02](https://github.com/abel398group-oss/projeto_tiktok-Categorias_v02).
+
+**Branches Git:** `main` (linha principal) e `backup` (cópia de segurança / referência). O desenvolvimento do utilizador pode estar em qualquer uma; confirmar com `git branch` antes de assumir a branch activa.

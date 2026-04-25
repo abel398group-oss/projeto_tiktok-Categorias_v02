@@ -5,7 +5,8 @@ alwaysApply: true
 
 # Projeto: categorias TikTok Shop
 
-- **Foco:** Uma categoria por execução; **não** abrir PDP; dados via **XHR + `__MODERN_ROUTER_DATA__`**.  
+- **Foco:** Uma categoria por execução; dados via **XHR + `__MODERN_ROUTER_DATA__`**; PDP opcional (`PDP_GALLERY` / `coleta:completa`).  
+- **Git:** branches **`main`** e **`backup`**; o utilizador trabalha na branch que escolher — não assumir `main` sem confirmar.  
 - **Entregável humano:** `output/dados_produtos.json` (resto de artefactos em `output/extra/`; não committar `output/*` exc. `.gitkeep`s).  
 - **Tarefas:** `docs/ROADMAP.md` é a fonte única (ver regra `task-management`).  
 - **Linguagem:** respostas ao utilizador em **português** quando pedido.  

@@ -164,6 +164,15 @@ function collectOecItemListOrProductInfo(data) {
 }
 
 function toDadosProdutoClean(n, categoriaUrl) {
+  const pdp = Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null;
+  let fotos = null;
+  if (Array.isArray(n.images) && n.images.length) {
+    if (pdp) {
+      fotos = subtractFotosOverlappingPdp(n.images, pdp);
+    } else {
+      fotos = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(n.images));
+    }
+  }
   return {
     categoria_url: categoriaUrl,
     link_produto: n.product_url ?? null,
@@ -177,8 +186,8 @@ function toDadosProdutoClean(n, categoriaUrl) {
     preco_original: n.original_price,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
-    fotos: n.images,
-    fotos_pdp: Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null,
+    fotos: fotos && fotos.length ? fotos : null,
+    fotos_pdp: pdp,
     seller_id: n.seller_id ?? null,
     global_seller_id: n.global_seller_id ?? null,
     nome_loja: n.nome_loja ?? null,
@@ -783,11 +792,125 @@ function extractImages(p) {
   if (p.cover_image?.url) pushUrl(p.cover_image.url);
   if (p.cover) pushUrl(typeof p.cover === "string" ? p.cover : p.cover?.url);
   if (p.main_image?.url) pushUrl(p.main_image.url);
-  return [...imgs];
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname([...imgs]));
 }
 
 /**
- * Deduplica URLs de imagem da galeria PDP (ordem estável, URL completa).
+ * Identificador do asset OEC (mesmo ficheiro em p16/p19 ou em resoluções tplv distintas).
+ * @param {string} u
+ * @returns {string | null}
+ */
+function getIbyteImageAssetId(u) {
+  if (!u || typeof u !== "string") {
+    return null;
+  }
+  try {
+    const path = new URL(u.trim()).pathname;
+    const m = path.match(/\/([a-f0-9]{8,32})~tplv-/i);
+    return m ? m[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mesmo ficheiro com crops diferentes (`:1000:1000` vs `:800:800`) — um URL por id de asset.
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function dedupeImageUrlsByAssetId(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || u.length < 12) {
+      continue;
+    }
+    const t = u.trim();
+    const id = getIbyteImageAssetId(t);
+    const key = id != null ? `id:${id}` : t;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Grelha (`fotos`) não repete o mesmo asset que já está em `fotos_pdp` (caminho diferente, mesmo hash).
+ * @param {string[]|null|undefined} fotosGrelha
+ * @param {string[]|null|undefined} fotosPdp
+ * @returns {string[]|null}
+ */
+function subtractFotosOverlappingPdp(fotosGrelha, fotosPdp) {
+  if (!Array.isArray(fotosGrelha) || !fotosGrelha.length) {
+    return null;
+  }
+  const g = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(fotosGrelha));
+  if (!Array.isArray(fotosPdp) || !fotosPdp.length) {
+    return g.length ? g : null;
+  }
+  const pdpIds = new Set();
+  for (const u of fotosPdp) {
+    const id = getIbyteImageAssetId(u);
+    if (id) {
+      pdpIds.add(id);
+    }
+  }
+  if (pdpIds.size === 0) {
+    return g.length ? g : null;
+  }
+  const out = g.filter((u) => {
+    const id = getIbyteImageAssetId(u);
+    if (id && pdpIds.has(id)) {
+      return false;
+    }
+    return true;
+  });
+  return out.length ? out : null;
+}
+
+/**
+ * O feed costuma listar o mesmo ficheiro em espelhos CDN (ex. `p16-oec-…` e `p19-oec-…` com o mesmo `pathname`).
+ * Mantém a primeira ocorrência, ordem estável.
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function dedupeImageUrlsByPathname(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || u.length < 12) {
+      continue;
+    }
+    const t = u.trim();
+    if (!t.startsWith("http")) {
+      continue;
+    }
+    let key;
+    try {
+      key = new URL(t).pathname;
+    } catch {
+      key = t;
+    }
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Deduplica URLs de imagem da galeria PDP (ordem estável, URL exata) e espelhos CDN por pathname.
  * @param {string[]} urls
  * @returns {string[]}
  */
@@ -805,12 +928,13 @@ function dedupePdpImageUrls(urls) {
     seen.add(t);
     out.push(t);
   }
-  return out;
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(out));
 }
 
 /**
- * Grelha/JSON da categoria traz poucas fotos; no PDP existem + URLs (hero, setinhas, miniaturas, embed).
- * Executado no browser. Filtra avatares / assets óbvios de utilizador.
+ * Só a grelha de miniaturas do produto (overflow-x-scroll + células w-66/h-66 no PDP).
+ * Não varre a página toda nem o JSON do router (isso trazia fotos de avaliações e outro ruído).
+ * Executado no browser.
  */
 function collectPdpGalleryUrlsInBrowser() {
   const list = [];
@@ -835,54 +959,64 @@ function collectPdpGalleryUrlsInBrowser() {
     seen.add(t);
     list.push(t);
   };
-  const parseSrcset = (s) => {
-    if (!s || typeof s !== "string") {
-      return;
-    }
-    for (const part of s.split(",")) {
-      const w = part.trim().split(/\s+/)[0];
-      if (w) {
-        add(w);
+  const inReviewLikeSection = (el) => {
+    let a = el;
+    for (let d = 0; d < 14 && a; d++) {
+      const id = a.id != null ? String(a.id) : "";
+      const cn = a.className != null ? String(a.className) : "";
+      const e2e = a.getAttribute && a.getAttribute("data-e2e");
+      const blob = `${id} ${cn} ${e2e || ""}`.toLowerCase();
+      if (
+        /review|avalia|comment|uploader|ugc|buyer|photo-?review|user-?media|image-?list-?review/.test(blob)
+      ) {
+        return true;
       }
+      a = a.parentElement;
     }
+    return false;
   };
-  for (const el of document.querySelectorAll("img[src], source[srcset], picture > source")) {
-    if (el.tagName === "IMG" && el.src) {
-      add(el.src);
+  const isUnderProductThumbStrip = (img) => {
+    if (!img || !img.parentElement) {
+      return false;
     }
-    if (el.srcset) {
-      parseSrcset(el.srcset);
+    if (inReviewLikeSection(img)) {
+      return false;
     }
+    const p = img.parentElement;
+    const cnP = p.className != null ? String(p.className) : "";
+    const parentIsThumbCell = cnP.includes("w-66") && cnP.includes("h-66");
+    if (!parentIsThumbCell) {
+      return false;
+    }
+    let a = p.parentElement;
+    for (let d = 0; d < 8 && a; d++) {
+      const cn = a.className != null ? String(a.className) : "";
+      if (cn.includes("overflow-x-scroll") && cn.includes("flex")) {
+        return !inReviewLikeSection(a);
+      }
+      a = a.parentElement;
+    }
+    return false;
+  };
+  for (const img of document.querySelectorAll("img[src]")) {
+    if (!isUnderProductThumbStrip(img) || !img.src) {
+      continue;
+    }
+    add(img.src);
   }
-  const script = document.getElementById("__MODERN_ROUTER_DATA__");
-  if (script && script.textContent) {
-    try {
-      const data = JSON.parse(script.textContent);
-      (function walk(o, depth) {
-        if (depth > 28) {
-          return;
-        }
-        if (typeof o === "string") {
-          if (o.startsWith("http") && /ibyteimg|p16-|p19-/i.test(o)) {
-            add(o);
-          }
-          return;
-        }
-        if (o == null || typeof o !== "object") {
-          return;
-        }
-        if (Array.isArray(o)) {
-          for (const x of o) {
-            walk(x, depth + 1);
-          }
-          return;
-        }
-        for (const v of Object.values(o)) {
-          walk(v, depth + 1);
-        }
-      })(data, 0);
-    } catch {
-      // ignora
+  if (list.length > 0) {
+    return list;
+  }
+  for (const strip of document.querySelectorAll("div[class*='overflow-x-scroll']")) {
+    const cn = strip.className != null ? String(strip.className) : "";
+    if (!cn.includes("flex") || inReviewLikeSection(strip)) {
+      continue;
+    }
+    for (const img of strip.querySelectorAll("img[src]")) {
+      if (inReviewLikeSection(img) || !img.src) {
+        continue;
+      }
+      add(img.src);
     }
   }
   return list;
@@ -2308,6 +2442,8 @@ if (isRunAsCli()) {
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
   coalesceProductRatings,
+  dedupeImageUrlsByAssetId,
+  dedupeImageUrlsByPathname,
   dedupePdpImageUrls,
   extractProductRatings,
   mergeLojaFromNormalized,

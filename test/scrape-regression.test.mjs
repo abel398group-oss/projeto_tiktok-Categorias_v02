@@ -8,6 +8,8 @@ import {
   mergeProductById,
   normalizeItem,
   normalizeSellerInfo,
+  dedupeImageUrlsByAssetId,
+  dedupeImageUrlsByPathname,
   dedupePdpImageUrls,
   parseBrlishMoneyString,
   parseDiscountPercentFromPpi,
@@ -119,6 +121,26 @@ describe("dedupePdpImageUrls", () => {
         "https://p19-oec-sg.example.com/b.webp"
       ]
     );
+  });
+});
+
+describe("dedupeImageUrlsByPathname", () => {
+  test("p16 e p19 com o mesmo path — um só (espelho CDN)", () => {
+    const a =
+      "https://p16-oec-va.ibyteimg.com/tos-maliva-i-x/bbc5a751~tplv-o3syd03w52-crop-webp:1024:1024.webp?dr=1";
+    const b =
+      "https://p19-oec-va.ibyteimg.com/tos-maliva-i-x/bbc5a751~tplv-o3syd03w52-crop-webp:1024:1024.webp?dr=2";
+    assert.deepEqual(dedupeImageUrlsByPathname([a, b]), [a]);
+  });
+});
+
+describe("dedupeImageUrlsByAssetId", () => {
+  test("mesmo hash, resoluções tplv diferentes — um só", () => {
+    const a =
+      "https://p16-oec-sg.example.com/tos-x/f75ff326720d42e5af569ff71fd09095~tplv-a-crop-webp:1000:1000.webp?q=1";
+    const b =
+      "https://p16-oec-sg.example.com/tos-x/f75ff326720d42e5af569ff71fd09095~tplv-a-crop-webp:800:800.webp?q=2";
+    assert.deepEqual(dedupeImageUrlsByAssetId([a, b]), [a]);
   });
 });
 
