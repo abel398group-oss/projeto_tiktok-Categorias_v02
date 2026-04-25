@@ -1,6 +1,7 @@
 /**
  * Fase 1: coleta estável de UMA categoria — dados via page.on("response") + setRequestInterception(continue).
- * `PDP_GALLERY=1`: após a grelha, abre N PDPs (PDP_GALLERY_MAX) e recolhe `fotos_pdp` (DOM + #__MODERN_ROUTER_DATA__).
+ * `PDP_GALLERY=1`: após a grelha, abre N PDPs (PDP_GALLERY_MAX) e recolhe `fotos_pdp` (DOM) e, no mesmo
+ * passo, **preço de vitrine + "de" riscado** (hero 36px + cêntimos; `original_price` só se houver riscado).
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
@@ -176,8 +177,9 @@ function collectOecItemListOrProductInfo(data) {
 
 /**
  * Export p/ `dados_produtos.json` (`itens[]`).
- * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original, vendas,
- *   fotos, fotos_pdp, bloco de avaliação do item.
+ * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original,
+ *   preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent (opcionais, experimentais),
+ *   vendas, fotos, fotos_pdp, bloco de avaliação do item.
  * - Campos de loja (cópia no item; desnormalizados; chave = `seller_id`):
  *   `seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`.
  * Não remove campos; contrato de ficheiro estável — ver `docs/ARCHITECTURE.md`.
@@ -204,6 +206,9 @@ function toDadosProdutoClean(n, categoriaUrl) {
     avaliacoes_total: n.review_count_total ?? null,
     votos_por_estrela: n.review_star_votes ?? null,
     preco_original: n.original_price,
+    preco_estimado_vitrine: n.preco_estimado_vitrine ?? null,
+    preco_gap_estimado: n.preco_gap_estimado ?? null,
+    preco_gap_estimado_percent: n.preco_gap_estimado_percent ?? null,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
     fotos: fotos && fotos.length ? fotos : null,
@@ -772,6 +777,15 @@ function parseBrlishMoneyString(s) {
       return n;
     }
   }
+  // BR sem "R$": "59,90" vindo só do API (evita cair em ppi.price errado)
+  const bare = t.match(/^(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})$/);
+  if (bare) {
+    const g = bare[1];
+    const n = parseFloat(g.replace(/\./g, "").replace(",", "."));
+    if (!Number.isNaN(n) && n > 0 && n < 1_000_000) {
+      return n;
+    }
+  }
   return null;
 }
 
@@ -783,11 +797,13 @@ function pickPriceFromFormatStrings(p) {
   if (!p || typeof p !== "object") {
     return null;
   }
+  // Ordem: vitrine (`format_price` / `show_price`) antes de `sale_format_price`. `selling_price` fica
+  // depois (por vezes espelha variante, não a linha principal do card).
   const keys = [
+    p.format_price,
+    p.show_price,
     p.sale_format_price,
     p.sale_price_format,
-    p.show_price,
-    p.format_price,
     p.selling_price,
     p.list_format_price
   ];
@@ -798,6 +814,176 @@ function pickPriceFromFormatStrings(p) {
     }
   }
   return null;
+}
+
+/**
+ * Sinal de desconto no feed: badge %, `discount` numérico, `discount_decimal` — o reconcile não
+ * força o riscado para `preco` quando o feed declara venda.
+ */
+function ppiHasDiscountSignal(ppi) {
+  if (!ppi || typeof ppi !== "object") {
+    return false;
+  }
+  if (parseDiscountPercentFromPpi(ppi) != null) {
+    return true;
+  }
+  const df = ppi.discount_format;
+  if (df != null && String(df).trim() !== "" && /%/.test(String(df))) {
+    return true;
+  }
+  if (typeof ppi.discount === "number" && ppi.discount > 0) {
+    return true;
+  }
+  if (typeof ppi.discount_decimal === "number" && ppi.discount_decimal > 0) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Preço do `default_sku` na `sku_list` — alinha com a variante do hero quando `price` vem noutro SKU.
+ */
+function priceFromDefaultSku(raw) {
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.sku_list)) {
+    return null;
+  }
+  const sid = pickString(raw.default_sku_id, raw.default_sku, raw.sku_id);
+  if (sid == null) {
+    return null;
+  }
+  for (const s of raw.sku_list) {
+    if (!s || typeof s !== "object") {
+      continue;
+    }
+    const id = s.sku_id ?? s.id ?? s.skuId;
+    if (id != null && String(sid) === String(id)) {
+      return pickNumber(
+        s.sale_price,
+        s.price,
+        s.sale_price_decimal,
+        s.sku_sale_price,
+        s.purchase_price
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * Sem badge de desconto, o feed muitas vezes mete o piso em `price` e o "de" em `origin_price` (a vitrine
+ * mostra o de).
+ */
+function reconcileVitrineNoDiscount(price, originalPrice, ppi, minPrice, fromFormatStrUsed) {
+  if (fromFormatStrUsed) {
+    return price;
+  }
+  if (price == null || originalPrice == null) {
+    return price;
+  }
+  if (Number(originalPrice) <= Number(price) + 0.0001) {
+    return price;
+  }
+  if (ppiHasDiscountSignal(ppi)) {
+    return price;
+  }
+  const p = Number(price);
+  const pMin = minPrice != null && !Number.isNaN(Number(minPrice)) ? Number(minPrice) : null;
+  if (pMin != null && Math.abs(p - pMin) < 0.0001) {
+    return Number(originalPrice);
+  }
+  return price;
+}
+
+/**
+ * Com badge e "de" no feed, o número em `price` muitas vezes é piso/variante/cupom, não a linha principal
+ * do card. O valor mostrado alinha-se em geral a `origin × (1 - d/100)`.
+ * - Muito abaixo de `exp` → piso/variante barata.
+ * - Muito acima de `exp` → cifra antiga ou outro alvo.
+ * Não aplica se já houver `format_price` (`fromFormatUsed`).
+ * @param {boolean} [fromFormatUsed]
+ */
+function alignPriceToStatedPercent(price, originalPrice, ppi, minPrice, fromFormatUsed) {
+  if (fromFormatUsed) {
+    return price;
+  }
+  if (price == null || originalPrice == null) {
+    return price;
+  }
+  if (!ppi || typeof ppi !== "object") {
+    return price;
+  }
+  if (!ppiHasDiscountSignal(ppi)) {
+    return price;
+  }
+  const d = parseDiscountPercentFromPpi(ppi);
+  if (d == null || d <= 0 || d >= 100) {
+    return price;
+  }
+  const o = Number(originalPrice);
+  const p = Number(price);
+  if (o <= 0) {
+    return price;
+  }
+  const exp = Math.round(o * (1 - d / 100) * 100) / 100;
+  // Piso/variante: feed << preço "de"×(1-%)
+  if (p < exp * 0.92) {
+    return exp;
+  }
+  // Cifra acima do anunciado (ex.: 18,90 vs -50% com "de" 29,90 → ~15)
+  if (p > exp * 1.1) {
+    return exp;
+  }
+  if (p >= exp - 0.0001) {
+    return price;
+  }
+  const m = minPrice != null && !Number.isNaN(Number(minPrice)) ? Number(minPrice) : null;
+  const onMin = m != null && Math.abs(p - m) < 0.01;
+  if (onMin) {
+    return exp;
+  }
+  if (m == null && p < o * 0.5 && p < exp - 1) {
+    return exp;
+  }
+  return price;
+}
+
+/**
+ * Estimativa experimental (vitrine): `original × (1 - d/100)` com d de `parseDiscountPercentFromPpi(ppi)`.
+ * Não altera `price`; usado para comparar com o preço de grelha. Campos nulos se faltar dado.
+ * @param {number | null | undefined} price — valor final já normalizado (`normalizeItem`)
+ * @param {number | null | undefined} originalPrice
+ * @param {object | undefined} ppi — `product_price_info`
+ * @returns {{ preco_estimado_vitrine: number | null, preco_gap_estimado: number | null, preco_gap_estimado_percent: number | null }}
+ */
+function computePrecoEstimadoVitrineFields(price, originalPrice, ppi) {
+  const empty = {
+    preco_estimado_vitrine: null,
+    preco_gap_estimado: null,
+    preco_gap_estimado_percent: null
+  };
+  if (originalPrice == null || typeof originalPrice !== "number" || Number.isNaN(originalPrice) || originalPrice <= 0) {
+    return empty;
+  }
+  if (price == null || typeof price !== "number" || Number.isNaN(price)) {
+    return empty;
+  }
+  if (originalPrice <= price) {
+    return empty;
+  }
+  const d = parseDiscountPercentFromPpi(ppi);
+  if (d == null || d < 1 || d > 94) {
+    return empty;
+  }
+  const base = originalPrice * (1 - d / 100);
+  const precoEstimadoVitrine = Math.round(base * 100) / 100;
+  const precoGapEstimado = precoEstimadoVitrine - price;
+  const rawPct = precoGapEstimado / originalPrice;
+  const precoGapEstimadoPercent = Math.round(rawPct * 10000) / 10000;
+  return {
+    preco_estimado_vitrine: precoEstimadoVitrine,
+    preco_gap_estimado: precoGapEstimado,
+    preco_gap_estimado_percent: precoGapEstimadoPercent
+  };
 }
 
 function extractImages(p) {
@@ -1062,6 +1248,139 @@ function collectPdpGalleryUrlsInBrowser() {
 }
 
 /**
+ * Junta a parte inteira (ex. "67") e os cêntimos (ex. ",28" ou ".28") no preço hero da PDP.
+ * Usado após a coleta de texto no browser; `npm test` valida a combinação.
+ * @param {string} intPart
+ * @param {string} decPart
+ * @returns {number | null}
+ */
+function combinePdpHeroPriceParts(intPart, decPart) {
+  const a = String(intPart || "").replace(/[^\d]/g, "");
+  if (!a) {
+    return null;
+  }
+  const rawD = String(decPart || "").replace(/[^\d]/g, "");
+  if (!rawD) {
+    const n = parseFloat(a, 10);
+    if (Number.isNaN(n) || n < 0) {
+      return null;
+    }
+    return n;
+  }
+  const d2 = rawD.length >= 2 ? rawD.slice(0, 2) : rawD.padEnd(2, "0");
+  const n = parseFloat(`${a}.${d2}`, 10);
+  if (Number.isNaN(n) || n < 0) {
+    return null;
+  }
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Aplica o par { sale, listPrice } lido no DOM do PDP: `price` = vitrine; `original_price` = "de" só
+ * se houver riscado acima do preço de venda, senão `null` (sem desconto visível nesse bloco).
+ * @param {Record<string, unknown>} n linha de `byProductId` (mutável)
+ * @param {{ sale: number | null, listPrice: number | null } | null | undefined} pdp
+ * @returns {Record<string, unknown>}
+ */
+function applyPdpDomPrices(n, pdp) {
+  if (!n || !pdp || typeof pdp !== "object") {
+    return n;
+  }
+  const sale = pdp.sale;
+  const listPrice = pdp.listPrice;
+  if (typeof sale !== "number" || Number.isNaN(sale) || sale <= 0) {
+    return n;
+  }
+  n.price = sale;
+  if (listPrice != null && typeof listPrice === "number" && !Number.isNaN(listPrice) && listPrice > sale + 0.0001) {
+    n.original_price = listPrice;
+  } else {
+    n.original_price = null;
+  }
+  return n;
+}
+
+/**
+ * Nó de produto no JSON embebido da PDP (o mesmo `product_id` + `product_price_info` que a vitrine OEC).
+ * @param {object} rootData
+ * @param {string} productId
+ * @returns {object | null}
+ */
+function findProductNodeByIdInModernRouter(rootData, productId) {
+  if (!rootData || typeof rootData !== "object" || !productId) {
+    return null;
+  }
+  const roots = [rootData, rootData.loaderData].filter((x) => x && typeof x === "object");
+  for (const r of roots) {
+    const found = findProductNodeByIdInTree(r, String(productId), 0);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * @param {unknown} node
+ * @param {string} productId
+ * @param {number} depth
+ * @returns {object | null}
+ */
+function findProductNodeByIdInTree(node, productId, depth) {
+  if (depth > 45 || node == null) {
+    return null;
+  }
+  if (Array.isArray(node)) {
+    for (const el of node) {
+      const r = findProductNodeByIdInTree(el, productId, depth + 1);
+      if (r) {
+        return r;
+      }
+    }
+    return null;
+  }
+  if (typeof node !== "object") {
+    return null;
+  }
+  const id = getProductId(node);
+  if (id != null && String(id) === productId && node.product_price_info && typeof node.product_price_info === "object") {
+    return node;
+  }
+  for (const v of Object.values(node)) {
+    if (v && typeof v === "object") {
+      const r = findProductNodeByIdInTree(v, productId, depth + 1);
+      if (r) {
+        return r;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * `normalizeItem` sobre o nó vindo de `#__MODERN_ROUTER_DATA__` (PDP) — o loader costuma ter
+ * `format_price` / `show_price` mais alinhados ao card do que o XHR mínimo da grelha.
+ * @param {object | null} root
+ * @param {string} productId
+ * @param {string} categoriaUrl
+ * @returns {{ sale: number, listPrice: number | null } | null}
+ */
+function pdpPriceFromLoaderRoot(root, productId, categoriaUrl) {
+  if (!root || !productId) {
+    return null;
+  }
+  const raw = findProductNodeByIdInModernRouter(root, String(productId));
+  if (!raw) {
+    return null;
+  }
+  const n = normalizeItem(mergeProductLayers(raw), categoriaUrl || "");
+  if (!n || n.price == null || Number.isNaN(Number(n.price))) {
+    return null;
+  }
+  return { sale: n.price, listPrice: n.original_price };
+}
+
+/**
  * @param {import("puppeteer").Page} page
  * @returns {Promise<string[]>}
  */
@@ -1070,14 +1389,204 @@ async function collectPdpGalleryUrlsFromPage(page) {
 }
 
 /**
- * Abre `product_url` (PDP) e preenche `images_pdp` no mapa. Opcional: env `PDP_GALLERY=1`.
+ * No PDP: lê o preço de vitrine no DOM. Aceita 28px–48px, classe Headline* (não só 36px) e
+ * desempata pelo **maior font-size** (evita apanhar cifra pequena de variante / cupom). Não escolhe span riscado.
+ * + "de" riscado no mesmo bloco. Se o DOM não devolver, usa **uma vez** o loader `__MODERN_ROUTER_DATA__`.
+ * @param {import("puppeteer").Page} page
+ * @param {string} productId
+ * @param {string} categoriaUrl
+ * @returns {Promise<{ sale: number | null, listPrice: number | null }>}
+ */
+async function collectPdpProductPricesFromPage(page, productId, categoriaUrl) {
+  const evalDom = () =>
+    page.evaluate(() => {
+    const combine = (a, b) => {
+      const a0 = String(a || "").replace(/[^\d]/g, "");
+      if (!a0) {
+        return null;
+      }
+      const rawD = String(b || "").replace(/[^\d]/g, "");
+      if (!rawD) {
+        const n0 = parseFloat(a0, 10);
+        return Number.isNaN(n0) || n0 < 0 ? null : n0;
+      }
+      const d2 = rawD.length >= 2 ? rawD.slice(0, 2) : rawD.padEnd(2, "0");
+      const n0 = parseFloat(`${a0}.${d2}`, 10);
+      if (Number.isNaN(n0) || n0 < 0) {
+        return null;
+      }
+      return Math.round(n0 * 100) / 100;
+    };
+    const fontSizePx = (el) => {
+      try {
+        const s = getComputedStyle(el).fontSize || "";
+        const m = s.match(/([\d.]+)px/);
+        return m ? parseFloat(m[1]) : 0;
+      } catch {
+        return 0;
+      }
+    };
+    const isHeadline = (el) => {
+      const c = el.className != null ? String(el.className) : "";
+      return c.includes("Headline");
+    };
+    const parseBr = (text) => {
+      if (text == null) {
+        return null;
+      }
+      const t = String(text)
+        .replace(/\s/g, "")
+        .replace(/\u00A0/g, "");
+      if (/frete|shipp|\/kg|unid\./i.test(t)) {
+        return null;
+      }
+      const m = t.match(/R\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{1,2}|[0-9]+[.,]\d{1,2}|[0-9]{1,4})/i);
+      if (m) {
+        const g = m[1];
+        const n0 =
+          g.includes(",") && !g.includes(".")
+            ? parseFloat(g.replace(/\./g, "").replace(",", "."), 10)
+            : g.includes(".") && g.includes(",")
+              ? parseFloat(g.replace(/\./g, "").replace(",", "."), 10)
+              : parseFloat(g.replace(",", "."), 10);
+        if (!Number.isNaN(n0) && n0 > 0.3 && n0 < 1e7) {
+          return Math.round(n0 * 100) / 100;
+        }
+      }
+      return null;
+    };
+    const isStrikethrough = (el) => {
+      if (!el) {
+        return false;
+      }
+      const cl = el.className != null ? String(el.className) : "";
+      if (/line-through|lineThrough/i.test(cl)) {
+        return true;
+      }
+      try {
+        const td = String(getComputedStyle(el).textDecorationLine || "");
+        if (td === "line-through") {
+          return true;
+        }
+        return td.split(/\s+/).indexOf("line-through") >= 0;
+      } catch {
+        return false;
+      }
+    };
+    const findStrikethroughListPrice = (heroEl, sale) => {
+      if (!heroEl) {
+        return null;
+      }
+      let c = heroEl;
+      let best = null;
+      for (let depth = 0; depth < 9 && c; depth++) {
+        c = c.parentElement;
+        if (!c) {
+          break;
+        }
+        const all = c.querySelectorAll("span, div, s, del, p, ins, strong");
+        for (const el of all) {
+          if (el === heroEl || heroEl.contains(el)) {
+            continue;
+          }
+          if (!isStrikethrough(el)) {
+            continue;
+          }
+          const p = parseBr(el.textContent || "");
+          if (p == null) {
+            continue;
+          }
+          if (sale != null && p <= sale + 0.01) {
+            continue;
+          }
+          if (best == null || p > best) {
+            best = p;
+          }
+        }
+      }
+      return best;
+    };
+
+    let bestSale = null;
+    let bestFs = 0;
+    let heroEl = null;
+
+    for (const intSpan of document.querySelectorAll("span")) {
+      if (!isHeadline(intSpan)) {
+        continue;
+      }
+      if (isStrikethrough(intSpan)) {
+        continue;
+      }
+      const fsv = fontSizePx(intSpan);
+      if (fsv < 28 || fsv > 48) {
+        continue;
+      }
+      const tInt = (intSpan.textContent || "").trim().replace(/[^\d]/g, "");
+      if (!/^\d{1,4}$/.test(tInt)) {
+        continue;
+      }
+      const next = intSpan.nextElementSibling;
+      let n0 = null;
+      if (next && next.tagName === "SPAN") {
+        const tDec0 = (next.textContent || "").replace(/\s/g, "").replace(/\u00A0/g, "");
+        const m = tDec0.match(/^[.,](\d{1,2})/);
+        if (m) {
+          n0 = combine(tInt, m[0]);
+        }
+      }
+      if (n0 == null) {
+        const t = (intSpan.textContent || "").replace(/\s/g, "");
+        const m1 = t.match(/^(\d{1,4})[.,](\d{2})$/);
+        if (m1) {
+          n0 = parseFloat(`${m1[1]}.${m1[2]}`, 10);
+          if (!Number.isNaN(n0)) {
+            n0 = Math.round(n0 * 100) / 100;
+          }
+        }
+      }
+      if (n0 == null || n0 < 0.3 || n0 >= 1e7) {
+        continue;
+      }
+      if (fsv > bestFs || (fsv === bestFs && bestSale != null && n0 > bestSale)) {
+        bestFs = fsv;
+        bestSale = n0;
+        heroEl = intSpan;
+      }
+    }
+
+    const listPrice = findStrikethroughListPrice(heroEl, bestSale);
+    return { sale: bestSale, listPrice };
+  });
+
+  const [root, fromDom] = await Promise.all([getModernRouterDataFromPage(page), evalDom()]);
+  const fromNorm = pdpPriceFromLoaderRoot(root, productId, categoriaUrl);
+  const hasDom = fromDom.sale != null && !Number.isNaN(fromDom.sale) && fromDom.sale > 0;
+  if (hasDom && fromNorm && fromNorm.sale > fromDom.sale * 1.05) {
+    // DOM apanhou cifra baixa (variante / linha acessória); o loader do PDP costuma ter o mesmo format da vitrine
+    return { sale: fromNorm.sale, listPrice: fromNorm.listPrice };
+  }
+  if (hasDom) {
+    return fromDom;
+  }
+  if (fromNorm) {
+    return { sale: fromNorm.sale, listPrice: fromNorm.listPrice };
+  }
+  return { sale: null, listPrice: null };
+}
+
+/**
+ * Abre `product_url` (PDP), preenche `images_pdp` e, quando possível, **preço de vitrine + "de"** no DOM
+ * (`price` = hero 28px–48px + cêntimos, ou `__MODERN_ROUTER_DATA__`; `original` = riscado se existir).
+ * Opcional: env `PDP_GALLERY=1`.
  * @param {import("puppeteer").Page} page
  * @param {Map<string, object>} byProductId
- * @param {{ max: number, debugLines?: string[] }} opts
+ * @param {{ max: number, debugLines?: string[], categoriaUrl?: string }} opts
  * @returns {Promise<{ visited: number, max: number, eligible: number }>}
  */
 async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
   const max = Math.max(0, Math.min(500, opts.max));
+  const categoriaUrl = opts.categoriaUrl != null ? String(opts.categoriaUrl) : "";
   const debugLines = opts.debugLines;
   const withPdp = [...byProductId.values()].filter(
     (n) => n?.product_url && String(n.product_url).includes("/pdp/")
@@ -1090,12 +1599,23 @@ async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
     try {
       await page.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
       await humanPause(page, 1800, 3600);
-      const raw = await collectPdpGalleryUrlsFromPage(page);
+      await page
+        .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
+        .catch(() => undefined);
+      const [raw, pdpDom] = await Promise.all([
+        collectPdpGalleryUrlsFromPage(page),
+        collectPdpProductPricesFromPage(page, String(n.product_id), categoriaUrl)
+      ]);
       const cleaned = dedupePdpImageUrls(raw);
       n.images_pdp = cleaned.length > 0 ? cleaned : null;
+      applyPdpDomPrices(n, pdpDom);
       visited += 1;
       if (debugLines && cleaned.length) {
         debugLines.push(`[pdp_gallery] ${n.product_id} → ${cleaned.length} url(s)`);
+      }
+      if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
+        const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
+        debugLines.push(`[pdp_gallery] ${n.product_id} preço: ${pdpDom.sale}${o}`);
       }
     } catch (e) {
       n.images_pdp = null;
@@ -1458,15 +1978,29 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     Array.isArray(raw.sku_list) && raw.sku_list[0] && typeof raw.sku_list[0] === "object"
       ? raw.sku_list[0]
       : null;
+
+  const originalPrice = pickNumber(
+    ppi?.origin_price,
+    ppi?.original_price,
+    ppi?.origin_price_decimal,
+    raw.origin_price,
+    raw.original_price,
+    raw.strike_price,
+    raw.price_info?.origin_price
+  );
+
   const fromFormatStr =
     pickPriceFromFormatStrings(ppi) ??
     pickPriceFromFormatStrings(raw) ??
     (raw.price_info && typeof raw.price_info === "object" ? pickPriceFromFormatStrings(raw.price_info) : null);
-  // Preço de grelha: `product_price_info` / `product_meta` = vitrine. `sku_list[0]` muitas vezes é a variante mais
-  // barata; `min_price` é piso de SKUs. Format strings primeiro, depois números ao nível de produto, depois 1.º
-  // sku, e min_price / raw por último (evita 22,58 com badge 66% no site: 23,77).
-  const price =
+  const fromFormatUsed = fromFormatStr != null;
+  const minPrice = pickNumber(ppi?.min_price, pm?.min_price, raw.min_price);
+  const defaultSkuPrice = priceFromDefaultSku(raw);
+  // Preço de grelha: strings format primeiro, depois default SKU, depois colunas a nível de produto
+  // (`sku_list[0]` piso, `min_price` por último). Reconcile/align: vitrine real vs. piso+desconto no feed.
+  const priceBase =
     fromFormatStr ??
+    defaultSkuPrice ??
     pickNumber(
       ppi?.sale_price,
       ppi?.price,
@@ -1485,15 +2019,13 @@ function normalizeItem(rawIn, categoriaUrl = "") {
       raw.price_info?.sale_price
     ) ??
     null;
-
-  const originalPrice = pickNumber(
-    ppi?.origin_price,
-    ppi?.original_price,
-    ppi?.origin_price_decimal,
-    raw.origin_price,
-    raw.original_price,
-    raw.strike_price,
-    raw.price_info?.origin_price
+  const priceReconciled = reconcileVitrineNoDiscount(priceBase, originalPrice, ppi, minPrice, fromFormatUsed);
+  const price = alignPriceToStatedPercent(
+    priceReconciled,
+    originalPrice,
+    ppi,
+    minPrice,
+    fromFormatUsed
   );
 
   const currency = pickString(
@@ -1520,6 +2052,9 @@ function normalizeItem(rawIn, categoriaUrl = "") {
   const lojaBlob = normalizeSellerInfo(raw) || { ...LOJA_FIELD_DEFAULTS };
   tryRecordSellerDebugSource(raw);
 
+  const { preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent } =
+    computePrecoEstimadoVitrineFields(price, originalPrice, ppi);
+
   return {
     sku,
     product_id: id,
@@ -1528,6 +2063,9 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     price,
     original_price: originalPrice,
     currency,
+    preco_estimado_vitrine,
+    preco_gap_estimado,
+    preco_gap_estimado_percent,
     sales_count: salesParsed,
     sales_display: salesRaw,
     images: extractImages(raw),
@@ -2351,10 +2889,11 @@ async function main() {
         const pdpMax = Math.min(500, Math.max(0, Number(process.env.PDP_GALLERY_MAX) || 25));
         // eslint-disable-next-line no-console
         console.log(
-          `[pdp_gallery] A abrir PDPs (máx ${pdpMax} produtos) para recolher fotos — desligar: omitir PDP_GALLERY`
+          `[pdp_gallery] A abrir PDPs (máx ${pdpMax} produtos) para fotos + preço hero (DOM) — desligar: omitir PDP_GALLERY`
         );
         const pr = await enrichByProductIdWithPdpGallery(page, byProductId, {
           max: pdpMax,
+          categoriaUrl: startUrl,
           debugLines: debug ? debugLines : undefined
         });
         // eslint-disable-next-line no-console
@@ -2401,7 +2940,7 @@ async function main() {
     status,
     total: itensDados.length,
     filtro: pdpGalleryEnv
-      ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos em tiktok.com/.../pdp/...)"
+      ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos + preço hero no DOM em .../pdp/...)"
       : "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
     itens: itensDados
   };
@@ -2504,5 +3043,7 @@ export {
   parseRateInfoObject,
   pickPriceFromFormatStrings,
   isReviewOnlyProductNode,
-  productRowRichness
+  productRowRichness,
+  combinePdpHeroPriceParts,
+  applyPdpDomPrices
 };

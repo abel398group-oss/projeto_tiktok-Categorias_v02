@@ -15,7 +15,9 @@ import {
   parseDiscountPercentFromPpi,
   pickPriceFromFormatStrings,
   isReviewOnlyProductNode,
-  productRowRichness
+  productRowRichness,
+  combinePdpHeroPriceParts,
+  applyPdpDomPrices
 } from "../src/scrapeCategory.mjs";
 
 const brUrl = "https://shop.tiktok.com/br/c/test/1";
@@ -38,6 +40,42 @@ describe("parseDiscountPercentFromPpi", () => {
   });
   test("discount_decimal 0,25 = 25%", () => {
     assert.equal(parseDiscountPercentFromPpi({ discount_decimal: 0.25 }), 25);
+  });
+});
+
+describe("applyPdpDomPrices", () => {
+  test("com desconto no DOM: preco = sale, preco_original = de", () => {
+    const n = { price: 1, original_price: 2 };
+    applyPdpDomPrices(n, { sale: 59.9, listPrice: 99.9 });
+    assert.equal(n.price, 59.9);
+    assert.equal(n.original_price, 99.9);
+  });
+  test("sem riscado (listPrice null): original anulado", () => {
+    const n = { price: 1, original_price: 999 };
+    applyPdpDomPrices(n, { sale: 39.99, listPrice: null });
+    assert.equal(n.price, 39.99);
+    assert.equal(n.original_price, null);
+  });
+  test("listPrice <= sale: trata como sem de", () => {
+    const n = { price: 10, original_price: 200 };
+    applyPdpDomPrices(n, { sale: 50, listPrice: 50 });
+    assert.equal(n.price, 50);
+    assert.equal(n.original_price, null);
+  });
+  test("sale inválido: não altera", () => {
+    const n = { price: 10, original_price: 5 };
+    applyPdpDomPrices(n, { sale: null, listPrice: 100 });
+    assert.equal(n.price, 10);
+    assert.equal(n.original_price, 5);
+  });
+});
+
+describe("combinePdpHeroPriceParts (PDP hero)", () => {
+  test("67 + .28 = 67.28", () => {
+    assert.equal(combinePdpHeroPriceParts("67", ".28"), 67.28);
+  });
+  test("1 + ,90 = 1.9", () => {
+    assert.equal(combinePdpHeroPriceParts("1", ",90"), 1.9);
   });
 });
 
@@ -105,6 +143,143 @@ describe("normalizeItem — preço (grelha, sem desconto % na saída)", () => {
     );
     assert.equal(n?.price, 49.99);
     assert.ok(n && !("discount_percent" in n));
+  });
+
+  test("format_price (vitrine) vence sale_format_price (variante mais barata) quando ambos existem", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "1731843713238730000",
+        product_price_info: {
+          origin_price: 59.9,
+          min_price: 52.71,
+          price: 52.71,
+          sale_format_price: "R$ 52,71",
+          format_price: "R$ 59,90",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 59.9);
+  });
+
+  test("format_price sem prefixo R$ (só 59,90) é lido", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          min_price: 40,
+          price: 40,
+          format_price: "59,90",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 59.9);
+  });
+
+  test("sem sinal de desconto, price=min e origin=de na vitrine — usa o riscado como preco atual", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          min_price: 29.99,
+          price: 29.99,
+          origin_price: 39.99,
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 39.99);
+    assert.equal(n?.original_price, 39.99);
+  });
+
+  test("badge e price no piso (min) — aplica o valor do % em relacao ao de", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          min_price: 39.9,
+          price: 39.9,
+          origin_price: 99.9,
+          discount_format: "-40%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 59.94);
+    assert.equal(n?.original_price, 99.9);
+  });
+
+  test("default_sku_id: preco do sku hero antes do primeiro sku (barato)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        default_sku_id: "B",
+        sku_list: [
+          { sku_id: "A", price: 9.9 },
+          { sku_id: "B", price: 39.99, sale_price: 39.99 }
+        ],
+        product_price_info: {
+          min_price: 9.9,
+          price: 9.9,
+          origin_price: 49.0,
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 39.99);
+  });
+
+  test("badge -12%: price e min alinhados no piso, corrigir para de * (1-12%)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          min_price: 60.55,
+          price: 60.55,
+          origin_price: 76.45,
+          discount_format: "-12%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 67.28);
+    assert.equal(n?.original_price, 76.45);
+  });
+
+  test("piso << de×(1-%): alinha ao preço do badge (ex. -45% de 99 → 54,45)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 99,
+          min_price: 38.76,
+          price: 38.76,
+          discount_format: "-45%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 54.45);
+    assert.equal(n?.original_price, 99);
+  });
+
+  test("feed acima do anunciado no badge: desce para de×(1-%/100)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 29.9,
+          min_price: 18.9,
+          price: 18.9,
+          discount_format: "-50%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 14.95);
+    assert.equal(n?.original_price, 29.9);
   });
 });
 
@@ -273,6 +448,96 @@ describe("reviews e dedupe", () => {
     );
     assert.ok(a && b);
     assert.ok(productRowRichness(b) > productRowRichness(a));
+  });
+});
+
+describe("preco_estimado_vitrine (experimental, aditivo)", () => {
+  test("89.9 e -56%: estimativa ≈ 39,56; preco de grelha 35,19; gaps preenchidos", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "1735058020882220157",
+        product_price_info: {
+          origin_price: 89.9,
+          format_price: "R$ 35,19",
+          min_price: 35.19,
+          price: 35.19,
+          discount_format: "56%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.ok(n);
+    assert.equal(n.price, 35.19);
+    assert.ok(Math.abs(n.preco_estimado_vitrine - 39.56) < 0.01);
+    assert.ok(Math.abs(n.preco_gap_estimado - 4.37) < 0.01);
+    assert.equal(n.preco_gap_estimado_percent, 0.0486);
+    assert.ok(n && !("discount_percent" in n));
+  });
+
+  test("sem desconto no ppi: preco_estimado_vitrine null", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: { origin_price: 100, price: 50, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.equal(n?.preco_estimado_vitrine, null);
+    assert.equal(n?.preco_gap_estimado, null);
+    assert.equal(n?.preco_gap_estimado_percent, null);
+  });
+
+  test("preco_original <= preco: preco_estimado_vitrine null", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 50,
+          format_price: "R$ 50,00",
+          price: 50,
+          min_price: 50,
+          discount_format: "20%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 50);
+    assert.equal(n?.original_price, 50);
+    assert.equal(n?.preco_estimado_vitrine, null);
+  });
+
+  test("comparação: preco final mantém a mesma regra (format_price fixa 35,19)", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "exp-est-1",
+        product_price_info: {
+          origin_price: 89.9,
+          format_price: "R$ 35,19",
+          min_price: 35.19,
+          price: 35.19,
+          discount_format: "56%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 35.19);
+  });
+
+  test("não exporta desconto_percent", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_price_info: {
+          origin_price: 89.9,
+          price: 35.19,
+          discount_format: "56%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.ok(n);
+    assert.ok(!("discount_percent" in n));
   });
 });
 
