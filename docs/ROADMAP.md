@@ -21,6 +21,81 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 ---
 
+## Visão estratégica do produto
+
+O repositório **não** é apenas um scraper: a visão é uma **plataforma de inteligência de produtos** para e-commerce e marketplaces — coletar dados, analisar potencial de venda, calcular viabilidade (incl. importação) e expor análise e decisão a utilizadores com **front com login** (vendedores, fornecedores, operação interna e contas próprias no ecossistema TikTok Creator/loja).
+
+**Fase inicial da coleta:** TikTok Shop como **primeira** fonte. **Futuro:** Mercado Livre, Shopee e outros; arquitetura a preparar `source_platform` e IDs externos para comparar o mesmo *tipo* de sinal entre plataformas (ex.: oportunidade no TikTok → validar preço e concorrência no ML/Shopee).
+
+### 1. Pipeline geral (alvo)
+
+Coleta de dados → tratamento → **banco histórico** → análise → **score de oportunidade** → **front / dashboard** → decisão comercial (e feedback para operação).
+
+### 2. Fontes de dados
+
+| Fase | Fontes |
+|------|--------|
+| **Inicial** | TikTok Shop (scraper actual) |
+| **Futuro** | Mercado Livre, Shopee, outros marketplaces (conectores a definir) |
+
+### 3. Objetivo da análise
+
+Gerar insumos para identificar, entre outros:
+
+- produtos **vendáveis** e **escaláveis**;
+- potencial de **viralização** (com limitações de dados e snapshot);
+- **lojas / sellers** relevantes;
+- **tendências de preço** (requer histórico no tempo);
+- produtos com **bom volume** de venda;
+- **oportunidades** para compra / importação (combina sinais de mercado com módulo de viabilidade).
+
+### 4. Módulo de score de produto (futuro)
+
+Módulo analítico (não implementado no scraper) com dimensões separadas, por exemplo:
+
+- `demanda_score` · `preco_score` · `crescimento_score` · `avaliacao_score` · `concorrencia_score` · `margem_score` → **`score_final`** (regras e pesos a definir com o negócio).
+
+### 5. Módulo de viabilidade comercial / importação (futuro)
+
+Onde fornecedor ou operador **informa** (fora do feed bruto do marketplace), entre outros:
+
+- preço de compra, moeda, frete internacional, impostos, taxas de marketplace, custo logístico nacional, **margem desejada**.
+
+**Resultados pretendidos (conceituais):** custo total estimado, preço mínimo viável, margem líquida, lucro unitário, classificação de viabilidade (ex.: **aprovado** / **atenção** / **inviável**).
+
+### 6. Tipos de utilizadores futuros
+
+- admin interno · utilizador vendedor · fornecedor · analista/operador · contas **próprias** da operação (TikTok / loja).
+
+### 7. Front / dashboard (futuro)
+
+- login · dashboard de produtos · **ranking** de produtos · ficha de produto · ficha de loja/seller · gráficos (vendas, preço, avaliações) · **simulador de viabilidade** · área do fornecedor.
+
+### 8. Estratégia multi-marketplace
+
+A arquitetura de dados e análise deve suportar:
+
+- `source_platform` · `product_external_id` · `seller_external_id` · **snapshots por marketplace** e, quando fizer sentido, **comparação entre plataformas** (mesma oportunidade validada noutro canal).
+
+### 9. Decisão actual (repositório scrape TikTok; abril 2026)
+
+- O scraper TikTok **continua a ser estabilizado**; não alterar pipeline sem necessidade.  
+- **Mantido** o **modelo JSON híbrido** (`dados_produtos` + `dados_lojas` na raiz de `output/`).  
+- **`dados_lojas.json`** em uso.  
+- **Não** priorizar, neste momento, **enriquecimento pesado via PDP** (ex.: `shop_info` rico no HTML do PDP) por **risco** de puzzle / anti‑bot e custo de visitas.  
+- **Próximo passo macro** a escolher **depois** (sem compromisso fixo):  
+  (a) modelar **Postgres** · (b) importador **JSON → banco** · (c) evoluir **scoring** · (d) **expandir categorias** de coleta · (e) **API / front**.
+
+### 10. Regras de proteção (desenvolvimento)
+
+- Não **quebrar** o scraper actual sem testes e justificação.  
+- Manter branch **`stable/scraper-funcionando`** como referência / backup.  
+- Trabalhar em **`feature/*`**.  
+- Correr **`npm test`** antes de merge em alterações de parser/merge.  
+- Não alterar **preço**, **merge**, **dedupe** ou regras de **seller/loja** sem **testes** actualizados.
+
+---
+
 ## `fotos_pdp` — validação (abril 2026)
 
 - [x] **`fotos_pdp` → OK (validado manualmente no output real).** Não abrir, por agora, a heurística extra de “limpeza” por URL (risco de falsos positivos/negativos); o scraper já filtra a grelha de miniaturas no DOM e deduplica por pathname/asset.
