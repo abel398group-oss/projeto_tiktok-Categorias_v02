@@ -46,11 +46,18 @@ Espera a execução acabar sozinha.
 
 ### 3. Abrir o ficheiro com os dados dos produtos
 
-O resultado que interessa para análise está **aqui**:
+O resultado que interessa para análise está **na raiz de `output/`**:
 
-**`output/dados_produtos.json`**
+**`output/dados_produtos.json`** · **`output/dados_lojas.json`**
 
-(Ficheiros de apoio — debug, cópia técnica, lojas, etc. — ficam em **`output/extra/`**.)
+(Ficheiros de apoio — debug, cópia técnica, etc. — ficam em **`output/extra/`**.)
+
+**Produto e loja no output (contrato):**
+
+- `dados_produtos.json` — lista de **produtos**; cada item inclui `seller_id` e campos de loja **desnormalizados** (`nome_loja`, `loja_*`, …) para leitura rápida.
+- `output/dados_lojas.json` (na **raiz** de `output/`, ao lado de `dados_produtos.json`) — **uma linha por `seller_id`**, com dados de loja **consolidados** (fonte agregada; liga-se ao produto pela mesma chave `seller_id`).
+
+Detalhe e modelo (produto / loja / snapshot futuro): **`docs/ARCHITECTURE.md`** — ver secções **Contrato dos outputs**, **Decisão arquitetural: modelo híbrido** e **Futuro modelo Postgres**.
 
 ---
 
