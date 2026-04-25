@@ -8,12 +8,12 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 
 - Pipeline **estável:** coleta por categoria, normalização, merge por `product_id`, testes de regressão (`npm test`) a verde.
 - **Opcional:** `PDP_GALLERY=1` abre páginas de produto para `fotos_pdp` (mais lento); ver `FLUXO.md`.
-- **Saídas:** `output/dados_produtos.json` + `output/extra/dados_lojas.json` (+ ficheiros técnicos em `output/extra/`). O **contrato** destes JSONs está na secção **Contrato dos outputs** abaixo.
+- **Saídas:** `output/dados_produtos.json` + `output/dados_lojas.json` (+ ficheiros técnicos em `output/extra/`). O **contrato** destes JSONs está na secção **Contrato dos outputs** abaixo.
 
 ## Decisão arquitetural: modelo híbrido nos JSONs (mantido)
 
 - **`dados_produtos.json`** continua a ser um export **flat / prático**: cada item tem `product_id`, nome, preço, vendas, imagens, **`seller_id`**, **`nome_loja`** e vários campos de loja (`loja_*`, logos). Essa **desnormalização é intencional** — leitura rápida, auditoria e análise sem `join` obrigatório.
-- **`output/extra/dados_lojas.json`** é o agregado **oficial por vendedor**: **uma** entrada por **`seller_id`** (dedupe e merge de campos entre produtos da mesma loja). Serve análise de sellers e futura importação para base de dados.
+- **`output/dados_lojas.json`** é o agregado **oficial por vendedor**: **uma** entrada por **`seller_id`** (dedupe e merge de campos entre produtos da mesma loja). Serve análise de sellers e futura importação para base de dados.
 - **Ligação:** `seller_id` é a **chave** comum entre um item em `itens[]` e uma linha em `lojas[]`.
 - **Não** remover, por agora, campos de loja de `dados_produtos.json` — evita quebrar consumidores e mantém o uso “abrir o ficheiro e ver tudo no item”.
 - **Normalização completa** (produto vs loja vs histórico no tempo) será feita no **Postgres** (tabelas separadas e snapshots), **não** obrigando o JSON actual a espelhar o esquema final da BD.
@@ -38,8 +38,8 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 4. Heurísticas em respostas JSON (URLs com `oec`, `list`, `shop.tiktok`, etc.), filtrando **telemetria** (MCS, Slardar, monitor, batch 204, …).
 5. Dados iniciais no DOM: leitura de `#__MODERN_ROUTER_DATA__` → `loaderData` (rota `…/c/…/page`) fundido no mesmo mapa de produtos.
 6. Normalização: `normalizeItem` (preço, desconto %, `seo_url` → `product_url`, imagens, etc.).
-7. **Saída “final” para uso:** `output/dados_produtos.json` (PT‑BR, inclui `categoria_url`, `link_produto`) — único ficheiro de dados de produto na raiz de `output/`.
-8. **Saída técnica e auxiliares:** `output/teste_categoria.json`, `modern_router_peek.json`, logs, `dados_lojas.json` em `output/extra/`, `caca_*`, etc. em `output/extra/`.
+7. **Saídas “finais” na raiz de `output/`:** `dados_produtos.json` (PT‑BR, `itens[]`, `categoria_url`, `link_produto`, …) e `dados_lojas.json` (agregado por `seller_id`).
+8. **Saída técnica e auxiliares:** `output/teste_categoria.json`, `modern_router_peek.json`, logs, `caca_*`, etc. em `output/extra/` (o agregado de lojas está na **raiz** de `output/` junto a `dados_produtos.json`).
 9. **Debug / descoberta:** `modern_router_peek.json`, `caca_dados.jsonl`, `rede_ultima_execucao.log`, `debug_responses.log`, `debug_snapshots/`, `descoberta_redes.jsonl` (quando ativo).
 
 ## Modelo de dados (conceitual)
@@ -55,7 +55,7 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - **Chave lógica:** `seller_id` (ligação entre produto e entidade vendedor; `global_seller_id` quando existir no feed).
 - **Campos típicos:** `nome_loja`, métricas de loja (`loja_vendas_total`, `loja_produtos_ativos`, …), logos (`loja_logo_uri`, `loja_logo_urls`), etc.
 - **Duplicação intencional:** o mesmo vendedor aparece em **cada** item em `dados_produtos.json` (desnormalização para leitura rápida e análise sem `join` obrigatório).
-- **Fonte agregada:** `output/extra/dados_lojas.json` — uma entrada por `seller_id`, construída por `buildLojasMapBySeller` (merge de campos de loja entre produtos do mesmo vendedor). Tratar-se como **catálogo consolidado** de vendedor; o produto continua a carregar a cópia desnormalizada.
+- **Fonte agregada:** `output/dados_lojas.json` — uma entrada por `seller_id`, construída por `buildLojasMapBySeller` (merge de campos de loja entre produtos do mesmo vendedor). Tratar-se como **catálogo consolidado** de vendedor; o produto continua a carregar a cópia desnormalizada.
 - **No código:** `normalizeSellerInfo`, `mergeLojaFromNormalized` / `extractLojaFromNormalized`, `lojaToRowFields`.
 
 ### Snapshot (estado no tempo) — ainda não implementado
@@ -71,7 +71,7 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - **Conteúdo:** `itens[]` com dados do **produto** (`product_id`, nome, preço, moeda, vendas, `fotos` / `fotos_pdp`, avaliações, …) **e** chave e cópia de **loja** (`seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`).
 - **Não** é a representação final do modelo relacional: é **conveniência** e desnormalização intencional; o esquema canónico alvo de longo prazo é o **banco** (ver abaixo).
 
-### `output/extra/dados_lojas.json`
+### `output/dados_lojas.json`
 
 - **Papel:** ficheiro **agregado** de lojas / vendedores.
 - **Conteúdo:** `lojas[]` com **uma** linha **por** `seller_id` (sem duplicar o mesmo vendedor em várias linhas).

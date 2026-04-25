@@ -4,7 +4,7 @@
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
- * Dados de produto (entrega): só `output/dados_produtos.json` na raiz de `output/`; o resto vai para `output/extra/`.
+ * Dados de entrega na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; o resto (técnico, debug, caça) em `output/extra/`.
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -15,7 +15,7 @@
  *   de loja, logos, etc. a partir de `seller_info` / `shop_info`. Vê `normalizeSellerInfo`,
  *   `mergeLojaFromNormalized`, `buildLojasMapBySeller`.
  *   Duplicação intencional: a mesma loja repete-se em cada `itens[]` de `dados_produtos.json`
- *   (conveniência) e existe consolidada em `output/extra/dados_lojas.json` (fonte agregada).
+ *   (conveniência) e existe consolidada em `output/dados_lojas.json` (fonte agregada).
  * - Snapshot (estado no tempo): ainda não implementado. Futuro: uma linha por coleta
  *   (preço, vendas, posição) ligada a `scrape_runs` — vê `docs/ARCHITECTURE.md` (Postgres alvo).
  */
@@ -31,10 +31,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "output");
-/** Só ficheiro “dados reais” (produtos) na raiz de `output/`. Técnica, debug, lojas, caça, etc. em `output/extra/`. */
+/** Dados de produto e agregado de lojas na raiz de `output/`; técnica, debug, caça, etc. em `output/extra/`. */
 const OUT_AUX = path.join(OUT_DIR, "extra");
 const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
-const DADOS_LOJAS_OUT = path.join(OUT_AUX, "dados_lojas.json");
+const DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
 const DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
 const MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
 
@@ -1136,7 +1136,7 @@ function isReviewOnlyProductNode(raw) {
 /* =============================================================================
  * Loja (seller): normalização, merge entre linhas e agregado por `seller_id`.
  * Não confundir com `reviewer_name` / nós de review (filtrados em outro sítio).
- * Saída: campos de loja na linha + `output/extra/dados_lojas.json` (dedupe por `seller_id`).
+ * Saída: campos de loja na linha + `output/dados_lojas.json` (dedupe por `seller_id`).
  * ============================================================================= */
 const LOJA_FIELD_DEFAULTS = {
   seller_id: null,
@@ -1734,7 +1734,7 @@ const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
 
 /**
  * Deduplica lojas por `seller_id` a partir do mapa de produtos.
- * Alimenta `output/extra/dados_lojas.json` (agregado oficial por vendedor; ver `docs/ARCHITECTURE.md`).
+ * Alimenta `output/dados_lojas.json` (agregado oficial por vendedor; ver `docs/ARCHITECTURE.md`).
  * @param {Map<string, object>} byProductId
  * @returns {Map<string, object>} valores = campos de loja (sem campos de produto)
  */
