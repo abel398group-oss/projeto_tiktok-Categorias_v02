@@ -164,6 +164,15 @@ function collectOecItemListOrProductInfo(data) {
 }
 
 function toDadosProdutoClean(n, categoriaUrl) {
+  const pdp = Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null;
+  let fotos = null;
+  if (Array.isArray(n.images) && n.images.length) {
+    if (pdp) {
+      fotos = subtractFotosOverlappingPdp(n.images, pdp);
+    } else {
+      fotos = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(n.images));
+    }
+  }
   return {
     categoria_url: categoriaUrl,
     link_produto: n.product_url ?? null,
@@ -177,8 +186,8 @@ function toDadosProdutoClean(n, categoriaUrl) {
     preco_original: n.original_price,
     vendas: n.sales_count,
     vendas_texto: n.sales_display,
-    fotos: n.images,
-    fotos_pdp: Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null,
+    fotos: fotos && fotos.length ? fotos : null,
+    fotos_pdp: pdp,
     seller_id: n.seller_id ?? null,
     global_seller_id: n.global_seller_id ?? null,
     nome_loja: n.nome_loja ?? null,
@@ -783,11 +792,125 @@ function extractImages(p) {
   if (p.cover_image?.url) pushUrl(p.cover_image.url);
   if (p.cover) pushUrl(typeof p.cover === "string" ? p.cover : p.cover?.url);
   if (p.main_image?.url) pushUrl(p.main_image.url);
-  return [...imgs];
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname([...imgs]));
 }
 
 /**
- * Deduplica URLs de imagem da galeria PDP (ordem estável, URL completa).
+ * Identificador do asset OEC (mesmo ficheiro em p16/p19 ou em resoluções tplv distintas).
+ * @param {string} u
+ * @returns {string | null}
+ */
+function getIbyteImageAssetId(u) {
+  if (!u || typeof u !== "string") {
+    return null;
+  }
+  try {
+    const path = new URL(u.trim()).pathname;
+    const m = path.match(/\/([a-f0-9]{8,32})~tplv-/i);
+    return m ? m[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mesmo ficheiro com crops diferentes (`:1000:1000` vs `:800:800`) — um URL por id de asset.
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function dedupeImageUrlsByAssetId(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || u.length < 12) {
+      continue;
+    }
+    const t = u.trim();
+    const id = getIbyteImageAssetId(t);
+    const key = id != null ? `id:${id}` : t;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Grelha (`fotos`) não repete o mesmo asset que já está em `fotos_pdp` (caminho diferente, mesmo hash).
+ * @param {string[]|null|undefined} fotosGrelha
+ * @param {string[]|null|undefined} fotosPdp
+ * @returns {string[]|null}
+ */
+function subtractFotosOverlappingPdp(fotosGrelha, fotosPdp) {
+  if (!Array.isArray(fotosGrelha) || !fotosGrelha.length) {
+    return null;
+  }
+  const g = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(fotosGrelha));
+  if (!Array.isArray(fotosPdp) || !fotosPdp.length) {
+    return g.length ? g : null;
+  }
+  const pdpIds = new Set();
+  for (const u of fotosPdp) {
+    const id = getIbyteImageAssetId(u);
+    if (id) {
+      pdpIds.add(id);
+    }
+  }
+  if (pdpIds.size === 0) {
+    return g.length ? g : null;
+  }
+  const out = g.filter((u) => {
+    const id = getIbyteImageAssetId(u);
+    if (id && pdpIds.has(id)) {
+      return false;
+    }
+    return true;
+  });
+  return out.length ? out : null;
+}
+
+/**
+ * O feed costuma listar o mesmo ficheiro em espelhos CDN (ex. `p16-oec-…` e `p19-oec-…` com o mesmo `pathname`).
+ * Mantém a primeira ocorrência, ordem estável.
+ * @param {string[]} urls
+ * @returns {string[]}
+ */
+function dedupeImageUrlsByPathname(urls) {
+  if (!Array.isArray(urls) || !urls.length) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || u.length < 12) {
+      continue;
+    }
+    const t = u.trim();
+    if (!t.startsWith("http")) {
+      continue;
+    }
+    let key;
+    try {
+      key = new URL(t).pathname;
+    } catch {
+      key = t;
+    }
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Deduplica URLs de imagem da galeria PDP (ordem estável, URL exata) e espelhos CDN por pathname.
  * @param {string[]} urls
  * @returns {string[]}
  */
@@ -805,7 +928,7 @@ function dedupePdpImageUrls(urls) {
     seen.add(t);
     out.push(t);
   }
-  return out;
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(out));
 }
 
 /**
@@ -2319,6 +2442,8 @@ if (isRunAsCli()) {
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
 export {
   coalesceProductRatings,
+  dedupeImageUrlsByAssetId,
+  dedupeImageUrlsByPathname,
   dedupePdpImageUrls,
   extractProductRatings,
   mergeLojaFromNormalized,
