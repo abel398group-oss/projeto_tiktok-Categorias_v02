@@ -25,8 +25,57 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 5. Dados iniciais no DOM: leitura de `#__MODERN_ROUTER_DATA__` → `loaderData` (rota `…/c/…/page`) fundido no mesmo mapa de produtos.
 6. Normalização: `normalizeItem` (preço, desconto %, `seo_url` → `product_url`, imagens, etc.).
 7. **Saída “final” para uso:** `output/dados_produtos.json` (PT‑BR, inclui `categoria_url`, `link_produto`) — único ficheiro de dados de produto na raiz de `output/`.
-8. **Saída técnica e auxiliares:** `output/teste_categoria.json`, `modern_router_peek.json`, logs, `dados_lojas.json`, `caca_*`, etc. em `output/extra/`.
+8. **Saída técnica e auxiliares:** `output/teste_categoria.json`, `modern_router_peek.json`, logs, `dados_lojas.json` em `output/extra/`, `caca_*`, etc. em `output/extra/`.
 9. **Debug / descoberta:** `modern_router_peek.json`, `caca_dados.jsonl`, `rede_ultima_execucao.log`, `debug_responses.log`, `debug_snapshots/`, `descoberta_redes.jsonl` (quando ativo).
+
+## Modelo de dados (conceitual)
+
+### Produto (product)
+
+- **Chave de negócio:** `product_id` (e dedupe/merge do mapa em memória por este id).
+- **Campos típicos (export):** `categoria_url`, `link_produto`, `nome`, preço, moeda, preço original, vendas, `fotos` / `fotos_pdp`, bloco de avaliações de produto.
+- **No código:** `normalizeItem` (nó grelha), `mergeProductById` + `productRowRichness` (colisão de linhas), `toDadosProdutoClean` (shape JSON final por item).
+
+### Loja (seller)
+
+- **Chave lógica:** `seller_id` (ligação entre produto e entidade vendedor; `global_seller_id` quando existir no feed).
+- **Campos típicos:** `nome_loja`, métricas de loja (`loja_vendas_total`, `loja_produtos_ativos`, …), logos (`loja_logo_uri`, `loja_logo_urls`), etc.
+- **Duplicação intencional:** o mesmo vendedor aparece em **cada** item em `dados_produtos.json` (desnormalização para leitura rápida e análise sem `join` obrigatório).
+- **Fonte agregada:** `output/extra/dados_lojas.json` — uma entrada por `seller_id`, construída por `buildLojasMapBySeller` (merge de campos de loja entre produtos do mesmo vendedor). Tratar-se como **catálogo consolidado** de vendedor; o produto continua a carregar a cópia desnormalizada.
+- **No código:** `normalizeSellerInfo`, `mergeLojaFromNormalized` / `extractLojaFromNormalized`, `lojaToRowFields`.
+
+### Snapshot (estado no tempo) — ainda não implementado
+
+- Conceito: gravar, por execução de coleta, **valores que mudam** (preço, vendas, contagem de reviews, posição, métricas de loja) sem sobrescrever o histórico.
+- Ligar a uma ideia de **run** (uma corridada do scraper) e a tabelas de histórico; ver secção *Camada alvo (Postgres, futuro)* abaixo.
+
+## Contrato entre ficheiros de saída
+
+| Ficheiro | Conteúdo | Uso típico |
+|----------|----------|------------|
+| `output/dados_produtos.json` | Objeto com `itens[]`: **produto** + `seller_id` + **cópia** dos campos de loja (`nome_loja`, `loja_*`, …) | Leitura rápida, análise por produto, inspeção humana, export sem `join` |
+| `output/extra/dados_lojas.json` | `lojas[]`: **uma** linha agregada por `seller_id` (campos de loja; sem atributos puramente de produto) | Fonte “oficial” de **dados de vendedor/loja**; rankings e joins por `seller_id` |
+
+- **Ligação:** `seller_id` no item de produto corresponde ao mesmo `seller_id` na grelha de lojas.
+- **Estrutura e campos** do JSON de produtos **não** foram alterados por este documento; apenas descritos.
+
+## Camada alvo (Postgres, futuro) — sem implementação neste repositório
+
+Estrutura de referência para evoluir o projeto; **dados ainda** saem em JSON com o pipeline actual.
+
+- **`scrape_runs`:** metadado de cada coleta (timestamp, categoria, status, ficheiro de saída / hash opcional).
+- **`products`:** atributos **estáveis** do artigo (ex.: `product_id`, título, links canónicos — conforme forem definidos no esquema).
+- **`sellers`:** atributos **estáveis** do vendedor, chaveada por `seller_id` (e `global_seller_id` se necessário).
+- **`product_snapshots`:** preço, vendas, contadores de review de **produto**, posição, etc. **no momento** do run; FK para `scrape_runs` e `products`.
+- **`seller_snapshots`:** totais de loja (vendas, seguidores, artigos ativos, …) **no momento** do run; FK para `scrape_runs` e `sellers`.
+- **Diferença fixa vs histórica:** tabelas “base” = dimensão; tabelas `*_snapshots` = factos no tempo, para gráficos e comparação entre coletas.
+- **`seller_id`:** chave de integridade entre `products` / `itens` e `sellers` / linhas de loja no export actual.
+
+**Pipeline de scraping:** o comportamento (normalização, merge, ficheiros gerados) permanece o definido em `src/scrapeCategory.mjs`; a camada SQL é **por cima** do JSON quando for implementada.
+
+## Integridade (regressão)
+
+- Alterações ao normalizador ou ao merge de produto/loja devem manter `npm test` a verde; ver `FLUXO.md` e `docs/ROADMAP.md`.
 
 A pasta `output/*` **não** deve ser commitada (ver `.gitignore`); mantém-se `output/.gitkeep`.
 

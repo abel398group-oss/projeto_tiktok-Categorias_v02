@@ -52,6 +52,13 @@ O resultado que interessa para análise está **aqui**:
 
 (Ficheiros de apoio — debug, cópia técnica, lojas, etc. — ficam em **`output/extra/`**.)
 
+**Produto e loja no output (contrato):**
+
+- `dados_produtos.json` — lista de **produtos**; cada item inclui `seller_id` e campos de loja **desnormalizados** (`nome_loja`, `loja_*`, …) para leitura rápida.
+- `output/extra/dados_lojas.json` — **uma linha por `seller_id`**, com dados de loja **consolidados** (fonte agregada; liga-se ao produto pela mesma chave `seller_id`).
+
+Detalhe e modelo (produto / loja / snapshot futuro): **`docs/ARCHITECTURE.md`**.
+
 ---
 
 ### 4. (Se precisares) Mudar a categoria

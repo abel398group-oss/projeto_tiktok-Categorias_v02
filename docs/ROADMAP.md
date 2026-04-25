@@ -31,6 +31,18 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 ---
 
+## Loja vs produto — ficheiro separado (decisão)
+
+- **Faz sentido** ter a loja fora do “núcleo” do item de produto: entidade **vendedor/loja** em JSON próprio, chaveada por `seller_id`, evita duplicar blocos idênticos em centenas de produtos e alinha com Postgres (`sellers` + `products`).
+
+- **Já implementado (pipeline actual):** `output/extra/dados_lojas.json` — grelha de lojas **deduplicada** a partir do mapa de produtos (`buildLojasMapBySeller` em `scrapeCategory.mjs`). O `dados_produtos.json` ainda traz **campos de loja desnormalizados** (`nome_loja`, `loja_vendas_total`, logos, etc.) para leitura humana e joins simples; isso **não invalida** o ficheiro de lojas: são dois níveis (catálogo agregado vs cópia no produto).
+
+- [~] **Documentar o contrato** (FLUXO / `ARCHITECTURE`): caminho de `dados_lojas`, relação com `seller_id` no produto, e quando fazer *join* em consumidores.
+- [ ] (Opcional, fase posterior) **Afinar separação “estrita”:** em `dados_produtos` exportar só `seller_id` + `global_seller_id` (e opcionalmente `nome_loja` para conveniência), e tratar métricas de loja **apenas** em `dados_lojas` — exige ajuste de testes e de quem consome o JSON.
+- [ ] (Opcional) Garantir que consumidores (scripts, futuro importador) **lêem** `dados_lojas` quando precisam de perfil de loja em vez de duplicar lógica só sobre o array de produtos.
+
+---
+
 ## Tarefas
 
 - [ ] Deduplicar por `product_id` no mapa e/ou excluir nós com `review_id` para limpar `dados_produtos.json`.

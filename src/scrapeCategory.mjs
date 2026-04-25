@@ -7,6 +7,17 @@
  * Dados de produto (entrega): só `output/dados_produtos.json` na raiz de `output/`; o resto vai para `output/extra/`.
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
+ *
+ * -- Modelo de dados (conceitual; contrato de ficheiros em `docs/ARCHITECTURE.md`) --
+ * - Produto (product): identidade `product_id`, preço, imagens, vendas/ texto de vendas,
+ *   `product_url` (PDP), avaliações de produto (`rate_info` / `review_avg`…). Vê `normalizeItem`.
+ * - Loja (seller): chave lógica `seller_id` (+ `global_seller_id` quando existir), nome, métricas
+ *   de loja, logos, etc. a partir de `seller_info` / `shop_info`. Vê `normalizeSellerInfo`,
+ *   `mergeLojaFromNormalized`, `buildLojasMapBySeller`.
+ *   Duplicação intencional: a mesma loja repete-se em cada `itens[]` de `dados_produtos.json`
+ *   (conveniência) e existe consolidada em `output/extra/dados_lojas.json` (fonte agregada).
+ * - Snapshot (estado no tempo): ainda não implementado. Futuro: uma linha por coleta
+ *   (preço, vendas, posição) ligada a `scrape_runs` — vê `docs/ARCHITECTURE.md` (Postgres alvo).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -163,6 +174,15 @@ function collectOecItemListOrProductInfo(data) {
   return items;
 }
 
+/**
+ * Export p/ `dados_produtos.json` (`itens[]`).
+ * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original, vendas,
+ *   fotos, fotos_pdp, bloco de avaliação do item.
+ * - Campos de loja (cópia no item; desnormalizados; chave = `seller_id`):
+ *   `seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`.
+ * Não remove campos; contrato de ficheiro estável — ver `docs/ARCHITECTURE.md`.
+ * @param {object} n linha normalizada (saída de `normalizeItem` + merge de loja)
+ */
 function toDadosProdutoClean(n, categoriaUrl) {
   const pdp = Array.isArray(n.images_pdp) && n.images_pdp.length ? n.images_pdp : null;
   let fotos = null;
@@ -1113,6 +1133,11 @@ function isReviewOnlyProductNode(raw) {
   return raw.review_id != null;
 }
 
+/* =============================================================================
+ * Loja (seller): normalização, merge entre linhas e agregado por `seller_id`.
+ * Não confundir com `reviewer_name` / nós de review (filtrados em outro sítio).
+ * Saída: campos de loja na linha + `output/extra/dados_lojas.json` (dedupe por `seller_id`).
+ * ============================================================================= */
 const LOJA_FIELD_DEFAULTS = {
   seller_id: null,
   global_seller_id: null,
@@ -1289,6 +1314,12 @@ function tryRecordSellerDebugSource(raw) {
   });
 }
 
+/* =============================================================================
+ * Produto (product): colisão no mapa por `product_id`, normalização grelha (`normalizeItem`)
+ * e escolha da linha mais “rica” (`productRowRichness`). Preço/merge: não alterar sem testes.
+ * Snapshot histórico (futuro) é responsabilidade de camada à parte — aqui só estado corrente.
+ * ============================================================================= */
+
 /**
  * Colisão no mesmo `product_id`: fica a linha com mais dados (grelha com product_price_info ganha a reviews).
  * @param {ReturnType<normalizeItem> | null | undefined} n
@@ -1386,6 +1417,7 @@ function pickProductPdpUrl(productId, raw, categoriaUrl) {
   return `https://www.tiktok.com/shop/${region}/pdp/${productId}`;
 }
 
+/** Nó de produto (grelha): `product_id`, preço, imagens, url PDP, vendas, ratings de produto; anexa bloco de loja quando existir. */
 function normalizeItem(rawIn, categoriaUrl = "") {
   const raw = mergeProductLayers(rawIn);
   const ppi = raw.product_price_info;
@@ -1702,6 +1734,7 @@ const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
 
 /**
  * Deduplica lojas por `seller_id` a partir do mapa de produtos.
+ * Alimenta `output/extra/dados_lojas.json` (agregado oficial por vendedor; ver `docs/ARCHITECTURE.md`).
  * @param {Map<string, object>} byProductId
  * @returns {Map<string, object>} valores = campos de loja (sem campos de produto)
  */
