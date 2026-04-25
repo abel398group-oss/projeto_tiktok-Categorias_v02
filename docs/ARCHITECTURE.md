@@ -4,6 +4,20 @@
 
 Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: interceptar `application/json` e o JSON embebido `__MODERN_ROUTER_DATA__` no HTML, **sem abrir PDP** (reduz risco de puzzle/anti‑bot na página de produto).
 
+## Estado actual do scraper (abril 2026)
+
+- Pipeline **estável:** coleta por categoria, normalização, merge por `product_id`, testes de regressão (`npm test`) a verde.
+- **Opcional:** `PDP_GALLERY=1` abre páginas de produto para `fotos_pdp` (mais lento); ver `FLUXO.md`.
+- **Saídas:** `output/dados_produtos.json` + `output/extra/dados_lojas.json` (+ ficheiros técnicos em `output/extra/`). O **contrato** destes JSONs está na secção **Contrato dos outputs** abaixo.
+
+## Decisão arquitetural: modelo híbrido nos JSONs (mantido)
+
+- **`dados_produtos.json`** continua a ser um export **flat / prático**: cada item tem `product_id`, nome, preço, vendas, imagens, **`seller_id`**, **`nome_loja`** e vários campos de loja (`loja_*`, logos). Essa **desnormalização é intencional** — leitura rápida, auditoria e análise sem `join` obrigatório.
+- **`output/extra/dados_lojas.json`** é o agregado **oficial por vendedor**: **uma** entrada por **`seller_id`** (dedupe e merge de campos entre produtos da mesma loja). Serve análise de sellers e futura importação para base de dados.
+- **Ligação:** `seller_id` é a **chave** comum entre um item em `itens[]` e uma linha em `lojas[]`.
+- **Não** remover, por agora, campos de loja de `dados_produtos.json` — evita quebrar consumidores e mantém o uso “abrir o ficheiro e ver tudo no item”.
+- **Normalização completa** (produto vs loja vs histórico no tempo) será feita no **Postgres** (tabelas separadas e snapshots), **não** obrigando o JSON actual a espelhar o esquema final da BD.
+
 ## Stack
 
 - **Node.js** (ES modules), **Puppeteer** + `puppeteer-extra` + **Stealth**
@@ -49,29 +63,60 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - Conceito: gravar, por execução de coleta, **valores que mudam** (preço, vendas, contagem de reviews, posição, métricas de loja) sem sobrescrever o histórico.
 - Ligar a uma ideia de **run** (uma corridada do scraper) e a tabelas de histórico; ver secção *Camada alvo (Postgres, futuro)* abaixo.
 
-## Contrato entre ficheiros de saída
+## Contrato dos outputs
 
-| Ficheiro | Conteúdo | Uso típico |
-|----------|----------|------------|
-| `output/dados_produtos.json` | Objeto com `itens[]`: **produto** + `seller_id` + **cópia** dos campos de loja (`nome_loja`, `loja_*`, …) | Leitura rápida, análise por produto, inspeção humana, export sem `join` |
-| `output/extra/dados_lojas.json` | `lojas[]`: **uma** linha agregada por `seller_id` (campos de loja; sem atributos puramente de produto) | Fonte “oficial” de **dados de vendedor/loja**; rankings e joins por `seller_id` |
+### `output/dados_produtos.json`
 
-- **Ligação:** `seller_id` no item de produto corresponde ao mesmo `seller_id` na grelha de lojas.
-- **Estrutura e campos** do JSON de produtos **não** foram alterados por este documento; apenas descritos.
+- **Papel:** ficheiro de **leitura rápida, auditoria e análise** por produto (export “flat”).
+- **Conteúdo:** `itens[]` com dados do **produto** (`product_id`, nome, preço, moeda, vendas, `fotos` / `fotos_pdp`, avaliações, …) **e** chave e cópia de **loja** (`seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`).
+- **Não** é a representação final do modelo relacional: é **conveniência** e desnormalização intencional; o esquema canónico alvo de longo prazo é o **banco** (ver abaixo).
 
-## Camada alvo (Postgres, futuro) — sem implementação neste repositório
+### `output/extra/dados_lojas.json`
 
-Estrutura de referência para evoluir o projeto; **dados ainda** saem em JSON com o pipeline actual.
+- **Papel:** ficheiro **agregado** de lojas / vendedores.
+- **Conteúdo:** `lojas[]` com **uma** linha **por** `seller_id` (sem duplicar o mesmo vendedor em várias linhas).
+- **Uso:** análise de vendedor, rankings de loja, e **import** onde se precisa de **um** registo por vendedor.
+- Construção: merge no mapa de coleta (`buildLojasMapBySeller` no código; sem alterar este documento).
 
-- **`scrape_runs`:** metadado de cada coleta (timestamp, categoria, status, ficheiro de saída / hash opcional).
-- **`products`:** atributos **estáveis** do artigo (ex.: `product_id`, título, links canónicos — conforme forem definidos no esquema).
-- **`sellers`:** atributos **estáveis** do vendedor, chaveada por `seller_id` (e `global_seller_id` se necessário).
-- **`product_snapshots`:** preço, vendas, contadores de review de **produto**, posição, etc. **no momento** do run; FK para `scrape_runs` e `products`.
-- **`seller_snapshots`:** totais de loja (vendas, seguidores, artigos ativos, …) **no momento** do run; FK para `scrape_runs` e `sellers`.
-- **Diferença fixa vs histórica:** tabelas “base” = dimensão; tabelas `*_snapshots` = factos no tempo, para gráficos e comparação entre coletas.
-- **`seller_id`:** chave de integridade entre `products` / `itens` e `sellers` / linhas de loja no export actual.
+### Regra de ligação
 
-**Pipeline de scraping:** o comportamento (normalização, merge, ficheiros gerados) permanece o definido em `src/scrapeCategory.mjs`; a camada SQL é **por cima** do JSON quando for implementada.
+- **`seller_id`** é a chave de ligação: cada produto com determinado `seller_id` corresponde à mesma chave no array `lojas` (e na dimensão `sellers` no futuro Postgres).
+
+| Ficheiro | O quê | Quando preferir |
+|----------|--------|-----------------|
+| `dados_produtos.json` | Produto + loja desnormalizada no item | Exploração, scripts simples, inspeção linha a linha |
+| `dados_lojas.json` | Loja **deduplicada** por `seller_id` | Métricas por vendedor, import `sellers`, consistência de loja |
+
+## Futuro modelo Postgres — apenas documentado (não implementado)
+
+Objetivo: **normalizar** entidades e **histórico** na base de dados; o JSON actual permanece a interface de saída do scraper até existir importador. **Nenhum** requisito de alterar o JSON agora.
+
+### Tabelas de dimensão (dados “fixos” ou semi-fixos)
+
+- **`products`**
+  - Dados **estáveis** do artigo: pelo menos `product_id`, referência a vendedor (`seller_id` FK), título, URLs canónicas / identificadores que não mudam a cada scrape (definição fina no DDL).
+- **`sellers`**
+  - Dados **estáveis** da loja: `seller_id` (PK lógica), `nome_loja`, identidade de logo / URIs (conforme esquema), `global_seller_id` se aplicável.
+
+### Tabelas de facto / histórico (estado no tempo, por execução)
+
+- **`scrape_runs`**
+  - Uma linha **por execução** do scraper (horário, categoria, parâmetros, notas, paths dos JSONs ou hash, status).
+- **`product_snapshots`**
+  - **Por run** e **por produto:** preço, vendas, avaliações, campos de imagem relevantes, ou qualquer métrica que deva ser **rastreada no tempo** (colunas a definir no DDL). FK: `scrape_runs`, `products`.
+- **`seller_snapshots`**
+  - **Por run** e **por loja:** vendas totais, seguidores, produtos ativos, totais de reviews, estado resumido da loja, etc. FK: `scrape_runs`, `sellers`.
+
+### Diferença entre dado “fixo” e histórico
+
+- Tabelas **dimensão** (`products`, `sellers`): identidade e atributos que raramente exigem histórico linha a linha no mesmo registo.
+- Tabelas **snapshot**: permitem comparação entre coletas (evolução de preço, vendas, métricas de loja) sem sobrescrever o passado.
+
+### `seller_id` na BD
+
+- Chave de integridade entre `products` e `sellers`, alinhada ao `seller_id` nos JSONs actuais.
+
+**Pipeline de scraping:** permanece o definido em `src/scrapeCategory.mjs`; a importação JSON → Postgres será uma **camada à parte** quando existir.
 
 ## Integridade (regressão)
 

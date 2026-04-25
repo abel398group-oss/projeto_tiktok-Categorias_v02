@@ -31,15 +31,32 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 ---
 
-## Loja vs produto — ficheiro separado (decisão)
+## Loja vs produto — decisão: modelo híbrido (JSON)
 
-- **Faz sentido** ter a loja fora do “núcleo” do item de produto: entidade **vendedor/loja** em JSON próprio, chaveada por `seller_id`, evita duplicar blocos idênticos em centenas de produtos e alinha com Postgres (`sellers` + `products`).
+- **Estado:** o scraper gera **dois** outputs complementares, descritos em **`docs/ARCHITECTURE.md`** (secção *Contrato dos outputs* e *Futuro modelo Postgres*).
+- **`dados_produtos.json`:** export plano/flat com **produto + `seller_id` + `nome_loja` + campos `loja_*` / logos** em cada item — **desnormalização intencional** (inspeção, análise rápida, sem `join` forçado). **Não** é o modelo final da base de dados.
+- **`output/extra/dados_lojas.json`:** agregado **oficial** — **uma** loja **por** `seller_id` (análise de vendedor, import da dimensão `sellers` no futuro).
+- **Ligação:** `seller_id` em comum.
+- **Decisão:** **não** remover campos de loja de `dados_produtos` nesta fase; **não** mudar o formato de `dados_lojas` para “forçar” normalização no JSON. A **normalização plena** (tabelas `products` / `sellers` / snapshots) fica para **Postgres** quando existir.
+- [x] **Contrato dos outputs documentado** em `docs/ARCHITECTURE.md` (e apontador no `FLUXO.md` onde existir).
+- [ ] (Opcional, fase posterior) **Separação estrita** só de campos de loja no `dados_produtos` — requer decisão, consumidores e testes.
+- [ ] (Opcional) Importador / consumidores a usarem `dados_lojas` para métricas por vendedor de forma explícita.
 
-- **Já implementado (pipeline actual):** `output/extra/dados_lojas.json` — grelha de lojas **deduplicada** a partir do mapa de produtos (`buildLojasMapBySeller` em `scrapeCategory.mjs`). O `dados_produtos.json` ainda traz **campos de loja desnormalizados** (`nome_loja`, `loja_vendas_total`, logos, etc.) para leitura humana e joins simples; isso **não invalida** o ficheiro de lojas: são dois níveis (catálogo agregado vs cópia no produto).
+---
 
-- [~] **Documentar o contrato** (FLUXO / `ARCHITECTURE`): caminho de `dados_lojas`, relação com `seller_id` no produto, e quando fazer *join* em consumidores.
-- [ ] (Opcional, fase posterior) **Afinar separação “estrita”:** em `dados_produtos` exportar só `seller_id` + `global_seller_id` (e opcionalmente `nome_loja` para conveniência), e tratar métricas de loja **apenas** em `dados_lojas` — exige ajuste de testes e de quem consome o JSON.
-- [ ] (Opcional) Garantir que consumidores (scripts, futuro importador) **lêem** `dados_lojas` quando precisam de perfil de loja em vez de duplicar lógica só sobre o array de produtos.
+## Próximas fases (ordem recomendada, alto nível)
+
+1. **Manter o scraper estável** (regressão `npm test` antes de merges relevantes).  
+2. **Validar outputs** reais (`dados_produtos`, `dados_lojas`, debug se necessário).  
+3. **Contrato dos JSONs** — documentado em `docs/ARCHITECTURE.md` (feito; rever quando o pipeline mudar).  
+4. **Definir esquema Postgres** (tabelas + relações; ver secção *Futuro modelo Postgres*).  
+5. **Importador JSON → Postgres** (sem alterar a lógica de coleta; camada separada).  
+6. **Testar** 3–5 categorias reais; validar variação de dados.  
+7. **Métricas / ranking** (sobre snapshots ou agregados).  
+8. **Otimizar velocidade** (paralelismo, filas, rate limit — após o modelo de dados fechado).  
+9. **Front / dashboard** (após base e import estáveis).
+
+Não implica prazos: é **sequência lógica**; pode haver itens em paralelo após a fase 3.
 
 ---
 
