@@ -5,7 +5,8 @@
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
- * Dados de entrega na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; o resto (técnico, debug, caça) em `output/extra/`.
+ * Dados de entrega: por defeito na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; resto (debug, caça) em `output/extra/`.
+ * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -31,13 +32,34 @@ puppeteer.use(StealthPlugin());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
-const OUT_DIR = path.join(ROOT, "output");
-/** Dados de produto e agregado de lojas na raiz de `output/`; técnica, debug, caça, etc. em `output/extra/`. */
-const OUT_AUX = path.join(OUT_DIR, "extra");
-const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
-const DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
-const DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
-const MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
+
+let OUT_DIR;
+let OUT_AUX;
+let DADOS_OUT;
+let DADOS_LOJAS_OUT;
+let DEBUG_SELLER_SOURCES;
+let MODERN_ROUTER_PEEK;
+let CACA_DADOS_JSONL;
+let CACA_XHR_FILE;
+
+/**
+ * Resolução de pastas de escrita. Chamada no início de `main` (lê `OUTPUT_DIR` no processo do CLI).
+ * @see process.env.OUTPUT_DIR
+ */
+function initOutputPaths() {
+  const raw = process.env.OUTPUT_DIR != null && String(process.env.OUTPUT_DIR).trim() !== ""
+    ? String(process.env.OUTPUT_DIR).trim()
+    : "output";
+  const base = path.isAbsolute(raw) ? path.normalize(raw) : path.join(ROOT, raw.replace(/\\/g, "/"));
+  OUT_DIR = base;
+  OUT_AUX = path.join(OUT_DIR, "extra");
+  DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
+  DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
+  DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
+  MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
+  CACA_DADOS_JSONL = path.join(OUT_AUX, "caca_dados.jsonl");
+  CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
+}
 
 /** Só ativo durante `main` — `output/extra/debug_seller_sources.json` (máx. 20) */
 let recordSellerDebug = false;
@@ -59,8 +81,6 @@ const netLogVerbose = process.env.NET_LOG === "verbose" || process.env.NET_LOG =
 const huntLog =
   process.env.HUNT_LOG !== "0" &&
   (process.argv.includes("--hunt") || process.env.HUNT_LOG === "1" || process.argv.includes("--debug"));
-const CACA_DADOS_JSONL = path.join(OUT_AUX, "caca_dados.jsonl");
-const CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
 /** Se o corpo JSON tiver tamanho acima do limite, regista as primeiras chaves (ajuda a achar o feed) */
 const HUNT_BIG_JSON = Math.max(2000, Number(process.env.HUNT_MIN_BYTES) || 3000);
 /** No console, só pistas com score a partir do indicado (reduz barulho) */
@@ -2314,6 +2334,7 @@ function buildLojasMapBySeller(byProductId) {
 }
 
 async function main() {
+  initOutputPaths();
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
@@ -2826,6 +2847,9 @@ async function main() {
         finalUrl = page.url();
       }
     }
+
+    // Garante `.../extra` antes de escrever o peek (pasta pode ter sido apagada ou ainda inexistente em OUTPUT_DIR aninhado).
+    await fs.mkdir(OUT_AUX, { recursive: true });
 
     if (!/shop\.tiktok\.com/i.test(finalUrl)) {
       status = "not_shop";

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/scrape-regression.test.mjs",
-    "coleta": "node src/scrapeCategory.mjs",
+    "coleta": "node scripts/scrape-both.mjs && node scripts/consolidate-category-outputs.mjs",
+    "coleta:uma": "node src/scrapeCategory.mjs",
     "coleta:completa": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
     "coleta:completa:login": "cross-env HEADED=1 PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
     "scrape:category": "node src/scrapeCategory.mjs",
@@ -16,7 +17,10 @@
     "scrape:category:discover": "cross-env HEADED=1 DISCOVER=1 node src/scrapeCategory.mjs --debug",
     "scrape:category:caca": "cross-env HEADED=1 HUNT_LOG=1 NET_LOG=1 node src/scrapeCategory.mjs --hunt",
     "scrape:category:peek": "cross-env HEADED=1 ROUTER_PEEK_LEN=12000 node src/scrapeCategory.mjs --debug",
-    "scrape:category:pdp": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs"
+    "scrape:category:pdp": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
+    "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
+    "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
+    "scrape:categories:sample": "node scripts/scrape-both.mjs"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"
