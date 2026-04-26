@@ -28,6 +28,7 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 ## CI e qualidade (repositório)
 
 - [x] **CI simples (GitHub Actions):** em cada push e pull request corre `npm test` (ver `.github/workflows/ci.yml` e `README.md`).
+- [x] Governança mínima do repositório (gitignore, CHANGELOG, ADR, engines, README)
 
 **Futuro (não implementar agora):**
 

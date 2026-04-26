@@ -1,6 +1,21 @@
+# build/deps
 node_modules/
+dist/
+
+# env/local
+.env
 .chrome-tiktok-profile/
-output/*
+
+# outputs de coleta
+output/
 !output/.gitkeep
-output/extra/**
 !output/extra/.gitkeep
+
+# debug/logs
+*.log
+debug_*.log
+debug_snapshots/
+
+# OS
+.DS_Store
+Thumbs.db
