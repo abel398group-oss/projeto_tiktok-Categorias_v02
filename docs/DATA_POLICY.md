@@ -98,3 +98,21 @@ Uso:
 - normalização completa no banco de dados
 
 ---
+
+## Versão e manutenção
+
+Política de Dados v1 — válida para o estado atual do scraper.
+
+Qualquer alteração em:
+
+- lógica de preço
+- lógica de vendas
+- fontes de dados
+- contrato dos outputs
+- classificação de confiabilidade dos campos
+
+deve revisar e, se necessário, atualizar este documento.
+
+Objetivo:
+
+Garantir que a Política de Dados continue alinhada ao comportamento real do scraper e ao uso correto dos dados.
