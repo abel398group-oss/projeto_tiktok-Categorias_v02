@@ -6,6 +6,22 @@ alwaysApply: false
 
 # scrapeCategory.mjs
 
+## Módulo de preço v1 (protegido — abril 2026)
+
+**Não** alterar **sem autorização explícita** (issue/tarefa no ROADMAP) e **`npm test` a verde** após qualquer toque:
+
+- **`normalizeItem`** (ramos e campos de preço / desconto / PPi).
+- **`parseDiscountPercentFromPpi`**
+- **`ppiHasDiscountSignal`**
+- **`computePrecoEstimadoVitrineFields`**
+- Lógica de **`tem_desconto`** e coerência com `preco` / `preco_original` / estimados.
+- **`toDadosProdutoClean`** nos **campos de preço** exportados.
+- **`mergeProductById`** (e **`productRowRichness`**) **na parte que afeta preço** / linha “vencedora” para preço.
+
+**Sempre** correr **`npm test`** se qualquer função acima ou campo de preço na saída for alterado. Contrato e validação: `docs/ARCHITECTURE.md` (contrato de preço), `docs/ROADMAP.md`, `docs/CHECKLIST-VALIDACAO-OUTPUT.md`.
+
+---
+
 - Novos campos de produto: preferir reutilizar **`normalizeItem`** e **`toDadosProdutoClean`**, a não ser que a API exija caminho totalmente distinto.  
 - URLs: **`pickProductPdpUrl`** — preferir `seo_url.canonical_url`; região do fallback a partir de `CATEGORY_URL` / `pathRegionFromCategoryUrl`.  
 - Mapeamento: **`Map` por `product_id`** com **`mergeProductById`** (linha “mais rica”); nós de review têm `review_id` e são ignorados em **`normalizeItem`**. Não reintroduzir dedupe por `sku` sozinho.  

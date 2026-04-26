@@ -2,6 +2,15 @@
 
 Ticar: `- [ ]` → `- [x]`
 
+## Antes de considerar **mudança de preço** aceitável (revisão de código / merge)
+
+- [ ] `npm test` a passar na totalidade.
+- [ ] Comparação: produto **sem** desconto no contrato v1 continua com `preco_original` **null** (e `preco_estimado_vitrine` / gaps **null** onde aplicável) e `tem_desconto: false`.
+- [ ] Comparação: produto **com** desconto mantém `tem_desconto: true` e coerência `preco` / `preco_original` (regra actual).
+- [ ] O campo `preco` **não** é substituído por `preco_estimado_vitrine` (papéis distintos).
+- [ ] Campos numéricos de preço permanecem **number** ou **null** (sem strings involuntárias).
+- [ ] Ficheiro consolidado `output/dados_produtos.json` (multi-categoria) continua o **mesmo schema** de item (só se aplicar a PRs que toquem consolidação).
+
 ## dados_produtos.json
 
 - [x] JSON ok
@@ -60,7 +69,9 @@ Ticar: `- [ ]` → `- [x]`
 
 ## Notas
 
-**Preço (revisar depois da avaliação):** nesses campos, os itens com mais vendas / mais “vendidos” tiveram **mais divergências** em relação à vitrine; o resto ficou em grande parte alinhado. Ajustes de lógica de preço e refinamento ficam **para depois** de fecharmos a avaliação. **Síntese:** em geral o resultado é **bom**; ainda precisamos de **algumas melhorias** nos preços nos casos mais problemáticos.
+**Preço (v1 validado, abril 2026):** validação **manual** em **duas** categorias (com e sem desconto). **Sem desconto:** `preco_original`, `preco_estimado_vitrine` e gaps a `null`, `tem_desconto: false`. **Com desconto:** `preco` e `preco_original` preenchidos, `preco_estimado_vitrine` próximo da UI, `tem_desconto: true`. Pequenas diferenças de **centavos** são toleráveis. O módulo de preço está **estável**; alterações à lógica exigem issue/tarefa e `npm test` (ver `docs/ARCHITECTURE.md` e `docs/ROADMAP.md`). **Futuro (não feito):** score de confiança, `price_source` interno, validação extra com PDP.
+
+**Preço (histórico / borderline):** nesses campos, em corridas anteriores os itens com muitas vendas tiveram por vezes **mais divergências** — mantém-se em observação para **casos extremos**; não invalida a validação v1 do contrato geral.
 
 **Fotos da grelha (`fotos`):** de tudo o que analisámos, **2 produtos** saíram com **apenas 1** URL de foto; nos **outros** o array tem **mais** links, como esperado.
 

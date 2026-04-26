@@ -6,6 +6,8 @@ Este ficheiro é a **única** fonte de tarefas objetivas do projeto. Não usar `
 
 Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
+**Módulo de preço v1 (abril 2026):** validado manualmente (produtos com e sem desconto, duas categorias) e protegido por testes. **Não** alterar lógica de preço, `normalizeItem` ou campos de desconto na exportação **sem** nova issue/tarefa explícita; qualquer toque nesses trechos: correr `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de preço) e `.cursor/rules/scrape-mjs-patterns.mdc`.
+
 ---
 
 ## Metodologia (alinhada ao fluxo Cursor / Uleder)
@@ -103,6 +105,26 @@ A arquitetura de dados e análise deve suportar:
 **Nota:** O `dados_produtos.json` (e corridas reais) está **consistente** no que toca a `fotos_pdp` no estado actual. Se no futuro aparecer **ruído** recorrente (logos, badges, promos) nas URLs, reavaliar: filtro pós-URL (ex. `filterPdpProductImages`) + testes de regressão.
 
 **Ordem de prioridade actual:** (1) validação feita, (2) **não alterar** a pipeline de `fotos_pdp` por enquanto, (3) avançar para a **próxima etapa** abaixo (tarefas em aberto / próximo marco do produto de dados).
+
+---
+
+## Módulo de preço (v1) — concluído (abril 2026)
+
+Validação manual: produtos **com** e **sem** desconto em **duas** categorias; pequenas diferenças de centavos vs UI aceitáveis; o módulo de preço no scraper passa a ser considerado **estável** nesta versão.
+
+- [x] Normalização de preço **sem** desconto (campos de desconto a `null`, `tem_desconto: false` onde aplicável).
+- [x] Normalização de preço **com** desconto (`preco`, `preco_original`, estimativas e gaps alinhados à regra actual).
+- [x] Campo **`tem_desconto`**.
+- [x] **`preco_estimado_vitrine`** (experimental) — validado no output real.
+- [x] Consolidação **multi-categoria** em `output/dados_*.json` **mantendo o mesmo schema** por item (ver `scripts/consolidate-category-outputs.mjs`).
+
+**Decisão (duradoura):** o módulo de preço **v1** está **validado manualmente** e **protegido por** `test/scrape-regression.test.mjs`. Não alterar `normalizeItem`, cálculo de preço, `tem_desconto` ou `toDadosProdutoClean` nesses campos **sem** nova issue/tarefa explícita e regressão a verde.
+
+## Futuro — sinais e confiança de preço (não implementar agora)
+
+- [ ] Score de **confiança** de preço.
+- [ ] `price_source` (ou equivalente) **interno** para auditoria.
+- [ ] Validação reforçada com amostra **PDP** (futuro; não exige implementação agora).
 
 ---
 

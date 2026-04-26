@@ -71,6 +71,21 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - **Conteúdo:** `itens[]` com dados do **produto** (`product_id`, nome, preço, moeda, vendas, `fotos` / `fotos_pdp`, avaliações, …) **e** chave e cópia de **loja** (`seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`).
 - **Não** é a representação final do modelo relacional: é **conveniência** e desnormalização intencional; o esquema canónico alvo de longo prazo é o **banco** (ver abaixo).
 
+#### Contrato de preço (v1, validado)
+
+Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline real vive em `normalizeItem` → `toDadosProdutoClean`; **não** duplicar regra de negócio neste parágrafo — serve de referência e contrato para consumidores e revisões):
+
+- **`preco`:** preço **principal** do pipeline (grelha / feed; pode ser reforçado no PDP com `PDP_GALLERY=1` conforme a lógica actual).
+- **`preco_original`:** preenchido **só** quando existe **desconto confiável**; caso contrário `null` (incluindo “sem desconto” no sentido de negócio acordado no código).
+- **`tem_desconto`:** `true` / `false` — espelha a decisão de desconto confiável do normalizador.
+- **`preco_estimado_vitrine`:** estimativa alinhada à **UI de vitrine** em cenários com desconto (marcado como experimental / aditivo no código; ver testes de regressão).
+- **`preco_gap_estimado` / `preco_gap_estimado_percent`:** derivados da estimativa em relação às bases do item (conforme `computePrecoEstimadoVitrineFields` e regras associadas).
+- **Produtos sem desconto (contrato de saída):** `preco_original`, `preco_estimado_vitrine` e os dois gaps a **`null`**, e **`tem_desconto: false`**, coerente com a lógica validada.
+- **Tolerância vs site:** pequenas diferenças de **centavos** face à UI são aceitáveis; **não** se exige correspondência “pixel-perfect”.
+- **Estabilidade:** o módulo de preço v1 foi **validado manualmente** (abril 2026); alterações exigem testes e decisão (ver `docs/ROADMAP.md` e `.cursor/rules/scrape-mjs-patterns.mdc`).
+
+**Futuro (não implementado):** score de confiança de preço, `price_source` interno, validação adicional com PDP em amostra — apenas roadmap, sem código obrigatório agora.
+
 ### `output/dados_lojas.json`
 
 - **Papel:** ficheiro **agregado** de lojas / vendedores.
