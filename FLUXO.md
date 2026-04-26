@@ -8,11 +8,12 @@ O script **já corre tudo em sequência** no mesmo `node` (primeiro a categoria,
 
 | O quê | Comando |
 |--------|--------|
-| Só categoria (mais rápido; `fotos` no JSON) | `npm run coleta` |
-| Categoria + links extra das fotos no PDP (`fotos_pdp`) | `npm run coleta:completa` |
+| **Duas** categorias (rápido; só grelha) + `output/dados_*.json` consolidados | `npm run coleta` |
+| **Duas** categorias + galeria no PDP (`fotos_pdp`, mais lento) + consolidado | `npm run coleta:completa` |
 | Igual à completa, com browser visível p/ login | `npm run coleta:completa:login` |
+| Uma categoria só, com PDP (`OUTPUT_DIR` / `CATEGORY_URL` se precisar) | `npm run coleta:uma:completa` |
 
-(Equivalem a `scrape:category`, `scrape:category:pdp` e variante com `HEADED=1`.)
+O script `scrape-both` propaga as variáveis de ambiente (incl. `PDP_GALLERY`) a cada corrida. Atalhos equivalentes: `scrape:category` / `scrape:category:pdp` (uma categoria).
 
 ---
 
@@ -35,10 +36,12 @@ Precisas de **Node.js** instalado no PC.
 npm run coleta
 ```
 
-**Completa (grelha + fotos do PDP, demora mais):**
+**Completa (as **duas** categorias, grelha + fotos do PDP, demora mais; depois consolida em `output/dados_*.json`):**
 ```bash
 npm run coleta:completa
 ```
+
+Uma categoria só com PDP: `npm run coleta:uma:completa` (ou `npm run scrape:category:pdp`).
 
 Espera a execução acabar sozinha.
 

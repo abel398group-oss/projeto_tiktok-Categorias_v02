@@ -1,6 +1,7 @@
 /**
  * Corrida sequencial: duas categorias, outputs em pastas distintas (só orquestra o CLI, sem tocar no parser).
  * Uso: node scripts/scrape-both.mjs
+ * Variáveis do processo pai (ex.: PDP_GALLERY=1 do `npm run coleta:completa`) propagam em `...process.env` a cada `spawn`.
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
