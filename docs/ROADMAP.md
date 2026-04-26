@@ -25,6 +25,18 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 ---
 
+## CI e qualidade (repositório)
+
+- [x] **CI simples (GitHub Actions):** em cada push e pull request corre `npm test` (ver `.github/workflows/ci.yml` e `README.md`).
+
+**Futuro (não implementar agora):**
+
+- [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.
+- [ ] **Validação de schema** JSON dos outputs (`dados_produtos` / `dados_lojas`) no CI ou pós-geração.
+- [ ] **CI com lint / typecheck** se o projeto adoptar ferramentas (ESLint, TypeScript, etc.) noutro passo.
+
+---
+
 ## Visão estratégica do produto
 
 O repositório **não** é apenas um scraper: a visão é uma **plataforma de inteligência de produtos** para e-commerce e marketplaces — coletar dados, analisar potencial de venda, calcular viabilidade (incl. importação) e expor análise e decisão a utilizadores com **front com login** (vendedores, fornecedores, operação interna e contas próprias no ecossistema TikTok Creator/loja).
@@ -165,7 +177,7 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 
 ## Próximas fases (ordem recomendada, alto nível)
 
-1. **Manter o scraper estável** (regressão `npm test` antes de merges relevantes).  
+1. **Manter o scraper estável** (regressão `npm test` localmente; no GitHub, o workflow **CI** corre os mesmos testes em push/PR).  
 2. **Validar outputs** reais (`dados_produtos`, `dados_lojas`, debug se necessário).  
 3. **Contrato dos JSONs** — documentado em `docs/ARCHITECTURE.md` (feito; rever quando o pipeline mudar).  
 4. **Definir esquema Postgres** (tabelas + relações; ver secção *Futuro modelo Postgres*).  
