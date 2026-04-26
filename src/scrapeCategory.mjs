@@ -61,6 +61,15 @@ function initOutputPaths() {
   CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
 }
 
+/**
+ * Recria `OUT_DIR` e `OUT_DIR/extra` antes de escrever em `extra/`
+ * (caminho aninhado `output/categorias/...`; pasta pode desaparecer a meio da execução).
+ */
+async function ensureOutAuxDir() {
+  await fs.mkdir(OUT_DIR, { recursive: true });
+  await fs.mkdir(OUT_AUX, { recursive: true });
+}
+
 /** Só ativo durante `main` — `output/extra/debug_seller_sources.json` (máx. 20) */
 let recordSellerDebug = false;
 const sellerDebugSamples = [];
@@ -2338,8 +2347,7 @@ async function main() {
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  await fs.mkdir(OUT_AUX, { recursive: true });
+  await ensureOutAuxDir();
   const outFile = path.join(OUT_AUX, "teste_categoria.json");
   const debugFile = path.join(OUT_AUX, "debug_responses.log");
   const fresh = process.env.FRESH_SESSION === "1";
@@ -2404,6 +2412,7 @@ async function main() {
 
   const netLogFile = path.join(OUT_AUX, "rede_ultima_execucao.log");
   if (netLog) {
+    await ensureOutAuxDir();
     await fs.writeFile(netLogFile, `inicio ${new Date().toISOString()}\n${"=".repeat(80)}\n`, "utf8");
     // eslint-disable-next-line no-console
     console.log(
@@ -2413,6 +2422,7 @@ async function main() {
 
   const huntXhrSeen = new Set();
   if (huntLog) {
+    await ensureOutAuxDir();
     const head =
       JSON.stringify({
         t: new Date().toISOString(),
@@ -2500,6 +2510,7 @@ async function main() {
   let discoverCount = 0;
 
   if (isDiscover) {
+    await ensureOutAuxDir();
     await fs.writeFile(discoverPath, "", "utf8");
     // eslint-disable-next-line no-console
     console.log(
@@ -2798,6 +2809,7 @@ async function main() {
         ) {
           const dir = path.join(OUT_AUX, "debug_snapshots");
           try {
+            await ensureOutAuxDir();
             await fs.mkdir(dir, { recursive: true });
             const file = path.join(dir, `snap_${jsonSnapshotN++}.json`);
             const s = JSON.stringify({ url, body: data }, null, 2);
@@ -2848,14 +2860,12 @@ async function main() {
       }
     }
 
-    // Garante `.../extra` antes de escrever o peek (pasta pode ter sido apagada ou ainda inexistente em OUTPUT_DIR aninhado).
-    await fs.mkdir(OUT_AUX, { recursive: true });
-
     if (!/shop\.tiktok\.com/i.test(finalUrl)) {
       status = "not_shop";
       note = isHeaded
         ? `Ainda fora de shop.tiktok.com após ${Math.round(loginWaitMaxMs / 60_000)} min. Aumente LOGIN_WAIT_MAX_MS ou conclua o login a tempo. Perfil: CHROME_USER_DATA=...`
         : "A sessão caiu fora de shop.tiktok.com. Use HEADED=1, faça o login; na próxima execução o login deve persistir no perfil .chrome-tiktok-profile. Outro local: CHROME_USER_DATA=caminho.";
+      await ensureOutAuxDir();
       await fs.writeFile(
         MODERN_ROUTER_PEEK,
         JSON.stringify(
@@ -2888,6 +2898,7 @@ async function main() {
       }
       const routerPeekLen = Math.min(120_000, Math.max(0, Number(process.env.ROUTER_PEEK_LEN) || 8_000));
       if (!modernRouter) {
+        await ensureOutAuxDir();
         await fs.writeFile(
           MODERN_ROUTER_PEEK,
           JSON.stringify(
@@ -2916,6 +2927,7 @@ async function main() {
         }, sample || undefined);
         peekBody.categoria_url = startUrl;
         peekBody.final_url = finalUrl;
+        await ensureOutAuxDir();
         await fs.writeFile(MODERN_ROUTER_PEEK, JSON.stringify(peekBody, null, 2), "utf8");
         // eslint-disable-next-line no-console
         console.log(
@@ -2971,6 +2983,7 @@ async function main() {
     products
   };
 
+  await ensureOutAuxDir();
   await fs.writeFile(outFile, JSON.stringify(payload, null, 2), "utf8");
 
   const itensDados = [...byProductId.values()]
@@ -3006,6 +3019,7 @@ async function main() {
     ),
     "utf8"
   );
+  await ensureOutAuxDir();
   await fs.writeFile(
     DEBUG_SELLER_SOURCES,
     JSON.stringify(
@@ -3023,6 +3037,7 @@ async function main() {
   recordSellerDebug = false;
 
   if (debug) {
+    await ensureOutAuxDir();
     const head = `final_url=${finalUrl}\njson_peeks≈${jsonPeeksTried}\n`;
     const body = debugLines.length
       ? debugLines.join("\n")
