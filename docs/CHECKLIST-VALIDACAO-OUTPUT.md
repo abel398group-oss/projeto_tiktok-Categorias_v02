@@ -42,21 +42,21 @@ Ticar: `- [ ]` → `- [x]`
 
 ## dados_lojas.json
 
-- [ ] JSON ok
-- [ ] `coletado_em`
-- [ ] `total`
-- [ ] `lojas[]`
-- [ ] (por loja) `seller_id`
-- [ ] (por loja) `global_seller_id`
-- [ ] (por loja) `nome_loja`
-- [ ] (por loja) `loja_vendas_total`
-- [ ] (por loja) `loja_produtos_ativos`
-- [ ] (por loja) `loja_reviews_total`
-- [ ] (por loja) `loja_seguidores`
-- [ ] (por loja) `loja_videos`
-- [ ] (por loja) `loja_enable_follow`
-- [ ] (por loja) `loja_logo_uri`
-- [ ] (por loja) `loja_logo_urls`
+- [x] JSON ok
+- [x] `coletado_em`
+- [x] `total`
+- [x] `lojas[]`
+- [x] (por loja) `seller_id`
+- [x] (por loja) `global_seller_id` (ver Notas)
+- [x] (por loja) `nome_loja`
+- [x] (por loja) `loja_vendas_total` (ver Notas)
+- [x] (por loja) `loja_produtos_ativos` (ver Notas)
+- [x] (por loja) `loja_reviews_total` (ver Notas)
+- [x] (por loja) `loja_seguidores` (ver Notas)
+- [x] (por loja) `loja_videos` (ver Notas)
+- [x] (por loja) `loja_enable_follow` (ver Notas)
+- [x] (por loja) `loja_logo_uri`
+- [x] (por loja) `loja_logo_urls`
 
 ## Notas
 
@@ -77,6 +77,8 @@ Ticar: `- [ ]` → `- [x]`
 **Métricas de loja embutidas no produto** (`loja_vendas_total`, `loja_produtos_ativos`, `loja_reviews_total`, `loja_seguidores`, `loja_videos`, `loja_enable_follow`): neste output estão **todas null** — ver se há **dados na API** para preencher e se o produto precisa destes campos ou se basta `dados_lojas.json` (observação).
 
 **Logo da loja (`loja_logo_uri`, `loja_logo_urls`):** `uri` ainda **não está claro** o uso; aparece **em todos**. `loja_logo_urls` também **em todos**; num caso pareceu **foto de produto** e **não ficou provado** que é logo da loja — **validar com o tempo**; **a princípio não usar** para decisões rápidas.
+
+**`dados_lojas.json` (validação):** estrutura e metadados ok. Por loja: **`seller_id` ok**, **`nome_loja` ok**, **`loja_logo_uri` ok**, **`loja_logo_urls` ok** (ex.: path + URL https). O que ainda vem **`null`** (`global_seller_id`, vendas totais, produtos ativos, reviews, seguidores, vídeos, `enable_follow`) fica **para ver se / como capturar** noutro passo; ainda **não** está a ser preenchido por este run.
 
 ```
 data:
