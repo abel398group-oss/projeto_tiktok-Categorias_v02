@@ -11,6 +11,15 @@ Ticar: `- [ ]` → `- [x]`
 - [ ] Campos numéricos de preço permanecem **number** ou **null** (sem strings involuntárias).
 - [ ] Ficheiro consolidado `output/dados_produtos.json` (multi-categoria) continua o **mesmo schema** de item (só se aplicar a PRs que toquem consolidação).
 
+## Antes de considerar **mudança em vendas** aceitável (revisão de código / merge)
+
+- [ ] `npm test` a passar na totalidade.
+- [ ] O valor final de **`vendas` / `sales_count` não “desce”** se outra resposta com o mesmo `product_id` tinha um **número maior** (preservação do **máximo** entre fontes / colisões).
+- [ ] **`sales_count` null** da linha vencedora **não** apaga um **número** válido vindo de outra fonte.
+- [ ] **`vendas_texto` / `sales_display`:** texto não vazio **não** é apagado por `null` no merge (regra de coalescência).
+- [ ] **Preço e desconto** permanecem **intocados** (regra de preço e `productRowRichness` para a linha “rica” inalterada para fins de venda, salvo tarefa explícita a outro módulo).
+- [ ] **Schema** de `dados_produtos.json` (campos e tipos) **inalterado** (sem renomear ou remover chaves de contrato sem ADR/ROADMAP).
+
 ## dados_produtos.json
 
 - [x] JSON ok
@@ -24,30 +33,30 @@ Ticar: `- [ ]` → `- [x]`
 - [x] `product_id`
 - [x] `link_produto`
 - [x] `nome`
-- [x] `preco` (ver Notas)
-- [x] `preco_original` (ver Notas)
-- [x] `preco_estimado_vitrine` (ver Notas)
-- [x] `preco_gap_estimado` (ver Notas)
-- [x] `preco_gap_estimado_percent` (ver Notas)
-- [x] `moeda` (ver Notas)
+- [x] `preco`
+- [x] `preco_original`
+- [x] `preco_estimado_vitrine`
+- [x] `preco_gap_estimado`
+- [x] `preco_gap_estimado_percent`
+- [x] `moeda`
 - [x] `seller_id`
 - [x] `nome_loja`
-- [x] `fotos` (ver Notas)
-- [x] `fotos_pdp` (ver Notas)
-- [x] `vendas` (ver Notas)
-- [x] `vendas_texto` (ver Notas)
+- [x] `fotos`
+- [x] `fotos_pdp`
+- [x] `vendas`
+- [x] `vendas_texto`
 - [x] `avaliacao_media`
-- [x] `avaliacoes_total` (ver Notas)
-- [x] `votos_por_estrela` (ver Notas)
-- [x] `global_seller_id` (ver Notas)
-- [x] `loja_vendas_total` (ver Notas)
-- [x] `loja_produtos_ativos` (ver Notas)
-- [x] `loja_reviews_total` (ver Notas)
-- [x] `loja_seguidores` (ver Notas)
-- [x] `loja_videos` (ver Notas)
-- [x] `loja_enable_follow` (ver Notas)
-- [x] `loja_logo_uri` (ver Notas)
-- [x] `loja_logo_urls` (ver Notas)
+- [x] `avaliacoes_total`
+- [x] `votos_por_estrela`
+- [x] `global_seller_id`
+- [x] `loja_vendas_total`
+- [x] `loja_produtos_ativos`
+- [x] `loja_reviews_total`
+- [x] `loja_seguidores`
+- [x] `loja_videos`
+- [x] `loja_enable_follow`
+- [x] `loja_logo_uri`
+- [x] `loja_logo_urls`
 
 ## dados_lojas.json
 
@@ -56,18 +65,20 @@ Ticar: `- [ ]` → `- [x]`
 - [x] `total`
 - [x] `lojas[]`
 - [x] (por loja) `seller_id`
-- [x] (por loja) `global_seller_id` (ver Notas)
+- [x] (por loja) `global_seller_id`
 - [x] (por loja) `nome_loja`
-- [x] (por loja) `loja_vendas_total` (ver Notas)
-- [x] (por loja) `loja_produtos_ativos` (ver Notas)
-- [x] (por loja) `loja_reviews_total` (ver Notas)
-- [x] (por loja) `loja_seguidores` (ver Notas)
-- [x] (por loja) `loja_videos` (ver Notas)
-- [x] (por loja) `loja_enable_follow` (ver Notas)
+- [x] (por loja) `loja_vendas_total`
+- [x] (por loja) `loja_produtos_ativos`
+- [x] (por loja) `loja_reviews_total`
+- [x] (por loja) `loja_seguidores`
+- [x] (por loja) `loja_videos`
+- [x] (por loja) `loja_enable_follow`
 - [x] (por loja) `loja_logo_uri`
 - [x] (por loja) `loja_logo_urls`
 
 ## Notas
+
+Ressalvas, histórico e observações abertas; a checklist de **dados_produtos** / **dados_lojas** acima fica fechada sem remeter a estas notas em cada linha.
 
 **Preço (v1 validado, abril 2026):** validação **manual** em **duas** categorias (com e sem desconto). **Sem desconto:** `preco_original`, `preco_estimado_vitrine` e gaps a `null`, `tem_desconto: false`. **Com desconto:** `preco` e `preco_original` preenchidos, `preco_estimado_vitrine` próximo da UI, `tem_desconto: true`. Pequenas diferenças de **centavos** são toleráveis. O módulo de preço está **estável**; alterações à lógica exigem issue/tarefa e `npm test` (ver `docs/ARCHITECTURE.md` e `docs/ROADMAP.md`). **Futuro (não feito):** score de confiança, `price_source` interno, validação extra com PDP.
 
@@ -77,9 +88,9 @@ Ticar: `- [ ]` → `- [x]`
 
 **Fotos PDP (`fotos_pdp`):** no output atual **não vem nada** (ou vazio) — o fluxo **ainda não recolhe** a página de produto; campo reservado para **uso futuro** quando houver coleta PDP.
 
-**`vendas`:** há **muita variação** face ao que o site mostra; fica em **observação** para rever parser / fonte e alinhar regras depois.
+**Vendas (v1 aprovada com ressalva, abril 2026):** o merge agora toma o **máximo** de `sales_count` entre colisões do mesmo `product_id`, o que aproximou a UI em muitos casos. **Ainda** podem existir diferenças (métrica parcial/feed vs agregado, SKU, atraso). `vendas` = **melhor esforço**; **não** equivalência certificada com a UI; **não** usar como valor financeiro exato. **Uso:** ranking, tendência, análise. **Futuro (não feito):** `vendas_confianca`, `sales_source`, texto tipo `2,9K`, validação com PDP. Ver `docs/ARCHITECTURE.md` (contrato de vendas).
 
-**`vendas_texto`:** neste run saiu **tudo `null`**. No código, o propósito é guardar o **texto original** vindo do feed (ex. string de `sold_info`), enquanto `vendas` é o **número** já interpretado; não é redundante *por definição*, mas se continuar sempre vazio convém perceber se a API deixou de expor a string. Fica em **observação**.
+**`vendas_texto`:** no código, guarda o **texto** original quando o feed o expõe; o export usa `vendas` como número. O merge procura **não** apagar texto útil. Se o run tiver tudo `null`, pode ser a API/feed sem string — observação de produto, não revogação de v1.
 
 **Avaliações:** `avaliacao_media` **ok**. `avaliacoes_total` com **divergências** face ao site (observação, alinhar depois). `votos_por_estrela` veio **null** — ainda a decidir se faz sentido para o projeto.
 

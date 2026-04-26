@@ -19,6 +19,7 @@ Não monorepo: um módulo Node (`src/scrapeCategory.mjs`). Não há API Nest, Pr
 
 - Antes de mudar o contrato de `dados_produtos.json` ou a estratégia de coleta, ler `docs/ARCHITECTURE.md` e o ROADMAP.
 - **Módulo de preço v1** está **validado** (abril 2026); **não** refatorar preço / `normalizeItem` / desconto sem tarefa explícita e `npm test` — ver `docs/ROADMAP.md` e `.cursor/rules/scrape-mjs-patterns.mdc`.
+- **Módulo de vendas v1** (merge com **máximo** de `sales_count`, validado manualmente com ressalvas); **não** alterar extração/merge de vendas sem tarefa e testes.
 - Decisões que alterem o “contrato” ou a abordagem: preferir ADR e referência no ROADMAP.
 
 ## O que **não** aplica a este repo

@@ -8,6 +8,8 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 **Módulo de preço v1 (abril 2026):** validado manualmente (produtos com e sem desconto, duas categorias) e protegido por testes. **Não** alterar lógica de preço, `normalizeItem` ou campos de desconto na exportação **sem** nova issue/tarefa explícita; qualquer toque nesses trechos: correr `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de preço) e `.cursor/rules/scrape-mjs-patterns.mdc`.
 
+**Módulo de vendas v1 (abril 2026):** após ajuste no `mergeProductById` (máximo `sales_count` entre colisões), **validado manualmente**; **aprovado com ressalva controlada** (feed ≠ pixel-perfect com UI; ver contrato de vendas). **Não** alterar extração/merge de vendas sem tarefa explícita e `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de vendas) e `.cursor/rules/scrape-mjs-patterns.mdc`.
+
 ---
 
 ## Metodologia (alinhada ao fluxo Cursor / Uleder)
@@ -94,7 +96,9 @@ A arquitetura de dados e análise deve suportar:
 - Manter branch **`stable/scraper-funcionando`** como referência / backup.  
 - Trabalhar em **`feature/*`**.  
 - Correr **`npm test`** antes de merge em alterações de parser/merge.  
-- Não alterar **preço**, **merge**, **dedupe** ou regras de **seller/loja** sem **testes** actualizados.
+- Não alterar **preço**, **dedupe** ou regras de **seller/loja** sem **testes** actualizados.  
+- **Vendas (v1):** não alterar `normalizeItem` (extração de vendas), `parseSalesText`, `coalesceMaxSalesCount`, `coalesceSalesDisplayFromMerge`, nem a parte de vendas de `mergeProductById` / `toDadosProdutoClean` — ver secção *Módulo de vendas* e regras Cursor; **merge** (linha rica) continua a valer para preço/imagem, com **máximo** de vendas preservado.  
+- **Preço (v1):** como já documentado; não reabrir sem critério.
 
 ---
 
@@ -125,6 +129,24 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 - [ ] Score de **confiança** de preço.
 - [ ] `price_source` (ou equivalente) **interno** para auditoria.
 - [ ] Validação reforçada com amostra **PDP** (futuro; não exige implementação agora).
+
+---
+
+## Módulo de vendas (v1) — melhorado, validado, aprovado com ressalva (abril 2026)
+
+- [x] **Vendas v1 melhorada:** o `mergeProductById` preserva o **maior** `sales_count` observado entre fontes do mesmo `product_id` (ver `coalesceMaxSalesCount` e `coalesceSalesDisplayFromMerge` no código).
+- [x] **Validação manual** após o ajuste: muitos produtos alinham com a UI; pequenas diferenças aceitáveis (atualização em tempo real, arredondamento).
+- [x] **Aprovado com ressalva controlada:** ainda é possível divergência (métrica **feed parcial / SKU** vs agregado mostrado na **UI**); isso **não** anula a aprovação de v1, mas define expectativa de consumo.
+- [x] **Regressão** em `test/scrape-regression.test.mjs` (suite *mergeProductById — vendas*) a cobrir o contrato de máximo e texto.
+
+**Decisão (duradoura):** o campo exportado **`vendas`** = **melhor esforço** a partir do feed, **consolidado** com o máximo no merge. **Não** é garantia absoluta de equivalência com o número exibido na UI; **não** utilizar `vendas` como métrica financeira “exacta” ou legal; **pode** utilizar-se para **ranking**, **tendência**, **filtro** e análise comercial. Ver `docs/ARCHITECTURE.md` (contrato de vendas).
+
+## Futuro — sinais e confiança de **vendas** (não implementar agora)
+
+- [ ] `vendas_confianca` (ou score análogo).
+- [ ] `sales_source` / `sales_source_debug` (auditoria de fonte).
+- [ ] Captura ou parse reforçado de **texto** de vendas (ex. formatos estilo `2,9K` / `1.2k`).
+- [ ] Validação com **PDP** ou **endpoint** dedicado, se o negócio exigir alinhamento fino com a UI.
 
 ---
 

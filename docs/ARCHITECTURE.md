@@ -86,6 +86,17 @@ Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline r
 
 **Futuro (não implementado):** score de confiança de preço, `price_source` interno, validação adicional com PDP em amostra — apenas roadmap, sem código obrigatório agora.
 
+#### Contrato de vendas (v1, aprovado com ressalva)
+
+- **`vendas`:** no mapa pós-`mergeProductById`, reflete o **maior** `sales_count` observado para o `product_id` quando existem colisões (várias respostas JSON). A extração em cada linha continua a vir de `normalizeItem` (ex. `sold_info` / cadeia de parse); o merge **não** soma duplicados, **toma o máximo** para não perder a melhor leitura entre XHR. **Semântica de consumo:** *melhor esforço* do feed consolidado, **não** contagem contábil nem correspondência certificada com a UI.
+- **`vendas_texto`:** texto de venda do feed (`sales_display` interno) quando existir; regra: o merge **não** descarta texto útil **só** porque a linha vencedora traz `null` em `sales_display`.
+- **UI e tolerância:** pequenas diferenças em relação ao número mostrado no site podem ocorrer (atualização, arredondamento de etiqueta). **Grandes** diferenças podem ser diferença de **métrica** (ex. variante, janela temporal, grelha parcial vs agregado na ficha) — **não** forçar interpretação de bug sem análise.
+- **Não** tratar `vendas` como valor financeiro exato, total oficial ou substituto de relatório de vendas da plataforma.
+- **Uso alinhado ao produto:** ranking, tendência, filtros, análise e priorização; combinar com preço, categoria, reviews conforme a análise.
+- **Estabilidade:** o módulo de vendas v1 foi **validado** após a melhoria de merge; alterações a extração, `parseSalesText` ou `merge` de vendas exigem `npm test` e decisão (ver `docs/ROADMAP.md` e `.cursor/rules/scrape-mjs-patterns.mdc`).
+
+**Futuro (não implementado):** `vendas_confianca`, `sales_source`, parse de `sales_display` rico, cruzamento com PDP/endpoint.
+
 ### `output/dados_lojas.json`
 
 - **Papel:** ficheiro **agregado** de lojas / vendedores.
