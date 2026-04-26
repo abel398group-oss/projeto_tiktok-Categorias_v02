@@ -5,7 +5,8 @@
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
- * Dados de entrega na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; o resto (técnico, debug, caça) em `output/extra/`.
+ * Dados de entrega: por defeito na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; resto (debug, caça) em `output/extra/`.
+ * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -31,13 +32,43 @@ puppeteer.use(StealthPlugin());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.join(__dirname, "..");
-const OUT_DIR = path.join(ROOT, "output");
-/** Dados de produto e agregado de lojas na raiz de `output/`; técnica, debug, caça, etc. em `output/extra/`. */
-const OUT_AUX = path.join(OUT_DIR, "extra");
-const DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
-const DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
-const DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
-const MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
+
+let OUT_DIR;
+let OUT_AUX;
+let DADOS_OUT;
+let DADOS_LOJAS_OUT;
+let DEBUG_SELLER_SOURCES;
+let MODERN_ROUTER_PEEK;
+let CACA_DADOS_JSONL;
+let CACA_XHR_FILE;
+
+/**
+ * Resolução de pastas de escrita. Chamada no início de `main` (lê `OUTPUT_DIR` no processo do CLI).
+ * @see process.env.OUTPUT_DIR
+ */
+function initOutputPaths() {
+  const raw = process.env.OUTPUT_DIR != null && String(process.env.OUTPUT_DIR).trim() !== ""
+    ? String(process.env.OUTPUT_DIR).trim()
+    : "output";
+  const base = path.isAbsolute(raw) ? path.normalize(raw) : path.join(ROOT, raw.replace(/\\/g, "/"));
+  OUT_DIR = base;
+  OUT_AUX = path.join(OUT_DIR, "extra");
+  DADOS_OUT = path.join(OUT_DIR, "dados_produtos.json");
+  DADOS_LOJAS_OUT = path.join(OUT_DIR, "dados_lojas.json");
+  DEBUG_SELLER_SOURCES = path.join(OUT_AUX, "debug_seller_sources.json");
+  MODERN_ROUTER_PEEK = path.join(OUT_AUX, "modern_router_peek.json");
+  CACA_DADOS_JSONL = path.join(OUT_AUX, "caca_dados.jsonl");
+  CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
+}
+
+/**
+ * Recria `OUT_DIR` e `OUT_DIR/extra` antes de escrever em `extra/`
+ * (caminho aninhado `output/categorias/...`; pasta pode desaparecer a meio da execução).
+ */
+async function ensureOutAuxDir() {
+  await fs.mkdir(OUT_DIR, { recursive: true });
+  await fs.mkdir(OUT_AUX, { recursive: true });
+}
 
 /** Só ativo durante `main` — `output/extra/debug_seller_sources.json` (máx. 20) */
 let recordSellerDebug = false;
@@ -59,8 +90,6 @@ const netLogVerbose = process.env.NET_LOG === "verbose" || process.env.NET_LOG =
 const huntLog =
   process.env.HUNT_LOG !== "0" &&
   (process.argv.includes("--hunt") || process.env.HUNT_LOG === "1" || process.argv.includes("--debug"));
-const CACA_DADOS_JSONL = path.join(OUT_AUX, "caca_dados.jsonl");
-const CACA_XHR_FILE = path.join(OUT_AUX, "caca_xhr_fetch_urls.txt");
 /** Se o corpo JSON tiver tamanho acima do limite, regista as primeiras chaves (ajuda a achar o feed) */
 const HUNT_BIG_JSON = Math.max(2000, Number(process.env.HUNT_MIN_BYTES) || 3000);
 /** No console, só pistas com score a partir do indicado (reduz barulho) */
@@ -177,9 +206,9 @@ function collectOecItemListOrProductInfo(data) {
 
 /**
  * Export p/ `dados_produtos.json` (`itens[]`).
- * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original,
- *   preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent (opcionais, experimentais),
- *   vendas, fotos, fotos_pdp, bloco de avaliação do item.
+ * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original (só com desconto
+ *   confiável), `tem_desconto`, preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent
+ *   (opcionais; estimados preenchidos com desconto confiável), vendas, fotos, fotos_pdp, bloco de avaliação.
  * - Campos de loja (cópia no item; desnormalizados; chave = `seller_id`):
  *   `seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`.
  * Não remove campos; contrato de ficheiro estável — ver `docs/ARCHITECTURE.md`.
@@ -206,6 +235,7 @@ function toDadosProdutoClean(n, categoriaUrl) {
     avaliacoes_total: n.review_count_total ?? null,
     votos_por_estrela: n.review_star_votes ?? null,
     preco_original: n.original_price,
+    tem_desconto: Boolean(n.tem_desconto),
     preco_estimado_vitrine: n.preco_estimado_vitrine ?? null,
     preco_gap_estimado: n.preco_gap_estimado ?? null,
     preco_gap_estimado_percent: n.preco_gap_estimado_percent ?? null,
@@ -1294,8 +1324,13 @@ function applyPdpDomPrices(n, pdp) {
   n.price = sale;
   if (listPrice != null && typeof listPrice === "number" && !Number.isNaN(listPrice) && listPrice > sale + 0.0001) {
     n.original_price = listPrice;
+    n.tem_desconto = true;
   } else {
     n.original_price = null;
+    n.tem_desconto = false;
+    n.preco_estimado_vitrine = null;
+    n.preco_gap_estimado = null;
+    n.preco_gap_estimado_percent = null;
   }
   return n;
 }
@@ -1874,6 +1909,43 @@ function productRowRichness(n) {
 }
 
 /**
+ * No merge, preserva o maior `sales_count` visto (várias respostas / XHR).
+ * Não afeta preço, loja, nem `normalizeItem`.
+ */
+function coalesceMaxSalesCount(a, b) {
+  const valid = (x) => typeof x === "number" && !Number.isNaN(x);
+  const va = valid(a);
+  const vb = valid(b);
+  if (!va && !vb) {
+    return null;
+  }
+  if (!va) {
+    return b;
+  }
+  if (!vb) {
+    return a;
+  }
+  return Math.max(a, b);
+}
+
+/**
+ * Vencedor do merge conserva o seu `sales_display` se tiver texto; senão, o do outro.
+ */
+function coalesceSalesDisplayFromMerge(winner, other) {
+  const trimmed = (v) =>
+    v != null && String(v).trim() !== "" ? String(v) : null;
+  const w = trimmed(winner?.sales_display);
+  if (w) {
+    return winner.sales_display;
+  }
+  const o = trimmed(other?.sales_display);
+  if (o) {
+    return other.sales_display;
+  }
+  return winner?.sales_display ?? other?.sales_display ?? null;
+}
+
+/**
  * @param {Map<string, object>} byProductId chave = product_id
  * @param {ReturnType<normalizeItem>} n
  */
@@ -1887,10 +1959,21 @@ function mergeProductById(byProductId, n) {
     byProductId.set(key, { ...n, ...lojaBlock });
     return;
   }
+  const salesMax = coalesceMaxSalesCount(prev.sales_count, n.sales_count);
   if (productRowRichness(n) > productRowRichness(prev)) {
-    byProductId.set(key, { ...n, ...lojaBlock, ...rateBlock });
+    const base = { ...n, ...lojaBlock, ...rateBlock };
+    byProductId.set(key, {
+      ...base,
+      sales_count: salesMax,
+      sales_display: coalesceSalesDisplayFromMerge(n, prev)
+    });
   } else {
-    byProductId.set(key, { ...prev, ...lojaBlock, ...rateBlock });
+    const base = { ...prev, ...lojaBlock, ...rateBlock };
+    byProductId.set(key, {
+      ...base,
+      sales_count: salesMax,
+      sales_display: coalesceSalesDisplayFromMerge(prev, n)
+    });
   }
 }
 
@@ -2052,8 +2135,20 @@ function normalizeItem(rawIn, categoriaUrl = "") {
   const lojaBlob = normalizeSellerInfo(raw) || { ...LOJA_FIELD_DEFAULTS };
   tryRecordSellerDebugSource(raw);
 
-  const { preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent } =
-    computePrecoEstimadoVitrineFields(price, originalPrice, ppi);
+  const dDisc = parseDiscountPercentFromPpi(ppi);
+  const temDesconto =
+    dDisc != null &&
+    dDisc >= 1 &&
+    dDisc <= 94 &&
+    originalPrice != null &&
+    typeof originalPrice === "number" &&
+    !Number.isNaN(originalPrice) &&
+    originalPrice > price;
+
+  const { preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent } = temDesconto
+    ? computePrecoEstimadoVitrineFields(price, originalPrice, ppi)
+    : { preco_estimado_vitrine: null, preco_gap_estimado: null, preco_gap_estimado_percent: null };
+  const outOriginal = temDesconto ? originalPrice : null;
 
   return {
     sku,
@@ -2061,7 +2156,8 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     product_url,
     title,
     price,
-    original_price: originalPrice,
+    original_price: outOriginal,
+    tem_desconto: temDesconto,
     currency,
     preco_estimado_vitrine,
     preco_gap_estimado,
@@ -2295,11 +2391,11 @@ function buildLojasMapBySeller(byProductId) {
 }
 
 async function main() {
+  initOutputPaths();
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  await fs.mkdir(OUT_AUX, { recursive: true });
+  await ensureOutAuxDir();
   const outFile = path.join(OUT_AUX, "teste_categoria.json");
   const debugFile = path.join(OUT_AUX, "debug_responses.log");
   const fresh = process.env.FRESH_SESSION === "1";
@@ -2364,6 +2460,7 @@ async function main() {
 
   const netLogFile = path.join(OUT_AUX, "rede_ultima_execucao.log");
   if (netLog) {
+    await ensureOutAuxDir();
     await fs.writeFile(netLogFile, `inicio ${new Date().toISOString()}\n${"=".repeat(80)}\n`, "utf8");
     // eslint-disable-next-line no-console
     console.log(
@@ -2373,6 +2470,7 @@ async function main() {
 
   const huntXhrSeen = new Set();
   if (huntLog) {
+    await ensureOutAuxDir();
     const head =
       JSON.stringify({
         t: new Date().toISOString(),
@@ -2460,6 +2558,7 @@ async function main() {
   let discoverCount = 0;
 
   if (isDiscover) {
+    await ensureOutAuxDir();
     await fs.writeFile(discoverPath, "", "utf8");
     // eslint-disable-next-line no-console
     console.log(
@@ -2758,6 +2857,7 @@ async function main() {
         ) {
           const dir = path.join(OUT_AUX, "debug_snapshots");
           try {
+            await ensureOutAuxDir();
             await fs.mkdir(dir, { recursive: true });
             const file = path.join(dir, `snap_${jsonSnapshotN++}.json`);
             const s = JSON.stringify({ url, body: data }, null, 2);
@@ -2813,6 +2913,7 @@ async function main() {
       note = isHeaded
         ? `Ainda fora de shop.tiktok.com após ${Math.round(loginWaitMaxMs / 60_000)} min. Aumente LOGIN_WAIT_MAX_MS ou conclua o login a tempo. Perfil: CHROME_USER_DATA=...`
         : "A sessão caiu fora de shop.tiktok.com. Use HEADED=1, faça o login; na próxima execução o login deve persistir no perfil .chrome-tiktok-profile. Outro local: CHROME_USER_DATA=caminho.";
+      await ensureOutAuxDir();
       await fs.writeFile(
         MODERN_ROUTER_PEEK,
         JSON.stringify(
@@ -2845,6 +2946,7 @@ async function main() {
       }
       const routerPeekLen = Math.min(120_000, Math.max(0, Number(process.env.ROUTER_PEEK_LEN) || 8_000));
       if (!modernRouter) {
+        await ensureOutAuxDir();
         await fs.writeFile(
           MODERN_ROUTER_PEEK,
           JSON.stringify(
@@ -2873,6 +2975,7 @@ async function main() {
         }, sample || undefined);
         peekBody.categoria_url = startUrl;
         peekBody.final_url = finalUrl;
+        await ensureOutAuxDir();
         await fs.writeFile(MODERN_ROUTER_PEEK, JSON.stringify(peekBody, null, 2), "utf8");
         // eslint-disable-next-line no-console
         console.log(
@@ -2928,6 +3031,7 @@ async function main() {
     products
   };
 
+  await ensureOutAuxDir();
   await fs.writeFile(outFile, JSON.stringify(payload, null, 2), "utf8");
 
   const itensDados = [...byProductId.values()]
@@ -2963,6 +3067,7 @@ async function main() {
     ),
     "utf8"
   );
+  await ensureOutAuxDir();
   await fs.writeFile(
     DEBUG_SELLER_SOURCES,
     JSON.stringify(
@@ -2980,6 +3085,7 @@ async function main() {
   recordSellerDebug = false;
 
   if (debug) {
+    await ensureOutAuxDir();
     const head = `final_url=${finalUrl}\njson_peeks≈${jsonPeeksTried}\n`;
     const body = debugLines.length
       ? debugLines.join("\n")

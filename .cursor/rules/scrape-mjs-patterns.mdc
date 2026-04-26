@@ -6,10 +6,39 @@ alwaysApply: false
 
 # scrapeCategory.mjs
 
+## Módulo de preço v1 (protegido — abril 2026)
+
+**Não** alterar **sem autorização explícita** (issue/tarefa no ROADMAP) e **`npm test` a verde** após qualquer toque:
+
+- **`normalizeItem`** (ramos e campos de preço / desconto / PPi).
+- **`parseDiscountPercentFromPpi`**
+- **`ppiHasDiscountSignal`**
+- **`computePrecoEstimadoVitrineFields`**
+- Lógica de **`tem_desconto`** e coerência com `preco` / `preco_original` / estimados.
+- **`toDadosProdutoClean`** nos **campos de preço** exportados.
+- **`mergeProductById`** (e **`productRowRichness`**) **na parte que afeta preço** / linha “vencedora” para preço.
+
+**Sempre** correr **`npm test`** se qualquer função acima ou campo de preço na saída for alterado. Contrato e validação: `docs/ARCHITECTURE.md` (contrato de preço), `docs/ROADMAP.md`, `docs/CHECKLIST-VALIDACAO-OUTPUT.md`.
+
+## Módulo de vendas v1 (protegido — abril 2026)
+
+**Não** alterar **sem autorização explícita** (issue/tarefa no ROADMAP) e **`npm test` a verde** após qualquer toque:
+
+- Extração de vendas / `sales_count` / `sales_display` em **`normalizeItem`** (cadeia `sold_info` / `parseSalesText` / números alternativos).
+- **`parseSalesText`**
+- **`coalesceMaxSalesCount`**
+- **`coalesceSalesDisplayFromMerge`**
+- **`mergeProductById`** **na parte que afeta vendas** (máximo de `sales_count`, coalescência de `sales_display`; a escolha da “linha rica” para **preço/imagem** permanece, mas o máximo de vendas foi contratualizado v1).
+- **`toDadosProdutoClean`** nos campos **`vendas`** e **`vendas_texto`**.
+
+**Sempre** correr **`npm test`** se lógica de vendas, merge de vendas ou estes identificadores forem alterados. Contrato: `docs/ARCHITECTURE.md` (contrato de vendas), `docs/ROADMAP.md`, `docs/CHECKLIST-VALIDACAO-OUTPUT.md`.
+
+---
+
 - Novos campos de produto: preferir reutilizar **`normalizeItem`** e **`toDadosProdutoClean`**, a não ser que a API exija caminho totalmente distinto.  
 - URLs: **`pickProductPdpUrl`** — preferir `seo_url.canonical_url`; região do fallback a partir de `CATEGORY_URL` / `pathRegionFromCategoryUrl`.  
-- Mapeamento: **`Map` por `product_id`** com **`mergeProductById`** (linha “mais rica”); nós de review têm `review_id` e são ignorados em **`normalizeItem`**. Não reintroduzir dedupe por `sku` sozinho.  
-- **Regressão:** após alterar preço, merge ou filtro de review, correr **`npm test`**. Contratos vivem em **`test/scrape-regression.test.mjs`**; exportações de teste no fim de `scrapeCategory.mjs` não remover sem atualizar testes.  
+- Mapeamento: **`Map` por `product_id`** com **`mergeProductById`** (linha “mais rica” para o **resto** dos dados; **vendas = máximo** entre colisões v1). Nós de review têm `review_id` e são ignorados em **`normalizeItem`**. Não reintroduzir dedupe por `sku` sozinho.  
+- **Regressão:** após alterar preço, **vendas**, merge (preço **ou** vendas) ou filtro de review, correr **`npm test`**. Contratos vivem em **`test/scrape-regression.test.mjs`**; exportações de teste no fim de `scrapeCategory.mjs` não remover sem atualizar testes.  
 - **Desconto %:** não exportar (omitir chaves de desconto em `dados_produtos` e no objeto de `normalizeItem` / `teste_categoria`); manter lógica de preço, loja, dedupe.  
 - **Fotos + preços PDP (opcional):** `PDP_GALLERY=1` e opcional `PDP_GALLERY_MAX` (padrão 25) — abre `product_url`, grava `images_pdp` / `fotos_pdp` e, no DOM, **vitrine** (`Headline-Semibold` 36px + cêntimos) → `price`; **riscado** na mesma zona → `original_price`, ou `null` se não houver. A grelha preenche `images` / `fotos` antes.  
 - **Avaliações (produto):** `rate_info` → `review_avg` / `review_count_total` / `review_star_votes` em `normalizeItem`; `toDadosProdutoClean` → `avaliacao_media` / `avaliacoes_total` / `votos_por_estrela`. No **`mergeProductById`**, as avaliações de ambas as linhas são fundidas (preenche o que faltar) sem mudar a regra de “linha mais rica” do preço.  

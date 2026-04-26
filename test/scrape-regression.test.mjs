@@ -191,7 +191,8 @@ describe("normalizeItem — preço (grelha, sem desconto % na saída)", () => {
       brUrl
     );
     assert.equal(n?.price, 39.99);
-    assert.equal(n?.original_price, 39.99);
+    assert.equal(n?.original_price, null);
+    assert.equal(n?.tem_desconto, false);
   });
 
   test("badge e price no piso (min) — aplica o valor do % em relacao ao de", () => {
@@ -419,7 +420,12 @@ describe("reviews e dedupe", () => {
     const ricoPreco = normalizeItem(
       minimalProduct({
         product_id: "rmerge-1",
-        product_price_info: { origin_price: 100, price: 50, currency: "BRL" }
+        product_price_info: {
+          origin_price: 100,
+          price: 50,
+          discount_format: "50%",
+          currency: "BRL"
+        }
       }),
       brUrl
     );
@@ -429,12 +435,13 @@ describe("reviews e dedupe", () => {
     const r = m.get("rmerge-1");
     assert.equal(r?.price, 50);
     assert.equal(r?.original_price, 100);
+    assert.equal(r?.tem_desconto, true);
     assert.equal(r?.review_avg, 4.2);
     assert.equal(r?.review_count_total, 99);
     assert.equal(r?.review_star_votes?.[5], 10);
   });
 
-  test("productRowRichness: linha com preço+original > só preço mínimo", () => {
+  test("productRowRichness: preço de venda maior pesa (sem depender de original exportado)", () => {
     const a = normalizeItem(
       minimalProduct({ product_id: "p", product_price_info: { price: 1, currency: "BRL" } }),
       brUrl
@@ -442,7 +449,8 @@ describe("reviews e dedupe", () => {
     const b = normalizeItem(
       minimalProduct({
         product_id: "p",
-        product_price_info: { origin_price: 10, price: 5, currency: "BRL" }
+        product_price_info: { price: 20, currency: "BRL" },
+        sold_info: { sold_count: 3 }
       }),
       brUrl
     );
@@ -469,6 +477,8 @@ describe("preco_estimado_vitrine (experimental, aditivo)", () => {
     );
     assert.ok(n);
     assert.equal(n.price, 35.19);
+    assert.equal(n.tem_desconto, true);
+    assert.equal(n.original_price, 89.9);
     assert.ok(Math.abs(n.preco_estimado_vitrine - 39.56) < 0.01);
     assert.ok(Math.abs(n.preco_gap_estimado - 4.37) < 0.01);
     assert.equal(n.preco_gap_estimado_percent, 0.0486);
@@ -482,6 +492,9 @@ describe("preco_estimado_vitrine (experimental, aditivo)", () => {
       }),
       brUrl
     );
+    assert.equal(n?.price, 50);
+    assert.equal(n?.original_price, null);
+    assert.equal(n?.tem_desconto, false);
     assert.equal(n?.preco_estimado_vitrine, null);
     assert.equal(n?.preco_gap_estimado, null);
     assert.equal(n?.preco_gap_estimado_percent, null);
@@ -502,7 +515,8 @@ describe("preco_estimado_vitrine (experimental, aditivo)", () => {
       brUrl
     );
     assert.equal(n?.price, 50);
-    assert.equal(n?.original_price, 50);
+    assert.equal(n?.original_price, null);
+    assert.equal(n?.tem_desconto, false);
     assert.equal(n?.preco_estimado_vitrine, null);
   });
 
@@ -538,6 +552,76 @@ describe("preco_estimado_vitrine (experimental, aditivo)", () => {
     );
     assert.ok(n);
     assert.ok(!("discount_percent" in n));
+    assert.equal(n.tem_desconto, true);
+  });
+});
+
+describe("tem_desconto: saída sem desconto / com desconto confiável", () => {
+  test("sem discount_format: preço mantém, original e estimados null, tem_desconto false", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "no-disc-1",
+        product_price_info: { price: 29.9, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 29.9);
+    assert.equal(n?.original_price, null);
+    assert.equal(n?.preco_estimado_vitrine, null);
+    assert.equal(n?.preco_gap_estimado, null);
+    assert.equal(n?.preco_gap_estimado_percent, null);
+    assert.equal(n?.tem_desconto, false);
+  });
+
+  test("com origin no feed sem % confiável: preço mantém, original e estimados null", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "no-disc-2",
+        product_price_info: { origin_price: 39.9, price: 29.9, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 29.9);
+    assert.equal(n?.original_price, null);
+    assert.equal(n?.preco_estimado_vitrine, null);
+    assert.equal(n?.tem_desconto, false);
+  });
+
+  test("com desconto confiável: tem_desconto true, original e estimado como hoje", () => {
+    const n = normalizeItem(
+      minimalProduct({
+        product_id: "disc-1",
+        product_price_info: {
+          origin_price: 69.0,
+          price: 39.99,
+          discount_format: "42%",
+          currency: "BRL"
+        }
+      }),
+      brUrl
+    );
+    assert.equal(n?.price, 39.99);
+    assert.equal(n?.tem_desconto, true);
+    assert.equal(n?.original_price, 69.0);
+    const exp = Math.round(69.0 * (1 - 42 / 100) * 100) / 100;
+    assert.ok(n?.preco_estimado_vitrine != null);
+    assert.ok(Math.abs(n.preco_estimado_vitrine - exp) < 0.02);
+  });
+
+  test("garante preço inalterado nos cenários sem desconto (regressão)", () => {
+    const a = normalizeItem(
+      minimalProduct({ product_id: "x1", product_price_info: { price: 29.9, currency: "BRL" } }),
+      brUrl
+    );
+    const b = normalizeItem(
+      minimalProduct({
+        product_id: "x2",
+        product_price_info: { origin_price: 39.9, price: 29.9, currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.equal(a?.price, 29.9);
+    assert.equal(b?.price, 29.9);
   });
 });
 
@@ -638,5 +722,131 @@ describe("normalizeSellerInfo / loja", () => {
     const r = m.get("merge-loja-1");
     assert.equal(r?.price, 10);
     assert.equal(r?.nome_loja, "LojaA");
+  });
+});
+
+describe("mergeProductById — vendas (max sales_count / sales_display)", () => {
+  test("mantém o maior sales_count (linha rica 4, outra 341)", () => {
+    const m = new Map();
+    const lo = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-max",
+        product_price_info: { price: 10, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    const hi = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-max",
+        product_price_info: {
+          price: 50,
+          origin_price: 100,
+          discount_format: "50%",
+          currency: "BRL"
+        },
+        sold_info: { sold_count: 4 }
+      }),
+      brUrl
+    );
+    assert.ok(lo && hi);
+    const hiRich = { ...hi, images: new Array(5).fill("https://p16-oec-sg.example/img.webp") };
+    assert.ok(productRowRichness(hiRich) > productRowRichness(lo));
+    mergeProductById(m, lo);
+    mergeProductById(m, hiRich);
+    const r = m.get("m-sales-max");
+    assert.equal(r?.sales_count, 341);
+    assert.equal(r?.price, 50);
+  });
+
+  test("não apaga sales_count quando o vencedor tem null e o outro tem número", () => {
+    const m = new Map();
+    const withSales = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-null",
+        product_price_info: { price: 1, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    const nBase = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-null",
+        product_price_info: { price: 200, origin_price: 400, discount_format: "50%", currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(withSales && nBase);
+    const winner = {
+      ...nBase,
+      sales_count: null,
+      sales_display: null,
+      images: new Array(6).fill("https://p16.example/w.webp")
+    };
+    assert.ok(productRowRichness(winner) > productRowRichness(withSales));
+    mergeProductById(m, withSales);
+    mergeProductById(m, winner);
+    const r = m.get("m-sales-null");
+    assert.equal(r?.sales_count, 341);
+    assert.equal(r?.price, 200);
+  });
+
+  test("preserva sales_display de uma fonte se o vencedor tiver vazio", () => {
+    const m = new Map();
+    const comTexto = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-disp",
+        product_price_info: { price: 1, currency: "BRL" }
+      }),
+      brUrl
+    );
+    const semTexto = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-disp",
+        product_price_info: { price: 200, origin_price: 300, discount_format: "20%", currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(comTexto && semTexto);
+    const a = { ...comTexto, sales_count: 1, sales_display: "341 vendidos" };
+    const b = {
+      ...semTexto,
+      sales_count: 1,
+      sales_display: null,
+      images: new Array(5).fill("https://p16.example/d.webp")
+    };
+    assert.ok(productRowRichness(b) > productRowRichness(a));
+    mergeProductById(m, a);
+    mergeProductById(m, b);
+    const r = m.get("m-sales-disp");
+    assert.equal(r?.sales_display, "341 vendidos");
+  });
+
+  test("preço do vencedor inalterado; sales_count = max(4, 341)", () => {
+    const m = new Map();
+    const h = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-price",
+        product_price_info: { price: 39.99, currency: "BRL" },
+        sold_info: { sold_count: 4 }
+      }),
+      brUrl
+    );
+    const l = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-price",
+        product_price_info: { price: 35.19, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    assert.ok(h && l);
+    const high = { ...h, images: new Array(4).fill("https://p16.example/a.webp") };
+    assert.ok(productRowRichness(high) > productRowRichness(l));
+    mergeProductById(m, high);
+    mergeProductById(m, l);
+    const r = m.get("m-sales-price");
+    assert.equal(r?.price, 39.99);
+    assert.equal(r?.sales_count, 341);
   });
 });
