@@ -724,3 +724,129 @@ describe("normalizeSellerInfo / loja", () => {
     assert.equal(r?.nome_loja, "LojaA");
   });
 });
+
+describe("mergeProductById — vendas (max sales_count / sales_display)", () => {
+  test("mantém o maior sales_count (linha rica 4, outra 341)", () => {
+    const m = new Map();
+    const lo = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-max",
+        product_price_info: { price: 10, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    const hi = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-max",
+        product_price_info: {
+          price: 50,
+          origin_price: 100,
+          discount_format: "50%",
+          currency: "BRL"
+        },
+        sold_info: { sold_count: 4 }
+      }),
+      brUrl
+    );
+    assert.ok(lo && hi);
+    const hiRich = { ...hi, images: new Array(5).fill("https://p16-oec-sg.example/img.webp") };
+    assert.ok(productRowRichness(hiRich) > productRowRichness(lo));
+    mergeProductById(m, lo);
+    mergeProductById(m, hiRich);
+    const r = m.get("m-sales-max");
+    assert.equal(r?.sales_count, 341);
+    assert.equal(r?.price, 50);
+  });
+
+  test("não apaga sales_count quando o vencedor tem null e o outro tem número", () => {
+    const m = new Map();
+    const withSales = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-null",
+        product_price_info: { price: 1, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    const nBase = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-null",
+        product_price_info: { price: 200, origin_price: 400, discount_format: "50%", currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(withSales && nBase);
+    const winner = {
+      ...nBase,
+      sales_count: null,
+      sales_display: null,
+      images: new Array(6).fill("https://p16.example/w.webp")
+    };
+    assert.ok(productRowRichness(winner) > productRowRichness(withSales));
+    mergeProductById(m, withSales);
+    mergeProductById(m, winner);
+    const r = m.get("m-sales-null");
+    assert.equal(r?.sales_count, 341);
+    assert.equal(r?.price, 200);
+  });
+
+  test("preserva sales_display de uma fonte se o vencedor tiver vazio", () => {
+    const m = new Map();
+    const comTexto = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-disp",
+        product_price_info: { price: 1, currency: "BRL" }
+      }),
+      brUrl
+    );
+    const semTexto = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-disp",
+        product_price_info: { price: 200, origin_price: 300, discount_format: "20%", currency: "BRL" }
+      }),
+      brUrl
+    );
+    assert.ok(comTexto && semTexto);
+    const a = { ...comTexto, sales_count: 1, sales_display: "341 vendidos" };
+    const b = {
+      ...semTexto,
+      sales_count: 1,
+      sales_display: null,
+      images: new Array(5).fill("https://p16.example/d.webp")
+    };
+    assert.ok(productRowRichness(b) > productRowRichness(a));
+    mergeProductById(m, a);
+    mergeProductById(m, b);
+    const r = m.get("m-sales-disp");
+    assert.equal(r?.sales_display, "341 vendidos");
+  });
+
+  test("preço do vencedor inalterado; sales_count = max(4, 341)", () => {
+    const m = new Map();
+    const h = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-price",
+        product_price_info: { price: 39.99, currency: "BRL" },
+        sold_info: { sold_count: 4 }
+      }),
+      brUrl
+    );
+    const l = normalizeItem(
+      minimalProduct({
+        product_id: "m-sales-price",
+        product_price_info: { price: 35.19, currency: "BRL" },
+        sold_info: { sold_count: 341 }
+      }),
+      brUrl
+    );
+    assert.ok(h && l);
+    const high = { ...h, images: new Array(4).fill("https://p16.example/a.webp") };
+    assert.ok(productRowRichness(high) > productRowRichness(l));
+    mergeProductById(m, high);
+    mergeProductById(m, l);
+    const r = m.get("m-sales-price");
+    assert.equal(r?.price, 39.99);
+    assert.equal(r?.sales_count, 341);
+  });
+});

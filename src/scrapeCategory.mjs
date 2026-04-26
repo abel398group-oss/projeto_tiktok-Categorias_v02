@@ -1909,6 +1909,43 @@ function productRowRichness(n) {
 }
 
 /**
+ * No merge, preserva o maior `sales_count` visto (várias respostas / XHR).
+ * Não afeta preço, loja, nem `normalizeItem`.
+ */
+function coalesceMaxSalesCount(a, b) {
+  const valid = (x) => typeof x === "number" && !Number.isNaN(x);
+  const va = valid(a);
+  const vb = valid(b);
+  if (!va && !vb) {
+    return null;
+  }
+  if (!va) {
+    return b;
+  }
+  if (!vb) {
+    return a;
+  }
+  return Math.max(a, b);
+}
+
+/**
+ * Vencedor do merge conserva o seu `sales_display` se tiver texto; senão, o do outro.
+ */
+function coalesceSalesDisplayFromMerge(winner, other) {
+  const trimmed = (v) =>
+    v != null && String(v).trim() !== "" ? String(v) : null;
+  const w = trimmed(winner?.sales_display);
+  if (w) {
+    return winner.sales_display;
+  }
+  const o = trimmed(other?.sales_display);
+  if (o) {
+    return other.sales_display;
+  }
+  return winner?.sales_display ?? other?.sales_display ?? null;
+}
+
+/**
  * @param {Map<string, object>} byProductId chave = product_id
  * @param {ReturnType<normalizeItem>} n
  */
@@ -1922,10 +1959,21 @@ function mergeProductById(byProductId, n) {
     byProductId.set(key, { ...n, ...lojaBlock });
     return;
   }
+  const salesMax = coalesceMaxSalesCount(prev.sales_count, n.sales_count);
   if (productRowRichness(n) > productRowRichness(prev)) {
-    byProductId.set(key, { ...n, ...lojaBlock, ...rateBlock });
+    const base = { ...n, ...lojaBlock, ...rateBlock };
+    byProductId.set(key, {
+      ...base,
+      sales_count: salesMax,
+      sales_display: coalesceSalesDisplayFromMerge(n, prev)
+    });
   } else {
-    byProductId.set(key, { ...prev, ...lojaBlock, ...rateBlock });
+    const base = { ...prev, ...lojaBlock, ...rateBlock };
+    byProductId.set(key, {
+      ...base,
+      sales_count: salesMax,
+      sales_display: coalesceSalesDisplayFromMerge(prev, n)
+    });
   }
 }
 
