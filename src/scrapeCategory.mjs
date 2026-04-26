@@ -177,9 +177,9 @@ function collectOecItemListOrProductInfo(data) {
 
 /**
  * Export p/ `dados_produtos.json` (`itens[]`).
- * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original,
- *   preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent (opcionais, experimentais),
- *   vendas, fotos, fotos_pdp, bloco de avaliação do item.
+ * - Campos de produto: categoria, link, product_id, nome, preco/moeda, preco_original (só com desconto
+ *   confiável), `tem_desconto`, preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent
+ *   (opcionais; estimados preenchidos com desconto confiável), vendas, fotos, fotos_pdp, bloco de avaliação.
  * - Campos de loja (cópia no item; desnormalizados; chave = `seller_id`):
  *   `seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`.
  * Não remove campos; contrato de ficheiro estável — ver `docs/ARCHITECTURE.md`.
@@ -206,6 +206,7 @@ function toDadosProdutoClean(n, categoriaUrl) {
     avaliacoes_total: n.review_count_total ?? null,
     votos_por_estrela: n.review_star_votes ?? null,
     preco_original: n.original_price,
+    tem_desconto: Boolean(n.tem_desconto),
     preco_estimado_vitrine: n.preco_estimado_vitrine ?? null,
     preco_gap_estimado: n.preco_gap_estimado ?? null,
     preco_gap_estimado_percent: n.preco_gap_estimado_percent ?? null,
@@ -1294,8 +1295,13 @@ function applyPdpDomPrices(n, pdp) {
   n.price = sale;
   if (listPrice != null && typeof listPrice === "number" && !Number.isNaN(listPrice) && listPrice > sale + 0.0001) {
     n.original_price = listPrice;
+    n.tem_desconto = true;
   } else {
     n.original_price = null;
+    n.tem_desconto = false;
+    n.preco_estimado_vitrine = null;
+    n.preco_gap_estimado = null;
+    n.preco_gap_estimado_percent = null;
   }
   return n;
 }
@@ -2052,8 +2058,20 @@ function normalizeItem(rawIn, categoriaUrl = "") {
   const lojaBlob = normalizeSellerInfo(raw) || { ...LOJA_FIELD_DEFAULTS };
   tryRecordSellerDebugSource(raw);
 
-  const { preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent } =
-    computePrecoEstimadoVitrineFields(price, originalPrice, ppi);
+  const dDisc = parseDiscountPercentFromPpi(ppi);
+  const temDesconto =
+    dDisc != null &&
+    dDisc >= 1 &&
+    dDisc <= 94 &&
+    originalPrice != null &&
+    typeof originalPrice === "number" &&
+    !Number.isNaN(originalPrice) &&
+    originalPrice > price;
+
+  const { preco_estimado_vitrine, preco_gap_estimado, preco_gap_estimado_percent } = temDesconto
+    ? computePrecoEstimadoVitrineFields(price, originalPrice, ppi)
+    : { preco_estimado_vitrine: null, preco_gap_estimado: null, preco_gap_estimado_percent: null };
+  const outOriginal = temDesconto ? originalPrice : null;
 
   return {
     sku,
@@ -2061,7 +2079,8 @@ function normalizeItem(rawIn, categoriaUrl = "") {
     product_url,
     title,
     price,
-    original_price: originalPrice,
+    original_price: outOriginal,
+    tem_desconto: temDesconto,
     currency,
     preco_estimado_vitrine,
     preco_gap_estimado,
