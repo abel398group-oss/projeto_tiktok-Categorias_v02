@@ -29,11 +29,13 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 - [x] **CI simples (GitHub Actions):** em cada push e pull request corre `npm test` (ver `.github/workflows/ci.yml` e `README.md`).
 - [x] Governança mínima do repositório (gitignore, CHANGELOG, ADR, engines, README)
+- [x] **JSON Schema** dos outputs (`schemas/dados_produtos.schema.json`, `schemas/dados_lojas.schema.json`)
+- [x] **Script local** de validação de schema (`npm run validate:schemas` → `scripts/validate-output-schema.mjs`)
 
 **Futuro (não implementar agora):**
 
 - [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.
-- [ ] **Validação de schema** JSON dos outputs (`dados_produtos` / `dados_lojas`) no CI ou pós-geração.
+- [ ] **Validação de schema no CI** com **fixture** versionada (ficheiros JSON de exemplo) — o CI continua **sem** depender de `output/` local.
 - [ ] **CI com lint / typecheck** se o projeto adoptar ferramentas (ESLint, TypeScript, etc.) noutro passo.
 
 ---

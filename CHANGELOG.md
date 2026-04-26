@@ -15,6 +15,7 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 - **Módulo de vendas v1:** `mergeProductById` passa a preservar o **máximo** de `sales_count` entre colisões e a coalescer `vendas_texto` / `sales_display` de forma a não apagar texto útil; testes *mergeProductById — vendas*.
 - **Regras Cursor** (`.cursor/rules/`) e documentação de contexto para desenvolvimento assistido.
 - **Governança do repositório:** `engines.node >= 20` em `package.json`, `.gitignore` alargado (outputs, debug, logs, env), `README` com requisitos e aviso de uso, **ADR** 0001 (modelo híbrido produto/loja) e 0002 (preço e vendas v1).
+- **JSON Schema** dos outputs (`schemas/dados_*.schema.json`, draft 2020-12) e script **`validate:schemas`** (AJV) para validar `output/dados_produtos.json` e `output/dados_lojas.json` localmente, sem alterar o formato dos ficheiros gerados.
 
 ### Changed
 

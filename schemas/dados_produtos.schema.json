@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/abel398group-oss/projeto_tiktok-Categorias_v02/schemas/dados_produtos.schema.json",
+  "title": "dados_produtos",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "coletado_em",
+    "categoria_url",
+    "final_url",
+    "status",
+    "total",
+    "filtro",
+    "itens"
+  ],
+  "properties": {
+    "coletado_em": { "type": "string" },
+    "categoria_url": { "type": "string" },
+    "final_url": { "type": "string" },
+    "status": { "type": "string" },
+    "total": { "type": "number" },
+    "filtro": { "type": "string" },
+    "itens": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/produtoItem" }
+    }
+  },
+  "$defs": {
+    "nullOrString": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+    "nullOrNumber": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
+    "nullOrBoolean": { "oneOf": [{ "type": "boolean" }, { "type": "null" }] },
+    "nullOrStringArray": {
+      "oneOf": [
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "null" }
+      ]
+    },
+    "nullOrObject": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "null" }] },
+    "produtoItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["product_id", "tem_desconto"],
+      "properties": {
+        "categoria_url": { "$ref": "#/$defs/nullOrString" },
+        "link_produto": { "$ref": "#/$defs/nullOrString" },
+        "product_id": { "type": "string" },
+        "nome": { "$ref": "#/$defs/nullOrString" },
+        "preco": { "$ref": "#/$defs/nullOrNumber" },
+        "moeda": { "$ref": "#/$defs/nullOrString" },
+        "preco_original": { "$ref": "#/$defs/nullOrNumber" },
+        "tem_desconto": { "type": "boolean" },
+        "preco_estimado_vitrine": { "$ref": "#/$defs/nullOrNumber" },
+        "preco_gap_estimado": { "$ref": "#/$defs/nullOrNumber" },
+        "preco_gap_estimado_percent": { "$ref": "#/$defs/nullOrNumber" },
+        "vendas": { "$ref": "#/$defs/nullOrNumber" },
+        "vendas_texto": { "$ref": "#/$defs/nullOrString" },
+        "avaliacao_media": { "$ref": "#/$defs/nullOrNumber" },
+        "avaliacoes_total": { "$ref": "#/$defs/nullOrNumber" },
+        "votos_por_estrela": { "$ref": "#/$defs/nullOrObject" },
+        "fotos": { "$ref": "#/$defs/nullOrStringArray" },
+        "fotos_pdp": { "$ref": "#/$defs/nullOrStringArray" },
+        "seller_id": { "$ref": "#/$defs/nullOrString" },
+        "global_seller_id": { "$ref": "#/$defs/nullOrString" },
+        "nome_loja": { "$ref": "#/$defs/nullOrString" },
+        "loja_vendas_total": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_produtos_ativos": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_reviews_total": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_seguidores": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_videos": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_enable_follow": { "$ref": "#/$defs/nullOrBoolean" },
+        "loja_logo_uri": { "$ref": "#/$defs/nullOrString" },
+        "loja_logo_urls": { "$ref": "#/$defs/nullOrStringArray" }
+      }
+    }
+  }
+}

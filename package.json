@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test test/scrape-regression.test.mjs",
+    "validate:schemas": "node scripts/validate-output-schema.mjs",
     "coleta": "node scripts/scrape-both.mjs && node scripts/consolidate-category-outputs.mjs",
     "coleta:uma": "node src/scrapeCategory.mjs",
     "coleta:uma:completa": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
@@ -27,11 +28,12 @@
     "scrape:categories:sample": "node scripts/scrape-both.mjs"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
     "cross-env": "^7.0.3"
   },
   "dependencies": {
+    "puppeteer": "^24.6.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "puppeteer": "^24.6.0"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }

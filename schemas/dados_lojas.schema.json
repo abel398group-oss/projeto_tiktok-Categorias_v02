@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/abel398group-oss/projeto_tiktok-Categorias_v02/schemas/dados_lojas.schema.json",
+  "title": "dados_lojas",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["coletado_em", "total", "lojas"],
+  "properties": {
+    "coletado_em": { "type": "string" },
+    "total": { "type": "number" },
+    "lojas": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/loja" }
+    }
+  },
+  "$defs": {
+    "nullOrString": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+    "nullOrNumber": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
+    "nullOrBoolean": { "oneOf": [{ "type": "boolean" }, { "type": "null" }] },
+    "nullOrStringArray": {
+      "oneOf": [
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "null" }
+      ]
+    },
+    "loja": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["seller_id"],
+      "properties": {
+        "seller_id": { "type": "string" },
+        "global_seller_id": { "$ref": "#/$defs/nullOrString" },
+        "nome_loja": { "$ref": "#/$defs/nullOrString" },
+        "loja_vendas_total": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_produtos_ativos": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_reviews_total": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_seguidores": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_videos": { "$ref": "#/$defs/nullOrNumber" },
+        "loja_enable_follow": { "$ref": "#/$defs/nullOrBoolean" },
+        "loja_logo_uri": { "$ref": "#/$defs/nullOrString" },
+        "loja_logo_urls": { "$ref": "#/$defs/nullOrStringArray" }
+      }
+    }
+  }
+}
