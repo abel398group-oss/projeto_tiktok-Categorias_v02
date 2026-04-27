@@ -30,6 +30,20 @@ npm run validate:schemas
 
 Correr **depois** de uma coleta que tenha gerado os dois ficheiros na raiz de `output/`, por exemplo após `npm run coleta` ou `npm run coleta:completa`.
 
+## Importar coleta para o Postgres (Prisma)
+
+Com `DATABASE_URL` válida no `.env` (ver `.env.example`), importa a **última** coleta de `output/dados_produtos.json` (e `dados_lojas.json` se existir) para a base:
+
+```bash
+npm run db:import:output
+```
+
+- **Product** e **Seller**: *upsert* por `product_id` / `seller_id` (identidade estável).
+- **ProductSnapshot** e **SellerSnapshot**: **sempre novas linhas** por importação (histórico por run); nada é sobrescrito no passado.
+- **RawPayload**: um registo `consolidated_output` com envelope JSON (auditoria / dados frios).
+
+Não altera o scraper nem recalcula preço ou vendas — apenas persiste o que está no JSON.
+
 ## Desenvolvimento
 
 ```bash
