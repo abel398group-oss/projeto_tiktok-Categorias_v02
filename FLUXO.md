@@ -9,9 +9,14 @@ O script **já corre tudo em sequência** no mesmo `node` (primeiro a categoria,
 | O quê | Comando |
 |--------|--------|
 | **Duas** categorias (rápido; só grelha) + `output/dados_*.json` consolidados | `npm run coleta` |
+| Idem, e **no fim** importa para o Postgres (precisa de `DATABASE_URL` no `.env`) | `npm run coleta:db` |
 | **Duas** categorias + galeria no PDP (`fotos_pdp`, mais lento) + consolidado | `npm run coleta:completa` |
+| Idem + **import** para o banco | `npm run coleta:completa:db` |
 | Igual à completa, com browser visível p/ login | `npm run coleta:completa:login` |
+| Idem com login + **import** para o banco | `npm run coleta:completa:login:db` |
 | Uma categoria só, com PDP (`OUTPUT_DIR` / `CATEGORY_URL` se precisar) | `npm run coleta:uma:completa` |
+| Uma categoria, só grelha (sem `PDP_GALLERY`) + **import** | `npm run coleta:uma:db` |
+| Uma categoria com PDP + **import** | `npm run coleta:uma:completa:db` |
 
 O script `scrape-both` propaga as variáveis de ambiente (incl. `PDP_GALLERY`) a cada corrida. Atalhos equivalentes: `scrape:category` / `scrape:category:pdp` (uma categoria).
 
@@ -42,6 +47,8 @@ npm run coleta:completa
 ```
 
 Uma categoria só com PDP: `npm run coleta:uma:completa` (ou `npm run scrape:category:pdp`).
+
+Os comandos `*:db` acrescentam **só o passo** `import-output-to-db` (Prisma) depois de existirem `output/dados_*.json`. Continuam a ser criados os mesmos ficheiros JSON; o banco fica alinhado à última consolidação. Se não quiseres importar, usa `coleta` / `coleta:completa` / … sem sufixo `:db`.
 
 Espera a execução acabar sozinha.
 
