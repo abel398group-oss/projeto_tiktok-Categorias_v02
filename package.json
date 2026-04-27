@@ -9,6 +9,9 @@
   "scripts": {
     "test": "node --test test/scrape-regression.test.mjs",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:format": "prisma format",
+    "prisma:studio": "prisma studio",
     "coleta": "node scripts/scrape-both.mjs && node scripts/consolidate-category-outputs.mjs",
     "coleta:uma": "node src/scrapeCategory.mjs",
     "coleta:uma:completa": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
@@ -29,9 +32,11 @@
   },
   "devDependencies": {
     "ajv": "^8.20.0",
-    "cross-env": "^7.0.3"
+    "cross-env": "^7.0.3",
+    "prisma": "5.22.0"
   },
   "dependencies": {
+    "@prisma/client": "5.22.0",
     "puppeteer": "^24.6.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"

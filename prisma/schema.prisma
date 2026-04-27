@@ -1,0 +1,159 @@
+// Base Postgres — desenho inicial; sem migrate aplicado ainda.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Execução de coleta (run).
+model ScrapeRun {
+  id                String   @id @default(cuid())
+  collectedAt       DateTime @map("collected_at")
+  sourcePlatform    String   @default("tiktok_shop") @map("source_platform")
+  status            String
+  categoryUrl       String?  @map("category_url")
+  finalUrl          String?  @map("final_url")
+  totalProducts     Int?     @map("total_products")
+  filterDescription String?  @map("filter_description")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  productSnapshots ProductSnapshot[]
+  sellerSnapshots  SellerSnapshot[]
+  rawPayloads      RawPayload[]
+
+  @@map("scrape_runs")
+}
+
+/// Identidade de loja (dados estáveis / quentes).
+model Seller {
+  id             String   @id @default(cuid())
+  sellerId       String   @unique @map("seller_id")
+  globalSellerId String?  @map("global_seller_id")
+  name           String?
+  logoUri        String?  @map("logo_uri")
+  logoUrls       Json?    @map("logo_urls")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  products       Product[]
+  snapshots      SellerSnapshot[]
+  rawPayloadRefs RawPayload[]
+
+  @@index([sellerId])
+  @@index([name])
+  @@map("sellers")
+}
+
+/// Identidade de produto (dados estáveis / quentes).
+model Product {
+  id             String  @id @default(cuid())
+  productId      String  @unique @map("product_id")
+  sourcePlatform String  @default("tiktok_shop") @map("source_platform")
+  name           String?
+  productUrl     String? @map("product_url")
+  categoryUrl    String? @map("category_url")
+  currency       String?
+
+  sellerRefId String? @map("seller_ref_id")
+  seller      Seller? @relation(fields: [sellerRefId], references: [id], onDelete: SetNull)
+
+  firstSeenAt DateTime? @map("first_seen_at")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  snapshots      ProductSnapshot[]
+  rawPayloadRefs RawPayload[]
+
+  @@index([productId])
+  @@index([sellerRefId])
+  @@index([categoryUrl])
+  @@index([name])
+  @@map("products")
+}
+
+/// Histórico de produto por coleta.
+model ProductSnapshot {
+  id         String   @id @default(cuid())
+  capturedAt DateTime @map("captured_at")
+
+  price                    Float?
+  originalPrice            Float?  @map("original_price")
+  hasDiscount              Boolean @default(false) @map("has_discount")
+  estimatedShowcasePrice   Float?  @map("estimated_showcase_price")
+  estimatedPriceGap        Float?  @map("estimated_price_gap")
+  estimatedPriceGapPercent Float?  @map("estimated_price_gap_percent")
+  salesCount               Int?    @map("sales_count")
+  salesText                String? @map("sales_text")
+  ratingAverage            Float?  @map("rating_average")
+  ratingTotal              Int?    @map("rating_total")
+  votesByStar              Json?   @map("votes_by_star")
+  images                   Json?
+  pdpImages                Json?   @map("pdp_images")
+  dataQuality              Json?   @map("data_quality")
+
+  productRefId String  @map("product_ref_id")
+  product      Product @relation(fields: [productRefId], references: [id], onDelete: Cascade)
+
+  scrapeRunId String    @map("scrape_run_id")
+  scrapeRun   ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
+
+  @@index([productRefId, capturedAt])
+  @@index([scrapeRunId])
+  @@index([salesCount])
+  @@index([price])
+  @@index([ratingAverage])
+  @@map("product_snapshots")
+}
+
+/// Histórico de loja por coleta.
+model SellerSnapshot {
+  id             String   @id @default(cuid())
+  capturedAt     DateTime @map("captured_at")
+  totalSales     Int?     @map("total_sales")
+  activeProducts Int?     @map("active_products")
+  totalReviews   Int?     @map("total_reviews")
+  followers      Int?
+  videos         Int?
+  enableFollow   Boolean? @map("enable_follow")
+  dataQuality    Json?    @map("data_quality")
+
+  sellerRefId String @map("seller_ref_id")
+  seller      Seller @relation(fields: [sellerRefId], references: [id], onDelete: Cascade)
+
+  scrapeRunId String    @map("scrape_run_id")
+  scrapeRun   ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
+
+  @@index([sellerRefId, capturedAt])
+  @@index([scrapeRunId])
+  @@map("seller_snapshots")
+}
+
+/// Dados frios / auditoria: JSONB leve ou referência a ficheiro futuro.
+model RawPayload {
+  id          String   @id @default(cuid())
+  payloadType String   @map("payload_type")
+  storageKind String   @map("storage_kind")
+  storagePath String?  @map("storage_path")
+  payloadJson Json?    @map("payload_json")
+  capturedAt  DateTime @map("captured_at")
+
+  scrapeRunId String    @map("scrape_run_id")
+  scrapeRun   ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
+
+  productRefId String?  @map("product_ref_id")
+  product      Product? @relation(fields: [productRefId], references: [id], onDelete: SetNull)
+
+  sellerRefId String? @map("seller_ref_id")
+  seller      Seller? @relation(fields: [sellerRefId], references: [id], onDelete: SetNull)
+
+  @@index([scrapeRunId])
+  @@index([productRefId])
+  @@index([sellerRefId])
+  @@index([payloadType])
+  @@index([capturedAt])
+  @@map("raw_payloads")
+}
