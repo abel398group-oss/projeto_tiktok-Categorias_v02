@@ -33,11 +33,11 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Script local** de validação de schema (`npm run validate:schemas` → `scripts/validate-output-schema.mjs`)
 - [x] **Importador JSON → Postgres v1** (`npm run db:import:output` → `scripts/import-output-to-db.mjs`); identidade com upsert, histórico em snapshots, envelope bruto em `RawPayload`
 - [x] **Proteção contra reimportação duplicada** — `inputHash` (SHA-256 do input consolidado) em `ScrapeRun`; segunda importação do mesmo payload não duplica snapshots
-- [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities` — ver `docs/ANALYTICS.md`
+- [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities`, `analytics:product-score` — ver `docs/ANALYTICS.md`
 
 **Futuro (não implementar agora):**
 
-- [ ] **Score** de produto / tendência persistente sobre snapshots
+- [ ] **Score** versionado / persistido (tabela ou materialização) e ajuste de pesos por categoria
 - [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
 - [ ] **API** read-only (mesmas métricas)
 - [ ] **Dashboard** consumindo API

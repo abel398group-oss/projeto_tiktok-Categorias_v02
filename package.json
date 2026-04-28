@@ -14,6 +14,7 @@
     "analytics:new-products": "node --env-file=.env scripts/analytics/new-products.mjs",
     "analytics:growth": "node --env-file=.env scripts/analytics/growth.mjs",
     "analytics:opportunities": "node --env-file=.env scripts/analytics/opportunities.mjs",
+    "analytics:product-score": "node --env-file=.env scripts/analytics/product-score.mjs",
     "prisma:generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:studio": "prisma studio",

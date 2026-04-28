@@ -82,6 +82,7 @@ Com `DATABASE_URL` definida:
 | `npm run analytics:new-products` | Produtos novos no último import (critérios em `docs/ANALYTICS.md`) |
 | `npm run analytics:growth` | Crescimento de vendas último vs run anterior (até 20; ≥2 runs necessários) |
 | `npm run analytics:opportunities` | Heurística simples de “oportunidade” no último run (até 20) |
+| `npm run analytics:product-score` | Score 0–100 (heurística v1, não gravado) sobre o último run — ver `docs/ANALYTICS.md` |
 
 Detalhes, limitações e contrato com `DATA_POLICY`: **[`docs/ANALYTICS.md`](docs/ANALYTICS.md)**.
 
