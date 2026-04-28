@@ -52,7 +52,7 @@ Para **validar** que os snapshots da base batem com o JSON actual (mesmo `input_
 npm run validate:db-vs-json
 ```
 
-**Atalhos (coleta + banco de seguida):** com `DATABASE_URL` configurada, podes usar `npm run coleta:db` (duas categorias, grelha + consolidado + import), `npm run coleta:completa:db` (com PDP + import), `npm run coleta:completa:login:db`, `npm run coleta:uma:db` ou `npm run coleta:uma:completa:db` (uma categoria). Detalhe em [`FLUXO.md`](FLUXO.md).
+**Atalhos (coleta + banco de seguida):** com `DATABASE_URL` configurada, podes usar `npm run coleta:db` (duas categorias, grelha + consolidado + import), `npm run coleta:completa:db` (com PDP + import), `npm run coleta:completa:login:db`, `npm run coleta:uma:db` ou `npm run coleta:uma:completa:db` (uma categoria). Para correr **`coleta:completa:db`** e em seguida **`analytics:product-score`**, usa **`npm start`**. Detalhe em [`FLUXO.md`](FLUXO.md).
 
 ### Prisma Studio (consultar dados no Postgres)
 

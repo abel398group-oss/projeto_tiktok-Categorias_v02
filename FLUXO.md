@@ -12,6 +12,7 @@ O script **já corre tudo em sequência** no mesmo `node` (primeiro a categoria,
 | Idem, e **no fim** importa para o Postgres (precisa de `DATABASE_URL` no `.env`) | `npm run coleta:db` |
 | **Duas** categorias + galeria no PDP (`fotos_pdp`, mais lento) + consolidado | `npm run coleta:completa` |
 | Idem + **import** para o banco | `npm run coleta:completa:db` |
+| Mesmo que a linha anterior, e no fim **`analytics:product-score`** | `npm start` |
 | Igual à completa, com browser visível p/ login | `npm run coleta:completa:login` |
 | Idem com login + **import** para o banco | `npm run coleta:completa:login:db` |
 | Uma categoria só, com PDP (`OUTPUT_DIR` / `CATEGORY_URL` se precisar) | `npm run coleta:uma:completa` |
