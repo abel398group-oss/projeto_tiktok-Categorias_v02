@@ -33,8 +33,15 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Script local** de validação de schema (`npm run validate:schemas` → `scripts/validate-output-schema.mjs`)
 - [x] **Importador JSON → Postgres v1** (`npm run db:import:output` → `scripts/import-output-to-db.mjs`); identidade com upsert, histórico em snapshots, envelope bruto em `RawPayload`
 - [x] **Proteção contra reimportação duplicada** — `inputHash` (SHA-256 do input consolidado) em `ScrapeRun`; segunda importação do mesmo payload não duplica snapshots
+- [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities` — ver `docs/ANALYTICS.md`
 
 **Futuro (não implementar agora):**
+
+- [ ] **Score** de produto / tendência persistente sobre snapshots
+- [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
+- [ ] **API** read-only (mesmas métricas)
+- [ ] **Dashboard** consumindo API
+- [ ] Integração **n8n / WhatsApp** via API (sem acesso SQL directo ao Postgres)
 
 - [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.
 - [ ] **Validação de schema no CI** com **fixture** versionada (ficheiros JSON de exemplo) — o CI continua **sem** depender de `output/` local.

@@ -5,6 +5,7 @@ Scraper de categorias do TikTok Shop (Node.js, Puppeteer) com saída em `output/
 - Fluxo e comandos: [`FLUXO.md`](FLUXO.md)
 - Tarefas e visão: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Arquitetura e contrato JSON: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Analytics (queries locais sobre a base): [`docs/ANALYTICS.md`](docs/ANALYTICS.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Requisitos
@@ -64,6 +65,25 @@ npm run prisma:studio
 Abre o **browser** numa página local (normalmente **`http://localhost:5555`**) onde podes navegar pelas tabelas (`Product`, `Seller`, `ScrapeRun`, snapshots, etc.). O terminal fica com o servidor ativo até fechares (**Ctrl+C**).
 
 Outros atalhos úteis: `npm run prisma:generate` (gerar cliente após mudar `prisma/schema.prisma`), `npm run prisma:format` (formatar o schema).
+
+## Analytics v1 (Postgres)
+
+Usa apenas dados **já importados** (não faz coleta nem escrita na base). Convém ter corrido antes:
+
+```bash
+npm run db:import:output
+```
+
+Com `DATABASE_URL` definida:
+
+| Comando | Descrição |
+|---------|-----------|
+| `npm run analytics:top-products` | Maior `sales_count` no último `ScrapeRun` (até 20) |
+| `npm run analytics:new-products` | Produtos novos no último import (critérios em `docs/ANALYTICS.md`) |
+| `npm run analytics:growth` | Crescimento de vendas último vs run anterior (até 20; ≥2 runs necessários) |
+| `npm run analytics:opportunities` | Heurística simples de “oportunidade” no último run (até 20) |
+
+Detalhes, limitações e contrato com `DATA_POLICY`: **[`docs/ANALYTICS.md`](docs/ANALYTICS.md)**.
 
 ## Desenvolvimento
 
