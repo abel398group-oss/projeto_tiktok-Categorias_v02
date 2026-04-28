@@ -67,7 +67,7 @@ O resultado que interessa para análise está **na raiz de `output/`**:
 - `dados_produtos.json` — lista de **produtos**; cada item inclui `seller_id` e campos de loja **desnormalizados** (`nome_loja`, `loja_*`, …) para leitura rápida.
 - `output/dados_lojas.json` (na **raiz** de `output/`, ao lado de `dados_produtos.json`) — **uma linha por `seller_id`**, com dados de loja **consolidados** (fonte agregada; liga-se ao produto pela mesma chave `seller_id`).
 
-Detalhe e modelo (produto / loja / snapshot futuro): **`docs/ARCHITECTURE.md`** — ver secções **Contrato dos outputs**, **Decisão arquitetural: modelo híbrido** e **Futuro modelo Postgres**.
+Detalhe e modelo (produto / loja / snapshots no Postgres): **`docs/ARCHITECTURE.md`** — ver secções **Contrato dos outputs**, **Decisão arquitetural: modelo híbrido** e **Modelo Postgres (Prisma) — implementado**.
 
 Para **consultar dados já importados** no Postgres sem SQL direto: com `DATABASE_URL` no `.env`, corre **`npm run prisma:studio`** (interface web tipo `localhost:5555`; ver **`README.md`**).
 

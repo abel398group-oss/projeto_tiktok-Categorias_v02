@@ -1,4 +1,4 @@
-// Base Postgres — desenho inicial; sem migrate aplicado ainda.
+// Postgres (TikTok Shop) — canónico: prisma/schema.prisma; histórico: prisma/migrations/; doc: docs/ARCHITECTURE.md
 generator client {
   provider = "prisma-client-js"
 }

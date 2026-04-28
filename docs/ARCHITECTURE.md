@@ -13,10 +13,10 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 ## Decisão arquitetural: modelo híbrido nos JSONs (mantido)
 
 - **`dados_produtos.json`** continua a ser um export **flat / prático**: cada item tem `product_id`, nome, preço, vendas, imagens, **`seller_id`**, **`nome_loja`** e vários campos de loja (`loja_*`, logos). Essa **desnormalização é intencional** — leitura rápida, auditoria e análise sem `join` obrigatório.
-- **`output/dados_lojas.json`** é o agregado **oficial por vendedor**: **uma** entrada por **`seller_id`** (dedupe e merge de campos entre produtos da mesma loja). Serve análise de sellers e futura importação para base de dados.
+- **`output/dados_lojas.json`** é o agregado **oficial por vendedor**: **uma** entrada por **`seller_id`** (dedupe e merge de campos entre produtos da mesma loja). Serve análise de sellers e **import** para Postgres (entre outros consumidores).
 - **Ligação:** `seller_id` é a **chave** comum entre um item em `itens[]` e uma linha em `lojas[]`.
 - **Não** remover, por agora, campos de loja de `dados_produtos.json` — evita quebrar consumidores e mantém o uso “abrir o ficheiro e ver tudo no item”.
-- **Normalização completa** (produto vs loja vs histórico no tempo) será feita no **Postgres** (tabelas separadas e snapshots), **não** obrigando o JSON actual a espelhar o esquema final da BD.
+- **Normalização na BD** (produto vs loja vs histórico no tempo) está em **`prisma/schema.prisma`** e é preenchida pelo importador (**não** obriga o JSON a espelhar coluna a coluna; o export do scraper continua a interface de coleta).
 
 ## Stack
 
@@ -58,10 +58,11 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - **Fonte agregada:** `output/dados_lojas.json` — uma entrada por `seller_id`, construída por `buildLojasMapBySeller` (merge de campos de loja entre produtos do mesmo vendedor). Tratar-se como **catálogo consolidado** de vendedor; o produto continua a carregar a cópia desnormalizada.
 - **No código:** `normalizeSellerInfo`, `mergeLojaFromNormalized` / `extractLojaFromNormalized`, `lojaToRowFields`.
 
-### Snapshot (estado no tempo) — ainda não implementado
+### Snapshot (estado no tempo) — Postgres
 
-- Conceito: gravar, por execução de coleta, **valores que mudam** (preço, vendas, contagem de reviews, posição, métricas de loja) sem sobrescrever o histórico.
-- Ligar a uma ideia de **run** (uma corridada do scraper) e a tabelas de histórico; ver secção *Camada alvo (Postgres, futuro)* abaixo.
+- Implementado como **`ProductSnapshot`** e **`SellerSnapshot`** em `prisma/schema.prisma`, ligados a **`ScrapeRun`** (uma coleta / import) e às dimensões **`Product`** / **`Seller`**.
+- Cada run de importação grava **novas linhas** de snapshot (preço, vendas, imagens no produto; métricas agregadas na loja) sem sobrescrever histórico anterior.
+- Preenchimento: **`scripts/import-output-to-db.mjs`** (`npm run db:import:output`), sobre `output/dados_produtos.json` e `output/dados_lojas.json`; ver secção **Modelo Postgres** abaixo.
 
 ## Contrato dos outputs
 
@@ -69,7 +70,7 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 
 - **Papel:** ficheiro de **leitura rápida, auditoria e análise** por produto (export “flat”).
 - **Conteúdo:** `itens[]` com dados do **produto** (`product_id`, nome, preço, moeda, vendas, `fotos` / `fotos_pdp`, avaliações, …) **e** chave e cópia de **loja** (`seller_id`, `global_seller_id`, `nome_loja`, `loja_*`, `loja_logo_*`).
-- **Não** é a representação final do modelo relacional: é **conveniência** e desnormalização intencional; o esquema canónico alvo de longo prazo é o **banco** (ver abaixo).
+- **Não** é a representação final do modelo relacional: é **conveniência** e desnormalização intencional; o modelo relacional canónico está no **Postgres / Prisma** (ver secção **Modelo Postgres**).
 
 #### Contrato de preço (v1, validado)
 
@@ -106,43 +107,44 @@ Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline r
 
 ### Regra de ligação
 
-- **`seller_id`** é a chave de ligação: cada produto com determinado `seller_id` corresponde à mesma chave no array `lojas` (e na dimensão `sellers` no futuro Postgres).
+- **`seller_id`** é a chave de ligação: cada produto com determinado `seller_id` corresponde à mesma chave no array `lojas` e ao registo **`sellers`** no Postgres após import.
 
 | Ficheiro | O quê | Quando preferir |
 |----------|--------|-----------------|
 | `dados_produtos.json` | Produto + loja desnormalizada no item | Exploração, scripts simples, inspeção linha a linha |
 | `dados_lojas.json` | Loja **deduplicada** por `seller_id` | Métricas por vendedor, import `sellers`, consistência de loja |
 
-## Futuro modelo Postgres — apenas documentado (não implementado)
+## Modelo Postgres (Prisma) — implementado
 
-Objetivo: **normalizar** entidades e **histórico** na base de dados; o JSON actual permanece a interface de saída do scraper até existir importador. **Nenhum** requisito de alterar o JSON agora.
+**Objetivo:** normalizar identidade (**produto**, **loja**) e **histórico por coleta** (**snapshots**) na base de dados; o JSON em `output/` continua a ser a **única saída do scraper** — o import não altera a coleta nem o formato dos JSONs.
 
-### Tabelas de dimensão (dados “fixos” ou semi-fixos)
+### Onde está definido
 
-- **`products`**
-  - Dados **estáveis** do artigo: pelo menos `product_id`, referência a vendedor (`seller_id` FK), título, URLs canónicas / identificadores que não mudam a cada scrape (definição fina no DDL).
-- **`sellers`**
-  - Dados **estáveis** da loja: `seller_id` (PK lógica), `nome_loja`, identidade de logo / URIs (conforme esquema), `global_seller_id` se aplicável.
+- **Esquema:** `prisma/schema.prisma` (tabelas mapeadas `snake_case` no Postgres).
+- **Import:** `scripts/import-output-to-db.mjs` — comando `npm run db:import:output` (requer `DATABASE_URL`). **Idempotência:** campo `input_hash` em `scrape_run`: reimportação do mesmo conteúdo (hash SHA-256 dos ficheiros consolidados) **não** duplica runs nem snapshots (`README.md`).
 
-### Tabelas de facto / histórico (estado no tempo, por execução)
+### Tabelas de dimensão (dados relativamente estáveis)
 
-- **`scrape_runs`**
-  - Uma linha **por execução** do scraper (horário, categoria, parâmetros, notas, paths dos JSONs ou hash, status).
-- **`product_snapshots`**
-  - **Por run** e **por produto:** preço, vendas, avaliações, campos de imagem relevantes, ou qualquer métrica que deva ser **rastreada no tempo** (colunas a definir no DDL). FK: `scrape_runs`, `products`.
-- **`seller_snapshots`**
-  - **Por run** e **por loja:** vendas totais, seguidores, produtos ativos, totais de reviews, estado resumido da loja, etc. FK: `scrape_runs`, `sellers`.
+- **`products`** (`Product`): chave externa TikTok `product_id`, FK opcional para `sellers`, URLs, datas `first_seen` / `last_seen`; **upsert** no import (identidade atualizada, sem apagar histórico).
+- **`sellers`** (`Seller`): `seller_id` único, `global_seller_id`, nome e logos conforme JSON.
 
-### Diferença entre dado “fixo” e histórico
+### Histórico e auditoria por importação / run
 
-- Tabelas **dimensão** (`products`, `sellers`): identidade e atributos que raramente exigem histórico linha a linha no mesmo registo.
-- Tabelas **snapshot**: permitem comparação entre coletas (evolução de preço, vendas, métricas de loja) sem sobrescrever o passado.
+- **`scrape_runs`** (`ScrapeRun`): uma linha **por importação** bem sucedida a partir do consolidado (metadados da coleta + `input_hash` quando aplicável).
+- **`product_snapshots`** / **`seller_snapshots`**: métricas e campos que mudam no tempo, **por run**; sempre **novas** linhas neste fluxo de import.
+
+- **`raw_payloads`** (`RawPayload`): envelope **`consolidated_output`** com cópia do JSON importado para auditoria (dados frios).
+
+### Diferença entre dado “quente” (dimensão) e snapshot
+
+- **`products`** / **`sellers`**: identidade e último estado útil consolidado pelo import (upsert).
+- **Snapshots**: série temporal entre coletas — evolução de preço, vendas e métricas de loja **sem** perder registos antigos ao importar outra vez.
 
 ### `seller_id` na BD
 
-- Chave de integridade entre `products` e `sellers`, alinhada ao `seller_id` nos JSONs actuais.
+- Alinhamento ao TikTok nos JSONs: integridade entre `products.seller_ref_id` → `sellers.id` e métricas em `seller_snapshots`.
 
-**Pipeline de scraping:** permanece o definido em `src/scrapeCategory.mjs`; a importação JSON → Postgres será uma **camada à parte** quando existir.
+**Pipeline de scraping:** inalterado em `src/scrapeCategory.mjs` (e scripts de coleta). **Import JSON → Postgres** é **camada separada** — `scripts/import-output-to-db.mjs` apenas mapeia valores; não recalcula preço, vendas ou merge.
 
 ## Integridade (regressão)
 

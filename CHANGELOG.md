@@ -40,4 +40,4 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 - **Preço v1** validado manualmente em **duas** categorias (com e sem desconto); pequenas diferenças de **centavos** vs UI são aceitáveis.
 - **Vendas v1** aprovada com **ressalva:** feed/merge ≠ leitura pixel-perfect da UI; adequado a ranking e análise, **não** a uso financeiro ou legal “exacto”.
 - **`fotos_pdp`:** validado no output real; heurística extra de limpeza de URLs adiada por risco de falsos positivos.
-- **Modelo híbrido JSON:** `dados_produtos` (flat com loja desnormalizada) + `dados_lojas` (agregado por `seller_id`); normalização plena fica para Postgres (futuro).
+- **Modelo híbrido JSON:** `dados_produtos` (flat com loja desnormalizada) + `dados_lojas` (agregado por `seller_id`); **Postgres** com importador JSON → snapshots (ver **0.1.0** e `docs/ARCHITECTURE.md`).

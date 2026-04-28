@@ -173,7 +173,7 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 
 - **Estado:** o scraper gera **dois** outputs complementares, descritos em **`docs/ARCHITECTURE.md`** (secção *Contrato dos outputs* e *Futuro modelo Postgres*).
 - **`dados_produtos.json`:** export plano/flat com **produto + `seller_id` + `nome_loja` + campos `loja_*` / logos** em cada item — **desnormalização intencional** (inspeção, análise rápida, sem `join` forçado). **Não** é o modelo final da base de dados.
-- **`output/dados_lojas.json`:** agregado **oficial** — **uma** loja **por** `seller_id` (análise de vendedor, import da dimensão `sellers` no futuro).
+- **`output/dados_lojas.json`:** agregado **oficial** — **uma** loja **por** `seller_id` (análise de vendedor; import da dimensão **`sellers`** em Postgres via `npm run db:import:output`).
 - **Ligação:** `seller_id` em comum.
 - **Decisão:** **não** remover campos de loja de `dados_produtos` nesta fase; **não** mudar o formato de `dados_lojas` para “forçar” normalização no JSON. A **normalização plena** (tabelas `products` / `sellers` / snapshots) fica para **Postgres** quando existir.
 - [x] **Contrato dos outputs documentado** em `docs/ARCHITECTURE.md` (e apontador no `FLUXO.md` onde existir).
