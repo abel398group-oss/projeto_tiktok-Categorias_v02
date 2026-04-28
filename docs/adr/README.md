@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR)
 
-Decisões que **perduram** (escolha de abordagem, fonte de dados, limites do scraper) registam-se aqui, no estilo usado no ecossistema Hipervias/Uleder, **adaptado** a este repositório (Node + Puppeteer, sem monorepo nem Prisma).
+Decisões que **perduram** (escolha de abordagem, fonte de dados, limites do scraper) registam-se aqui, no estilo usado no ecossistema Hipervias/Uleder, **adaptado** a este repositório: **Node + Puppeteer** (scraper), **sem monorepo**, e **Prisma + Postgres** para persistência histórica e analytics em CLI (ver `prisma/schema.prisma`, `npm run db:import:output`).
 
 ## Formato sugerido
 

@@ -15,7 +15,9 @@ O ficheiro `docs/ROADMAP.md` é a **fonte única** de tarefas do projeto. Não c
 
 ## Âmbito deste repositório
 
-Não existe base de dados nem Prisma; **não** aplicar regras de migrations ou nomenclatura de tabelas de outros projetos. Foco: scraper, `output/`, `src/scrapeCategory.mjs`.
+O projeto inclui **Prisma + Postgres** (`prisma/schema.prisma`, `npm run db:import:output`, scripts em `scripts/analytics/`). Tarefas que toquem em **migrations**, **schema** ou **importador** devem respeitar o que está em `docs/ARCHITECTURE.md` e `docs/ROADMAP.md`. **Não** importar convenções de BD ou multi-tenant de **outros** repositórios (ex. Hipervias) sem adaptação explícita.
+
+**Foco principal de alteração frequente:** scraper (`src/scrapeCategory.mjs`), `output/`, e contratos documentados. Ver também **`.cursor/rules/architecture-context.mdc`** para o mapa de ficheiros.
 
 ## Ao concluir uma tarefa
 

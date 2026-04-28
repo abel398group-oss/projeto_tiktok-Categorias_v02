@@ -81,7 +81,9 @@ Gerar insumos para identificar, entre outros:
 
 ### 4. Módulo de score de produto (futuro)
 
-Módulo analítico (não implementado no scraper) com dimensões separadas, por exemplo:
+**Estado actual:** existe heurística **v1 só leitura** em CLI (`npm run analytics:product-score` — não persistida; ver `docs/ANALYTICS.md`).  
+
+Módulo analítico **alvo** (não no scraper; dimensões persistíveis / pesos de negócio) com separação por eixo, por exemplo:
 
 - `demanda_score` · `preco_score` · `crescimento_score` · `avaliacao_score` · `concorrencia_score` · `margem_score` → **`score_final`** (regras e pesos a definir com o negócio).
 
@@ -110,11 +112,11 @@ A arquitetura de dados e análise deve suportar:
 ### 9. Decisão actual (repositório scrape TikTok; abril 2026)
 
 - O scraper TikTok **continua a ser estabilizado**; não alterar pipeline sem necessidade.  
-- **Mantido** o **modelo JSON híbrido** (`dados_produtos` + `dados_lojas` na raiz de `output/`).  
+- **Mantido** o **modelo JSON híbrido** na raiz de `output/` (`dados_produtos` + `dados_lojas`, após consolidação multi-categoria quando aplicável) como **fonte de coleta** e input do importador.  
 - **`dados_lojas.json`** em uso.  
+- **Postgres / Prisma:** esquema em `prisma/schema.prisma`; **importador JSON → base** (`npm run db:import:output`) e **analytics v1** em CLI só leitura (`scripts/analytics/`, ver `docs/ANALYTICS.md`) **já fazem parte do repositório**.  
 - **Não** priorizar, neste momento, **enriquecimento pesado via PDP** (ex.: `shop_info` rico no HTML do PDP) por **risco** de puzzle / anti‑bot e custo de visitas.  
-- **Próximo passo macro** a escolher **depois** (sem compromisso fixo):  
-  (a) modelar **Postgres** · (b) importador **JSON → banco** · (c) evoluir **scoring** · (d) **expandir categorias** de coleta · (e) **API / front**.
+- **Próximos macros** (sem ordem fixa; alinhado à secção **Futuro** em CI e qualidade): score **persistido** / versionado e motor de **viabilidade**; **API** read-only e **dashboard**; **expandir categorias** de coleta; fixtures/schema no CI, smoke opcional do browser, dados frios em **object storage** quando fizer sentido.
 
 ### 10. Regras de proteção (desenvolvimento)
 
@@ -134,7 +136,7 @@ A arquitetura de dados e análise deve suportar:
 
 **Nota:** O `dados_produtos.json` (e corridas reais) está **consistente** no que toca a `fotos_pdp` no estado actual. Se no futuro aparecer **ruído** recorrente (logos, badges, promos) nas URLs, reavaliar: filtro pós-URL (ex. `filterPdpProductImages`) + testes de regressão.
 
-**Ordem de prioridade actual:** (1) validação feita, (2) **não alterar** a pipeline de `fotos_pdp` por enquanto, (3) avançar para a **próxima etapa** abaixo (tarefas em aberto / próximo marco do produto de dados).
+**Ordem de prioridade actual:** (1) validação feita, (2) **não alterar** a pipeline de `fotos_pdp` por enquanto; (3) evoluções de produto seguem **Tarefas** e **Futuro** (secção CI e qualidade) neste mesmo ficheiro.
 
 ---
 
@@ -178,11 +180,11 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 
 ## Loja vs produto — decisão: modelo híbrido (JSON)
 
-- **Estado:** o scraper gera **dois** outputs complementares, descritos em **`docs/ARCHITECTURE.md`** (secção *Contrato dos outputs* e *Futuro modelo Postgres*).
-- **`dados_produtos.json`:** export plano/flat com **produto + `seller_id` + `nome_loja` + campos `loja_*` / logos** em cada item — **desnormalização intencional** (inspeção, análise rápida, sem `join` forçado). **Não** é o modelo final da base de dados.
+- **Estado:** o scraper gera **dois** outputs complementares, descritos em **`docs/ARCHITECTURE.md`** (secções *Contrato dos outputs* e *Modelo Postgres (Prisma)*).
+- **`dados_produtos.json`:** export plano/flat com **produto + `seller_id` + `nome_loja` + campos `loja_*` / logos** em cada item — **desnormalização intencional** (inspeção, análise rápida, sem `join` forçado). **Não** substitui o modelo relacional na base (é contrato do scraper e input do import).
 - **`output/dados_lojas.json`:** agregado **oficial** — **uma** loja **por** `seller_id` (análise de vendedor; import da dimensão **`sellers`** em Postgres via `npm run db:import:output`).
 - **Ligação:** `seller_id` em comum.
-- **Decisão:** **não** remover campos de loja de `dados_produtos` nesta fase; **não** mudar o formato de `dados_lojas` para “forçar” normalização no JSON. A **normalização plena** (tabelas `products` / `sellers` / snapshots) fica para **Postgres** quando existir.
+- **Decisão:** **não** remover campos de loja de `dados_produtos` nesta fase; **não** mudar o formato de `dados_lojas` para “forçar” normalização no JSON exportado. A **normalização canónica** em Postgres (`products` / `sellers` / snapshots) **já existe** via importador; os JSON continuam a ser a **saída da coleta** e o payload importado sem recalcular merge/preço/vendas no import.
 - [x] **Contrato dos outputs documentado** em `docs/ARCHITECTURE.md` (e apontador no `FLUXO.md` onde existir).
 - [ ] (Opcional, fase posterior) **Separação estrita** só de campos de loja no `dados_produtos` — requer decisão, consumidores e testes.
 - [ ] (Opcional) Importador / consumidores a usarem `dados_lojas` para métricas por vendedor de forma explícita.
@@ -191,17 +193,17 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 
 ## Próximas fases (ordem recomendada, alto nível)
 
-1. **Manter o scraper estável** (regressão `npm test` localmente; no GitHub, o workflow **CI** corre os mesmos testes em push/PR).  
-2. **Validar outputs** reais (`dados_produtos`, `dados_lojas`, debug se necessário).  
-3. **Contrato dos JSONs** — documentado em `docs/ARCHITECTURE.md` (feito; rever quando o pipeline mudar).  
-4. **Definir esquema Postgres** (tabelas + relações; ver secção *Futuro modelo Postgres*).  
-5. **Importador JSON → Postgres** (sem alterar a lógica de coleta; camada separada).  
-6. **Testar** 3–5 categorias reais; validar variação de dados.  
-7. **Métricas / ranking** (sobre snapshots ou agregados).  
-8. **Otimizar velocidade** (paralelismo, filas, rate limit — após o modelo de dados fechado).  
-9. **Front / dashboard** (após base e import estáveis).
+**Já entregues no repositório (contexto):** esquema **Postgres/Prisma**, **importador** JSON → base, **analytics v1** em CLI sobre snapshots, **CI** com `npm test`, **JSON Schema** + validação local — ver secção **CI e qualidade** acima.
 
-Não implica prazos: é **sequência lógica**; pode haver itens em paralelo após a fase 3.
+1. **Manter o scraper estável** (regressão `npm test`; CI em push/PR).  
+2. **Validar outputs** reais (`dados_produtos`, `dados_lojas`, debug se necessário) e `npm run validate:schemas` / `validate:db-vs-json` quando aplicável.  
+3. **Contrato dos JSONs** — manter `docs/ARCHITECTURE.md` e `schemas/` alinhados quando o pipeline exportado mudar.  
+4. **Testar** mais categorias reais; validar variação de dados e edge cases.  
+5. **Evoluir analytics e score** — heurística persistida / versionada, pesos por categoria; ver itens **Futuro** na secção CI (API, dashboard, viabilidade).  
+6. **Otimizar velocidade** da coleta e do import quando houver medição (paralelismo, batch, rate limit — **após** critérios de negócio e sem quebrar idempotência).  
+7. **Front / dashboard** / **API** read-only quando a equipa priorizar (dependências em **Futuro**).
+
+Não implica prazos: é **sequência orientadora**; itens 4–7 podem avançar em paralelo onde fizer sentido.
 
 ---
 
