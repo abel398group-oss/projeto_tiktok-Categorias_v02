@@ -1,5 +1,7 @@
 # Relatório de validação (referência Cursor / equipa)
 
+**Última validação:** 2026-04-28
+
 Documento resumo do que foi **validado** no pipeline **coleta → JSON → Postgres**, para não assumir mais do que o que foi testado.
 
 **Estado:** validação de amostra + verificação automática do import; **não** é auditoria completa site ↔ base.
