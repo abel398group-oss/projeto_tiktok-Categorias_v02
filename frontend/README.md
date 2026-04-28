@@ -28,3 +28,9 @@ Copiar `.env.example` → `.env` e ajustar `VITE_ANALYTICS_API_KEY`.
 ## Ecrã
 
 Três separadores: **Top Products**, **Opportunities**, **Product Score**. Botão **Carregar dados** para fazer o pedido ao endpoint da aba actual.
+
+## Erro ao carregar: `ECONNREFUSED 127.0.0.1:3333` (terminal do Vite)
+
+Significa que **a API analytics não está a correr**. Em **outro terminal**, na raiz do repositório: `npm run analytics:api` (com `.env` válido na raiz). Só depois use `npm run dev` no `frontend/` e atualize no browser.
+
+Se mudares a porta da API (`ANALYTICS_API_PORT`), ajusta o `target` em `frontend/vite.config.js` ou usa `VITE_API_URL` (com CORS na API — não incluso por defeito).
