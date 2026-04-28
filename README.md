@@ -45,6 +45,12 @@ npm run db:import:output
 
 Não altera o scraper nem recalcula preço ou vendas — apenas persiste o que está no JSON.
 
+Para **validar** que os snapshots da base batem com o JSON actual (mesmo `input_hash` que no import):
+
+```bash
+npm run validate:db-vs-json
+```
+
 **Atalhos (coleta + banco de seguida):** com `DATABASE_URL` configurada, podes usar `npm run coleta:db` (duas categorias, grelha + consolidado + import), `npm run coleta:completa:db` (com PDP + import), `npm run coleta:completa:login:db`, `npm run coleta:uma:db` ou `npm run coleta:uma:completa:db` (uma categoria). Detalhe em [`FLUXO.md`](FLUXO.md).
 
 ### Prisma Studio (consultar dados no Postgres)

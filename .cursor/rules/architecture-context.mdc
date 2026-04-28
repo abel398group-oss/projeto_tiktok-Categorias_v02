@@ -5,11 +5,12 @@ alwaysApply: true
 
 # Arquitetura — projeto TikTok Shop (categorias)
 
-Não monorepo: um módulo Node (`src/scrapeCategory.mjs`). Não há API Nest, Prisma, nem apps/.
+Não monorepo: um pacote **npm** (não pnpm workspaces). **Scraper:** `src/scrapeCategory.mjs`. **Persistência:** Prisma + Postgres (`prisma/schema.prisma`, `npm run db:import:output`) — não há API HTTP Nest/React neste repo.
 
 ## Onde está documentado
 
-- **`docs/ARCHITECTURE.md`** — stack, fluxo, variáveis de ambiente, saídas, limitações.
+- **`docs/CURSOR-CONTEXTO-SISTEMA.md`** — resumo técnico completo e comparação com Hipervias v12 (para IA / Cursor).
+- **`docs/ARCHITECTURE.md`** — stack, fluxo, variáveis de ambiente, saídas, limitações, modelo Postgres.
 - **`docs/ROADMAP.md`** — tarefas (fonte única) e metodologia de estados.
 - **`docs/adr/`** — Architecture Decision Records (ver `docs/adr/README.md`).
 - **`.cursor/docs/README.md`** — índice rápido para a IA.
@@ -24,5 +25,5 @@ Não monorepo: um módulo Node (`src/scrapeCategory.mjs`). Não há API Nest, Pr
 
 ## O que **não** aplica a este repo
 
-- Migrations, reset de base de dados, tabelas `tenant_` / `system_` — **outro** projeto (ex. Hipervias); ignorar se sugerido por engano.
-- Estrutura `apps/api/**/*.ts` — não existem neste repositório.
+- Tabelas `tenant_` / `system_`, auth multi-tenant, CASL — padrões do **Hipervias**; não existem aqui.
+- Sugestões que assumem monorepo **`apps/api` / `apps/web`** ou **NestJS** como caminho obrigatório — neste projeto a fonte de verdade é scraper + JSON + script de import Prisma (ver **`docs/CURSOR-CONTEXTO-SISTEMA.md`**).

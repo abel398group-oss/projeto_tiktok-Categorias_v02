@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node --test test/scrape-regression.test.mjs",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
+    "validate:db-vs-json": "node --env-file=.env scripts/validate-db-vs-json.mjs",
     "prisma:generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:studio": "prisma studio",

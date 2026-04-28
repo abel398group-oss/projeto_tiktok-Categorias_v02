@@ -9,6 +9,9 @@ Esta pasta é um **índice para a IA do Cursor** neste repositório. A documenta
 | **Tarefas (fonte única), estados [ ] [~] [!] [x]** | **`docs/ROADMAP.md`** |
 | Atalho raiz p/ GitHub | `ROADMAP.md` → aponta para `docs/ROADMAP.md` |
 | Arquitetura geral, fluxo, env, limitações | `docs/ARCHITECTURE.md` |
+| Resumo técnico + comparação Hipervias / o que reutilizar | **`docs/CURSOR-CONTEXTO-SISTEMA.md`** |
+| O que já foi validado (JSON ↔ BD, amostra site) | **`docs/RELATORIO-VALIDACAO.md`** |
+| Prisma / Postgres (import) | `prisma/schema.prisma`, `npm run db:import:output` |
 | Decisões (ADR) | `docs/adr/` e `docs/adr/README.md` |
 | Código do scraper (único ponto lógico) | `src/scrapeCategory.mjs` |
 | Saída “final” (campos em PT) | `output/dados_produtos.json` (gerado; não em git) |
@@ -24,6 +27,6 @@ Esta pasta é um **índice para a IA do Cursor** neste repositório. A documenta
 - Ao **alterar** o fluxo de rede, o parser JSON ou o formato de `dados_produtos`, atualizar `docs/ARCHITECTURE.md`; decisões fortes → **ADR** em `docs/adr/`.
 - Não adicionar **dados pessoais** ou tokens a ficheiros versionados: `output/` fica fora do git por defeito.
 
-## Relação com o print de referência (Hipervias)
+## Relação com Hipervias v12 (outro repo)
 
-Este repositório é **um único módulo Node** (não monorepo). A tabela acima substitui referências a `apps/api`, `Prisma` ou `E2E` do outro projeto pelos caminhos reais **deste** projeto.
+Este projeto é **pacote npm único** (não monorepo tipo `apps/api` + `apps/web`). Tem **Prisma** para import analítico (`db:import:output`), **sem** Nest nem front. Ver **`docs/CURSOR-CONTEXTO-SISTEMA.md`** para tabela comparativa e ideias reutilizáveis (Docker Postgres, CI com fixture, ADRs, etc.).
