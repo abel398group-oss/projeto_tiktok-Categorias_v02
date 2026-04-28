@@ -18,7 +18,10 @@ model ScrapeRun {
   finalUrl          String?  @map("final_url")
   totalProducts     Int?     @map("total_products")
   filterDescription String?  @map("filter_description")
-  createdAt         DateTime @default(now()) @map("created_at")
+  /// SHA-256 hex dos ficheiros consolidados (produtos + lojas); dedupe de importação idempotente.
+  inputHash         String?  @unique @map("input_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   productSnapshots ProductSnapshot[]
   sellerSnapshots  SellerSnapshot[]

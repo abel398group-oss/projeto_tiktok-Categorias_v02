@@ -6,6 +6,7 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 
 ### Added
 
+- **Importador idempotente por hash de input:** `npm run db:import:output` calcula SHA-256 de `output/dados_produtos.json` + `output/dados_lojas.json` (ou marcador se o ficheiro de lojas não existir), persiste em `ScrapeRun.input_hash` e **ignora** uma segunda importação do mesmo conteúdo (sem novos snapshots nem `RawPayload`).
 - **CI:** workflow GitHub Actions (`.github/workflows/ci.yml`) — `npm test` em cada push e pull request, Node 20, `npm ci` quando existe `package-lock.json`.
 - **Coleta em duas categorias:** `scripts/scrape-both.mjs` e comando `npm run coleta` (grelha + consolidação).
 - **Consolidação multi-categoria** para `output/dados_produtos.json` e `output/dados_lojas.json` (`scripts/consolidate-category-outputs.mjs`), mantendo o mesmo schema por item.

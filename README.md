@@ -38,6 +38,7 @@ Com `DATABASE_URL` válida no `.env` (ver `.env.example`), importa a **última**
 npm run db:import:output
 ```
 
+- **Idempotência:** o comando calcula um **SHA-256** do texto completo desses ficheiros (produtos + lojas, com marcador se `dados_lojas.json` não existir) e grava em `ScrapeRun.input_hash`. Se correres **duas vezes** com o **mesmo** conteúdo consolidado, a segunda vez **não** cria novo `ScrapeRun`, snapshots nem `RawPayload` — apenas mostra que a importação foi ignorada (código de saída 0).
 - **Product** e **Seller**: *upsert* por `product_id` / `seller_id` (identidade estável).
 - **ProductSnapshot** e **SellerSnapshot**: **sempre novas linhas** por importação (histórico por run); nada é sobrescrito no passado.
 - **RawPayload**: um registo `consolidated_output` com envelope JSON (auditoria / dados frios).
@@ -45,6 +46,18 @@ npm run db:import:output
 Não altera o scraper nem recalcula preço ou vendas — apenas persiste o que está no JSON.
 
 **Atalhos (coleta + banco de seguida):** com `DATABASE_URL` configurada, podes usar `npm run coleta:db` (duas categorias, grelha + consolidado + import), `npm run coleta:completa:db` (com PDP + import), `npm run coleta:completa:login:db`, `npm run coleta:uma:db` ou `npm run coleta:uma:completa:db` (uma categoria). Detalhe em [`FLUXO.md`](FLUXO.md).
+
+### Prisma Studio (consultar dados no Postgres)
+
+Com `DATABASE_URL` no `.env` (copiar de `.env.example`):
+
+```bash
+npm run prisma:studio
+```
+
+Abre o **browser** numa página local (normalmente **`http://localhost:5555`**) onde podes navegar pelas tabelas (`Product`, `Seller`, `ScrapeRun`, snapshots, etc.). O terminal fica com o servidor ativo até fechares (**Ctrl+C**).
+
+Outros atalhos úteis: `npm run prisma:generate` (gerar cliente após mudar `prisma/schema.prisma`), `npm run prisma:format` (formatar o schema).
 
 ## Desenvolvimento
 

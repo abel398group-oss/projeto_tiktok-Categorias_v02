@@ -32,13 +32,14 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **JSON Schema** dos outputs (`schemas/dados_produtos.schema.json`, `schemas/dados_lojas.schema.json`)
 - [x] **Script local** de validação de schema (`npm run validate:schemas` → `scripts/validate-output-schema.mjs`)
 - [x] **Importador JSON → Postgres v1** (`npm run db:import:output` → `scripts/import-output-to-db.mjs`); identidade com upsert, histórico em snapshots, envelope bruto em `RawPayload`
+- [x] **Proteção contra reimportação duplicada** — `inputHash` (SHA-256 do input consolidado) em `ScrapeRun`; segunda importação do mesmo payload não duplica snapshots
 
 **Futuro (não implementar agora):**
 
 - [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.
 - [ ] **Validação de schema no CI** com **fixture** versionada (ficheiros JSON de exemplo) — o CI continua **sem** depender de `output/` local.
 - [ ] **CI com lint / typecheck** se o projeto adoptar ferramentas (ESLint, TypeScript, etc.) noutro passo.
-- [ ] Deduplicar reimport do mesmo ficheiro por *hash* de conteúdo / `scrapeRun` se fizer falta
+- [ ] Hash / dedupe **por categoria ou run** granular, se o fluxo evoluir (hoje é por ficheiro consolidado completo)
 - [ ] Dados frios pesados: `storagePath` (object storage) em vez de JSONB só
 
 ---

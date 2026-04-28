@@ -3,6 +3,7 @@
  * Identidade: upsert (Seller, Product). Histórico: novos registos (snapshots + RawPayload).
  * Não altera nem recalcula campos; apenas mapeia valores do JSON.
  */
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { access, constants } from "node:fs/promises";
 import path from "node:path";
@@ -101,6 +102,13 @@ function toJson(v) {
   return v;
 }
 
+/** Concatenação determinística para import idempotente (SHA-256). */
+function computeInputHash(produtosText, lojasTextOrAbsent) {
+  const boundary = "\n---IMPORT_INPUT_HASH_V1---\n";
+  const body = produtosText + boundary + lojasTextOrAbsent;
+  return createHash("sha256").update(Buffer.from(body, "utf8")).digest("hex");
+}
+
 /**
  * @param {import("@prisma/client").PrismaClient} client
  */
@@ -113,13 +121,28 @@ async function importMain() {
   }
 
   const produtosText = await readFile(DADOS_PRODUTOS, "utf8");
+  const lojasTextOrAbsent = (await fileExists(DADOS_LOJAS))
+    ? await readFile(DADOS_LOJAS, "utf8")
+    : "__NO_DADOS_LOJAS_FILE__";
+  const inputHash = computeInputHash(produtosText, lojasTextOrAbsent);
+
+  prisma = new PrismaClient();
+  const jaImportado = await prisma.scrapeRun.findFirst({
+    where: { inputHash },
+    select: { id: true }
+  });
+  if (jaImportado) {
+    console.log("Importação ignorada: este output já foi importado.");
+    console.log("(ScrapeRun existente:", jaImportado.id, "| inputHash:", inputHash + ")");
+    return;
+  }
+
   const dadosProdutos = JSON.parse(produtosText);
   const itens = Array.isArray(dadosProdutos.itens) ? dadosProdutos.itens : [];
 
   let dadosLojas = null;
   if (await fileExists(DADOS_LOJAS)) {
-    const lojasText = await readFile(DADOS_LOJAS, "utf8");
-    dadosLojas = JSON.parse(lojasText);
+    dadosLojas = JSON.parse(lojasTextOrAbsent);
   }
 
   const t = parseDate(dadosProdutos.coletado_em);
@@ -129,8 +152,6 @@ async function importMain() {
   const total = typeof dadosProdutos.total === "number" ? dadosProdutos.total : itens.length;
   const filtro = dadosProdutos.filtro != null ? String(dadosProdutos.filtro) : null;
 
-  prisma = new PrismaClient();
-
   const scrapeRun = await prisma.scrapeRun.create({
     data: {
       collectedAt: t,
@@ -139,7 +160,8 @@ async function importMain() {
       categoryUrl: categoriaUrl,
       finalUrl: finalUrl,
       totalProducts: total,
-      filterDescription: filtro
+      filterDescription: filtro,
+      inputHash
     }
   });
   const scrapeRunId = scrapeRun.id;

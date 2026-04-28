@@ -69,6 +69,8 @@ O resultado que interessa para análise está **na raiz de `output/`**:
 
 Detalhe e modelo (produto / loja / snapshot futuro): **`docs/ARCHITECTURE.md`** — ver secções **Contrato dos outputs**, **Decisão arquitetural: modelo híbrido** e **Futuro modelo Postgres**.
 
+Para **consultar dados já importados** no Postgres sem SQL direto: com `DATABASE_URL` no `.env`, corre **`npm run prisma:studio`** (interface web tipo `localhost:5555`; ver **`README.md`**).
+
 ---
 
 ### 4. (Se precisares) Mudar a categoria
