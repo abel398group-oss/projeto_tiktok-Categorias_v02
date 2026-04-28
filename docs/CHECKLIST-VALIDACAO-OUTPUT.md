@@ -1,6 +1,22 @@
 # Validação — output
 
-Ticar: `- [ ]` → `- [x]`
+Como ticar: `- [ ]` → `- [x]`
+
+---
+
+## Prioridade — tarefas de validação (executar sempre que fizer sentido)
+
+_Use esta secção em primeiro lugar: são os passos práticos após **coleta** e/ou **import**._
+
+- [ ] **`npm test`** — regressão de preço/vendas/merge (obrigatório antes de merge se se alterar scraper/normalizador).
+- [ ] **`npm run validate:schemas`** — contrato AJV de `output/dados_produtos.json` e `dados_lojas.json` (precisa dos ficheiros na raiz de `output/`).
+- [ ] **`npm run db:import:output`** (se quiseres base actual) — só depois da coleta; requer `DATABASE_URL`.
+- [ ] **`npm run validate:db-vs-json`** — confirma que o snapshot na base coincide com o JSON actual (via `input_hash` / `ScrapeRun`). Ver `README.md`.
+- [ ] **Analytics (smoke)** — pelo menos `npm run analytics:top-products`; opcionalmente `analytics:new-products`, `analytics:growth`, `analytics:opportunities` (ver `docs/ANALYTICS.md`; *growth* precisa de ≥2 runs com produtos comparáveis).
+- [ ] **`docs/RELATORIO-VALIDACAO.md`** — actualizar **Última validação** quando concluíres uma ronda importante (JSON ↔ BD e/ou amostra site).
+- [ ] **Amostra manual (opcional)** — 1–3 produtos: comparar JSON (ou Studio) com o site TikTok para calibrar diferenças normais de preço/vendas (ver `docs/DATA_POLICY.md`).
+
+---
 
 ## Antes de considerar **mudança de preço** aceitável (revisão de código / merge)
 
@@ -11,6 +27,8 @@ Ticar: `- [ ]` → `- [x]`
 - [ ] Campos numéricos de preço permanecem **number** ou **null** (sem strings involuntárias).
 - [ ] Ficheiro consolidado `output/dados_produtos.json` (multi-categoria) continua o **mesmo schema** de item (só se aplicar a PRs que toquem consolidação).
 
+---
+
 ## Antes de considerar **mudança em vendas** aceitável (revisão de código / merge)
 
 - [ ] `npm test` a passar na totalidade.
@@ -20,7 +38,13 @@ Ticar: `- [ ]` → `- [x]`
 - [ ] **Preço e desconto** permanecem **intocados** (regra de preço e `productRowRichness` para a linha “rica” inalterada para fins de venda, salvo tarefa explícita a outro módulo).
 - [ ] **Schema** de `dados_produtos.json` (campos e tipos) **inalterado** (sem renomear ou remover chaves de contrato sem ADR/ROADMAP).
 
-## dados_produtos.json
+---
+
+## Referência — checklist de campos já validada historicamente `[x]`
+
+_As linhas abaixo documentam uma validação manual anterior por campo (output real). Mantêm-se como **referência**, não obrigam nova verificação linha a linha._
+
+### dados_produtos.json
 
 - [x] JSON ok
 - [x] `coletado_em`
@@ -58,7 +82,7 @@ Ticar: `- [ ]` → `- [x]`
 - [x] `loja_logo_uri`
 - [x] `loja_logo_urls`
 
-## dados_lojas.json
+### dados_lojas.json
 
 - [x] JSON ok
 - [x] `coletado_em`
@@ -76,9 +100,11 @@ Ticar: `- [ ]` → `- [x]`
 - [x] (por loja) `loja_logo_uri`
 - [x] (por loja) `loja_logo_urls`
 
+---
+
 ## Notas
 
-Ressalvas, histórico e observações abertas; a checklist de **dados_produtos** / **dados_lojas** acima fica fechada sem remeter a estas notas em cada linha.
+Ressalvas, histórico e observações abertas; a checklist de campos **[x]** acima fica como **referência** sem remeter a estas notas em cada linha.
 
 **Preço (v1 validado, abril 2026):** validação **manual** em **duas** categorias (com e sem desconto). **Sem desconto:** `preco_original`, `preco_estimado_vitrine` e gaps a `null`, `tem_desconto: false`. **Com desconto:** `preco` e `preco_original` preenchidos, `preco_estimado_vitrine` próximo da UI, `tem_desconto: true`. Pequenas diferenças de **centavos** são toleráveis. O módulo de preço está **estável**; alterações à lógica exigem issue/tarefa e `npm test` (ver `docs/ARCHITECTURE.md` e `docs/ROADMAP.md`). **Futuro (não feito):** score de confiança, `price_source` interno, validação extra com PDP.
 
@@ -86,7 +112,7 @@ Ressalvas, histórico e observações abertas; a checklist de **dados_produtos**
 
 **Fotos da grelha (`fotos`):** de tudo o que analisámos, **2 produtos** saíram com **apenas 1** URL de foto; nos **outros** o array tem **mais** links, como esperado.
 
-**Fotos PDP (`fotos_pdp`):** no output atual **não vem nada** (ou vazio) — o fluxo **ainda não recolhe** a página de produto; campo reservado para **uso futuro** quando houver coleta PDP.
+**Fotos PDP (`fotos_pdp`):** no output actual com coleta PDP, o campo pode vir preenchido; sem PDP, vazio — ver `FLUXO.md` / `PDP_GALLERY`.
 
 **Vendas (v1 aprovada com ressalva, abril 2026):** o merge agora toma o **máximo** de `sales_count` entre colisões do mesmo `product_id`, o que aproximou a UI em muitos casos. **Ainda** podem existir diferenças (métrica parcial/feed vs agregado, SKU, atraso). `vendas` = **melhor esforço**; **não** equivalência certificada com a UI; **não** usar como valor financeiro exato. **Uso:** ranking, tendência, análise. **Futuro (não feito):** `vendas_confianca`, `sales_source`, texto tipo `2,9K`, validação com PDP. Ver `docs/ARCHITECTURE.md` (contrato de vendas).
 
