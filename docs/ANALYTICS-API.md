@@ -5,7 +5,7 @@ Servidor HTTP **read-only** expõe os mesmos dados que os comandos CLI em `npm r
 ## Pré-requisitos
 
 - `DATABASE_URL` no `.env` (Postgres já importado com `npm run db:import:output`).
-- **`ANALYTICS_API_KEY` obrigatória** — servidor não arranca sem ela.
+- **`ANALYTICS_API_KEY` obrigatória como variável activa** (valor não pode estar apenas comentado no `.env`). Os comandos `analytics:*` em CLI só precisam de `DATABASE_URL`; **`npm run analytics:api`** aborta imediatamente sem chave definida — ver `.env.example`.
 
 ## Arranque
 
