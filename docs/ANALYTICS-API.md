@@ -44,10 +44,12 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/new-products` | `npm run analytics:new-products` |
 | GET | `/analytics/growth` | `npm run analytics:growth` |
 | GET | `/analytics/scalable-products` | `npm run analytics:scalable` |
+| GET | `/analytics/category-map` | `npm run analytics:category-map` |
 
 ## Formato de resposta
 
 - **Sucesso com dados:** objecto JSON alinhado ao relatório (ex.: `items`, `scrapeRun`, `top` no score, etc.). Ver `scripts/analytics/lib/*.mjs` para campos exactos.
+- **Escalar** (`scalable-products`): inclui **`validatedToScale`**, **`potentialBets`** e contagens opcionais como **`scoredProductsAnalyzed`** (linhas pontuadas no último run consideradas antes dos cortes dos dois grupos). Ver `scripts/analytics/scalable-products.mjs`.
 - **Sem dados / vazio:** normalmente HTTP **200** com `items: []` ou `top: []` e `message` explicativa (igual às mensagens da CLI).
 - Definições de métricas e limites (top 20, score top 30, etc.): **`docs/ANALYTICS.md`**.
 

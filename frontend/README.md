@@ -27,7 +27,7 @@ Copiar `.env.example` → `.env` e ajustar `VITE_ANALYTICS_API_KEY`.
 
 ## Ecrã
 
-Três separadores: **Top Products**, **Opportunities**, **Product Score**. Botão **Carregar dados** para fazer o pedido ao endpoint da aba actual.
+Cinco separadores — **Top Products**, **Opportunities**, **Product Score**, **Escalar**, **Mapa** (endpoints `/analytics/top-products`, `…/opportunities`, `…/product-score`, `…/scalable-products`, `…/category-map`). Botão **Carregar dados** para fazer o pedido ao endpoint da aba activa.
 
 ## Erro ao carregar: `ECONNREFUSED 127.0.0.1:3333` (terminal do Vite)
 

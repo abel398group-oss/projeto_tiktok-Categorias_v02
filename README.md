@@ -83,6 +83,9 @@ Com `DATABASE_URL` definida:
 | `npm run analytics:growth` | Crescimento de vendas último vs run anterior (até 20; ≥2 runs necessários) |
 | `npm run analytics:opportunities` | Heurística simples de “oportunidade” no último run (até 20) |
 | `npm run analytics:product-score` | Score 0–100 (heurística v1, não gravado) sobre o último run — ver `docs/ANALYTICS.md` |
+| `npm run analytics:decision` | Interpretação rápida do score já calculado (CLI; ver `scripts/analytics/product-decision-cli.mjs`) |
+| `npm run analytics:scalable` | Listas «validados» e «potenciais apostas» a partir do mesmo universo pontuado do último run — ver `docs/ANALYTICS.md` |
+| `npm run analytics:category-map` | Mapa de categorias (último run) — ver `docs/ANALYTICS.md` |
 | `npm run analytics:api` | Servidor HTTP read-only com os mesmos relatórios (chave `ANALYTICS_API_KEY`) — ver **[`docs/ANALYTICS-API.md`](docs/ANALYTICS-API.md)** |
 
 Detalhes, limitações e contrato com `DATA_POLICY`: **[`docs/ANALYTICS.md`](docs/ANALYTICS.md)**.

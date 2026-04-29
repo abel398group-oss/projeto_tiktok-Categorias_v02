@@ -751,9 +751,10 @@ function TableScalableSections({ data }) {
     <IntroCard title='O que é "Escalar" neste painel?'>
       <p style={{ margin: 0 }}>
         <strong>Escalar</strong> significa aumentar esforço comercial num SKU do TikTok Shop — por exemplo criativos/paid,
-        reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo partem do mesmo{" "}
-        <strong>top do score analítico</strong> (até 30 produtos), mas <strong>cortam grupos diferentes</strong>: quem já
-        mostrou tração consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
+        reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo percorrem{" "}
+        <strong>todos os produtos já pontuados nesse scrape</strong> (o mesmo universo do score analítico total, não só os{" "}
+        primeiros da tabela resumida de score), mas <strong>cortam grupos diferentes</strong>: quem já mostrou tração{" "}
+        consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
       </p>
     </IntroCard>
   );

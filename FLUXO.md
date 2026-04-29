@@ -137,9 +137,9 @@ npm run analytics:api
 ```
 
 - Por defeito escuta em **`http://127.0.0.1:3333`** (opcional `ANALYTICS_API_PORT` / `ANALYTICS_API_HOST` no `.env`).
-- Endpoints só leitura: `GET /health`, `GET /analytics/top-products`, `…/opportunities`, `…/product-score`, `…/growth`, `…/new-products` — sempre com **`Authorization: Bearer <ANALYTICS_API_KEY>`** (detalhes em **`docs/ANALYTICS-API.md`**).
+- Endpoints só leitura: `GET /health`, `GET /analytics/top-products`, `…/opportunities`, `…/product-score`, `…/growth`, `…/new-products`, `…/scalable-products`, `…/category-map` — sempre com **`Authorization: Bearer <ANALYTICS_API_KEY>`** (detalhes em **`docs/ANALYTICS-API.md`**).
 
-Para **consultar relatórios no terminal** (sem subir servidor): `npm run analytics:top-products`, `…`, `npm run analytics:product-score`; interpretação extra: **`npm run analytics:decision`** (usa o mesmo score já calculado; ver `scripts/analytics/product-decision-cli.mjs`) · **produtos para escalar**: **`npm run analytics:scalable`** (lista “validados” e “apostas” sobre o mesmo top do score — ver `scripts/analytics/scalable-products.mjs`).
+Para **consultar relatórios no terminal** (sem subir servidor): `npm run analytics:top-products`, `…`, `npm run analytics:product-score`; interpretação extra: **`npm run analytics:decision`** (usa o mesmo score já calculado; ver `scripts/analytics/product-decision-cli.mjs`) · **`npm run analytics:scalable`** (listas «validados» e «potenciais apostas» sobre **todas** as linhas já pontuadas no último import — mesmo universo do score analítico, não só os 30 primeiros do relatório resumido — ver `scripts/analytics/scalable-products.mjs`) · **`npm run analytics:category-map`** (mapa de categorias; ver `scripts/analytics/category-map.mjs`).
 
 ---
 
