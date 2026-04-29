@@ -77,15 +77,29 @@ function SortTh({ label, colKey, sortKey, sortDir, onSort }) {
   );
 }
 
-/** Cabeçalho não ordenável (ex.: link). */
-function PlainTh({ label }) {
+/** Cabeçalho não ordenável (ex.: link ou # posição). */
+function PlainTh({ label, title }) {
   return (
-    <th scope="col" role="columnheader" style={{ padding: "0.4rem 0.5rem", verticalAlign: "middle" }}>
+    <th
+      scope="col"
+      role="columnheader"
+      title={title}
+      style={{ padding: "0.4rem 0.5rem", verticalAlign: "middle", width: label === "#" ? "2.5rem" : undefined }}
+    >
       {label}
     </th>
   );
 }
 
+/** Linha inicial: número 1-based na ordenação atual. */
+const tdPosStyle = {
+  textAlign: "right",
+  padding: "0.35rem 0.65rem",
+  width: "2.65rem",
+  fontVariantNumeric: "tabular-nums",
+  opacity: 0.9
+};
+const positionThTitle = "Posição na ordenação atual (1, 2, 3…)";
 /** Caixa introdutória (mesmo padrão visual da aba Escalar). */
 function IntroCard({ title, children }) {
   return (
@@ -196,6 +210,7 @@ function TableTop({ data }) {
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
+            <PlainTh label="#" title={positionThTitle} />
             <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="loja" colKey="loja" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="preço" colKey="preco" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
@@ -207,6 +222,7 @@ function TableTop({ data }) {
         <tbody>
           {items.map((row, i) => (
             <tr key={`${row.productId}-${i}`}>
+              <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.nome}</td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
@@ -297,6 +313,7 @@ function TableOpp({ data }) {
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
+            <PlainTh label="#" title={positionThTitle} />
             <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="loja" colKey="loja" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="preço" colKey="preco" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
@@ -309,6 +326,7 @@ function TableOpp({ data }) {
         <tbody>
           {items.map((row, i) => (
             <tr key={`${row.productId}-${i}`}>
+              <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.nome}</td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
@@ -403,6 +421,7 @@ function TableScore({ data }) {
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
+            <PlainTh label="#" title={positionThTitle} />
             <SortTh label="score" colKey="score" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="classificação" colKey="classific" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
             <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
@@ -417,6 +436,7 @@ function TableScore({ data }) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={`${row.productId}-${i}`}>
+              <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.score}</td>
               <td>{row.classific}</td>
               <td>{row.nome}</td>
@@ -612,6 +632,7 @@ function TableCategoryMap({ data }) {
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
         <thead>
           <tr>
+            <PlainTh label="#" title={positionThTitle} />
             <SortTh label="mestre" colKey="masterName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
             <SortTh label="categoria · ID" colKey="subName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
             <SortTh label="score" colKey="score" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
@@ -624,10 +645,11 @@ function TableCategoryMap({ data }) {
           </tr>
         </thead>
         <tbody>
-          {sortedSubcats.map((row) => {
+          {sortedSubcats.map((row, idx) => {
             const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
             return (
               <tr key={row._key}>
+                <td style={{ ...tdStyle, ...tdPosStyle }}>{idx + 1}</td>
                 <td style={tdStyle}>{mestre}</td>
                 <td style={tdStyle}>{categoria}</td>
               <td style={tdStyle}>{row.score}</td>
@@ -654,6 +676,7 @@ function TableCategoryMap({ data }) {
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
+            <PlainTh label="#" title={positionThTitle} />
             <SortTh label="mestre" colKey="masterName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
             <SortTh label="categoria · ID" colKey="subName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
             <SortTh label="nome" colKey="nome" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
@@ -670,6 +693,7 @@ function TableCategoryMap({ data }) {
             const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
             return (
               <tr key={row.rowKey || i}>
+                <td style={{ ...tdStyle, ...tdPosStyle }}>{i + 1}</td>
                 <td style={tdStyle}>{mestre}</td>
                 <td style={tdStyle}>{categoria}</td>
                 <td style={tdStyle}>{row.nome}</td>
@@ -792,6 +816,7 @@ function TableScalableSections({ data }) {
   const renderRows = (list) =>
     list.map((row, i) => (
       <tr key={`${row.productId}-${i}`}>
+        <td style={tdPosStyle}>{i + 1}</td>
         <td>{row.nome}</td>
         <td>{row.score}</td>
         <td>{row.vendas ?? "—"}</td>
@@ -840,6 +865,7 @@ function TableScalableSections({ data }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
+                  <PlainTh label="#" title={positionThTitle} />
                   <SortTh label="nome" colKey="nome" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
                   <SortTh label="score" colKey="score" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
                   <SortTh label="vendas" colKey="vendas" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
@@ -871,6 +897,7 @@ function TableScalableSections({ data }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
+                  <PlainTh label="#" title={positionThTitle} />
                   <SortTh label="nome" colKey="nome" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
                   <SortTh label="score" colKey="score" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
                   <SortTh label="vendas" colKey="vendas" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
