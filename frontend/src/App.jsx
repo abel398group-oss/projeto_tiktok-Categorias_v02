@@ -282,6 +282,8 @@ function TableScalableSections({ data }) {
   const rawV = data?.validatedToScale ?? [];
   const rawP = data?.potentialBets ?? [];
 
+  const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
+
   const [sortVal, setSortVal] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
   const [sortPot, setSortPot] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
 
@@ -308,6 +310,17 @@ function TableScalableSections({ data }) {
     return <p style={{ opacity: 0.85 }}>{data.message}</p>;
   }
 
+  const pill = (active) => ({
+    padding: "0.4rem 0.95rem",
+    cursor: "pointer",
+    borderRadius: 8,
+    border: active ? "2px solid #6ec4ff" : "1px solid #38444d",
+    background: active ? "#22303c" : "#16212b",
+    color: "#e7e9ea",
+    fontWeight: active ? 600 : 400,
+    fontSize: "0.85rem"
+  });
+
   const renderRows = (list) =>
     list.map((row, i) => (
       <tr key={`${row.productId}-${i}`}>
@@ -329,43 +342,100 @@ function TableScalableSections({ data }) {
 
   return (
     <>
-      <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-        Cada tabela ordena de forma independente; clique nos cabeçalhos (menos <strong>link</strong>).
+      <section
+        style={{
+          marginBottom: "1rem",
+          padding: "0.85rem 1rem",
+          borderRadius: 10,
+          border: "1px solid #38444d",
+          background: "#15202b"
+        }}
+      >
+        <h2 style={{ fontSize: "0.98rem", fontWeight: 600, margin: "0 0 0.5rem 0" }}>
+          O que é &quot;Escalar&quot; neste painel?
+        </h2>
+        <p style={{ fontSize: "0.8rem", opacity: 0.9, margin: 0, lineHeight: 1.55 }}>
+          <strong>Escalar</strong> significa aumentar esforço comercial num SKU do TikTok Shop — por exemplo criativos/paid,
+          reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo partem do mesmo{" "}
+          <strong>top do score analítico</strong> (até 30 produtos), mas <strong>cortam grupos diferentes</strong>: quem já
+          mostrou tração consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
+        </p>
+      </section>
+
+      <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.65rem" }}>
+        Clique num separador para ver só uma lista. Cada uma ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
+        <strong>link</strong>).
       </p>
-      <h2 style={{ fontSize: "1rem", marginTop: "1rem", marginBottom: "0.5rem" }}>1) Validados para escalar</h2>
-      {rawV.length === 0 ? (
-        <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;validados&quot;.</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <SortTh label="nome" colKey="nome" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-              <SortTh label="score" colKey="score" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-              <SortTh label="vendas" colKey="vendas" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-              <SortTh label="rating" colKey="rating" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-              <PlainTh label="link" />
-            </tr>
-          </thead>
-          <tbody>{renderRows(v)}</tbody>
-        </table>
+
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+        <button type="button" style={pill(scaleView === "validated")} onClick={() => setScaleView("validated")}>
+          1 · Validados para escalar ({rawV.length})
+        </button>
+        <button type="button" style={pill(scaleView === "potential")} onClick={() => setScaleView("potential")}>
+          2 · Apostas com potencial ({rawP.length})
+        </button>
+      </div>
+
+      {scaleView === "validated" && (
+        <section style={{ padding: "0 0 1rem 0" }}>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+            Validados para escalar — escalar quê?
+          </h3>
+          <p style={{ fontSize: "0.8rem", opacity: 0.88, margin: "0 0 1rem 0", lineHeight: 1.55, maxWidth: "58rem" }}>
+            Aqui tratamos de produtos já com <strong>volume de vendas demonstrado no feed</strong>{" "}
+            (<strong>300 a 3&nbsp;000</strong> unidades no snapshot), <strong>avaliação média ≥ 4,3</strong>,{" "}
+            <strong>score ≥ 55</strong> e <strong>preço válido</strong>. A ideia de &quot;escalar&quot; é aumentar canal,
+            margem ou repetição de campanhas <strong>com menos incerteza</strong> do que um artigo novo: são os primeiros candidatos se
+            quiseres intensificar peso do catálogo.
+          </p>
+          {rawV.length === 0 ? (
+            <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;validados&quot;.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <SortTh label="nome" colKey="nome" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
+                  <SortTh label="score" colKey="score" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
+                  <SortTh label="vendas" colKey="vendas" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
+                  <SortTh label="rating" colKey="rating" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
+                  <PlainTh label="link" />
+                </tr>
+              </thead>
+              <tbody>{renderRows(v)}</tbody>
+            </table>
+          )}
+        </section>
       )}
 
-      <h2 style={{ fontSize: "1rem", marginTop: "1.25rem", marginBottom: "0.5rem" }}>2) Apostas com potencial</h2>
-      {rawP.length === 0 ? (
-        <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;apostas&quot;.</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <SortTh label="nome" colKey="nome" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-              <SortTh label="score" colKey="score" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-              <SortTh label="vendas" colKey="vendas" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-              <SortTh label="rating" colKey="rating" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-              <PlainTh label="link" />
-            </tr>
-          </thead>
-          <tbody>{renderRows(p)}</tbody>
-        </table>
+      {scaleView === "potential" && (
+        <section style={{ padding: "0 0 1rem 0" }}>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+            Apostas com potencial — apostar em quê?
+          </h3>
+          <p style={{ fontSize: "0.8rem", opacity: 0.88, margin: "0 0 1rem 0", lineHeight: 1.55, maxWidth: "58rem" }}>
+            Neste bloco, <strong>&quot;escalar&quot; é gradual</strong>: são SKUs com{" "}
+            <strong>vendas ainda típicas de arranque</strong> (<strong>10 a 300</strong>), mas com{" "}
+            <strong>rating alto</strong> (média <strong>≥ 4,5</strong>, pelo menos <strong>5 avaliações</strong>) e{" "}
+            <strong>score ≥ 45</strong>. Servem como <strong>banco de apostas</strong>: testar creatives e stock antes do
+            nível dos validados — o rótulo diz respeito a <strong>crescimento eventual</strong>, não a garantia métrica.
+          </p>
+          {rawP.length === 0 ? (
+            <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;apostas&quot;.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <SortTh label="nome" colKey="nome" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
+                  <SortTh label="score" colKey="score" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
+                  <SortTh label="vendas" colKey="vendas" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
+                  <SortTh label="rating" colKey="rating" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
+                  <PlainTh label="link" />
+                </tr>
+              </thead>
+              <tbody>{renderRows(p)}</tbody>
+            </table>
+          )}
+        </section>
       )}
     </>
   );
