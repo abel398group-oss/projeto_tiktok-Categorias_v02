@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { apiFetch } from "./api.js";
 import { mapCategoryTableLabels } from "./mapCategoryUi.js";
+import { ColumnResizeGrip, useColumnWidths } from "./useColumnWidths.jsx";
 import {
   sortMapSubcatsByColumn,
   sortMapTopProductsByColumn,
@@ -24,8 +25,9 @@ const tabs = [
  * Cabeçalho ordenável (▲▼ quando activo, ↕ quando inactivo).
  * @param {{ label: string, colKey: string, sortKey: string, sortDir: SortDir, onSort: (k: string) => void }} props
  */
-function SortTh({ label, colKey, sortKey, sortDir, onSort }) {
+function SortTh({ label, colKey, sortKey, sortDir, onSort, resizeColIdx, onGrip }) {
   const active = sortKey === colKey;
+  const resize = resizeColIdx != null && onGrip;
   return (
     <th
       scope="col"
@@ -38,7 +40,10 @@ function SortTh({ label, colKey, sortKey, sortDir, onSort }) {
         borderBottom: active ? "2px solid #6ec4ff" : undefined,
         verticalAlign: "middle",
         padding: "0.4rem 0.5rem",
-        boxSizing: "border-box"
+        paddingRight: resize ? "0.65rem" : "0.5rem",
+        boxSizing: "border-box",
+        position: resize ? "relative" : undefined,
+        overflow: "hidden"
       }}
       onClick={() => onSort(colKey)}
       onKeyDown={(e) => {
@@ -73,20 +78,29 @@ function SortTh({ label, colKey, sortKey, sortDir, onSort }) {
           {active ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : "\u2195"}
         </span>
       </div>
+      {resize ? <ColumnResizeGrip onMouseDown={onGrip(resizeColIdx)} /> : null}
     </th>
   );
 }
 
 /** Cabeçalho não ordenável (ex.: link ou # posição). */
-function PlainTh({ label, title }) {
+function PlainTh({ label, title, resizeColIdx, onGrip }) {
+  const resize = resizeColIdx != null && onGrip;
   return (
     <th
       scope="col"
       role="columnheader"
       title={title}
-      style={{ padding: "0.4rem 0.5rem", verticalAlign: "middle", width: label === "#" ? "2.5rem" : undefined }}
+      style={{
+        padding: "0.4rem 0.5rem",
+        paddingRight: resize ? "0.65rem" : "0.5rem",
+        verticalAlign: "middle",
+        position: resize ? "relative" : undefined,
+        overflow: "hidden"
+      }}
     >
       {label}
+      {resize ? <ColumnResizeGrip onMouseDown={onGrip(resizeColIdx)} /> : null}
     </th>
   );
 }
@@ -138,6 +152,14 @@ const SORT_SCALE_DESC = ["score", "vendas", "rating"];
 const SORT_MAP_SUB_DESC = ["score", "totalSales", "avgRating", "avgPrice", "totalProducts", "opportunities"];
 const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 
+/** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
+const CW_TOP = [52, 210, 150, 80, 90, 100, 76];
+const CW_OPP = [52, 200, 150, 80, 90, 100, 148, 76];
+const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 76];
+const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
+const CW_MAP_TOP = [52, 120, 200, 200, 64, 90, 80, 80, 76, 76];
+const CW_SCALE = [52, 220, 64, 90, 100, 76];
+
 /** Aceita só arrays; evita crash se a API devolver object ou outro tipo onde esperamos lista. */
 function asArray(x) {
   return Array.isArray(x) ? x : [];
@@ -145,16 +167,21 @@ function asArray(x) {
 
 function TableTop({ data }) {
   const rawItems = asArray(data?.items);
+  const colW = useColumnWidths(CW_TOP);
 
   const topIntro = (
     <IntroCard title='O que é "Top Products"?'>
       <p style={{ margin: "0 0 0.6rem 0" }}>
-        Lista os SKU com maior <strong>volume de vendas declarado</strong> na <strong>última coleta importada</strong>. O
-        servidor devolve até <strong>20</strong> linhas ordenadas por <strong>vendas (desc.)</strong>; na tabela podes{" "}
-        <strong>reordenar por outra coluna</strong> (preço, nome, etc.) só para leitura no ecrã.
+        Esta lista mostra os <strong>produtos (SKU) com mais vendas anunciadas</strong> segundo os dados da{" "}
+        <strong>última vez que importaste a coleta</strong> para a base. O TikTok apresenta um número de vendas no anúncio;
+        aqui usamos esse valor para montar um <strong>ranking por vendas do maior para o menor</strong>, com no máximo{" "}
+        <strong>20</strong> linhas. Se quiseres comparar de outra forma, podes <strong>clicar nos títulos das colunas</strong>{" "}
+        (por exemplo preço ou nome) — isso só muda a ordem <strong>no ecrã</strong>, não altera os dados na base.
       </p>
       <p style={{ margin: 0 }}>
-        Mostra nome, loja, preço, vendas e rating desse snapshot — ranking factual da base, não previsão comercial.
+        Vês <strong>nome do produto, loja, preço, vendas anunciadas e avaliações</strong> conforme foram gravados nessa atualização — é uma
+        foto do que está guardado no sistema. <strong>Não é sugestão de compra nem previsão de vendas</strong>; apenas o ranking com base nos
+        números que vieram na importação mais recente.
       </p>
     </IntroCard>
   );
@@ -205,18 +232,60 @@ function TableTop({ data }) {
       {topIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como na API). Altere clicando nos
-        cabeçalhos — não ordenamos <strong>link</strong>.
+        cabeçalhos — não ordenamos <strong>link</strong>.{" "}
+        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
-            <PlainTh label="#" title={positionThTitle} />
-            <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="loja" colKey="loja" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="preço" colKey="preco" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="vendas" colKey="vendas" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="rating" colKey="rating" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <PlainTh label="link" />
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+            <SortTh
+              label="nome"
+              colKey="nome"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={1}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="loja"
+              colKey="loja"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="preço"
+              colKey="preco"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="vendas"
+              colKey="vendas"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={4}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="rating"
+              colKey="rating"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={5}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -247,6 +316,7 @@ function TableTop({ data }) {
 
 function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
+  const colW = useColumnWidths(CW_OPP);
 
   const oppIntro = (
     <IntroCard title='O que é "Opportunities" (oportunidades)?'>
@@ -308,19 +378,69 @@ function TableOpp({ data }) {
       {oppIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> (critério principal aqui).
-        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong>.
+        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong>.{" "}
+        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
-            <PlainTh label="#" title={positionThTitle} />
-            <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="loja" colKey="loja" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="preço" colKey="preco" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="vendas" colKey="vendas" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="rating" colKey="avalMed" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="motivo" colKey="motivo" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <PlainTh label="link" />
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+            <SortTh
+              label="nome"
+              colKey="nome"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={1}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="loja"
+              colKey="loja"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="preço"
+              colKey="preco"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="vendas"
+              colKey="vendas"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={4}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="rating"
+              colKey="avalMed"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={5}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="motivo"
+              colKey="motivo"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={6}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={7} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -354,6 +474,7 @@ function TableOpp({ data }) {
 
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
+  const colW = useColumnWidths(CW_SCORE);
 
   const scoreIntro = (
     <IntroCard title='O que é "Product Score" (score do produto)?'>
@@ -416,21 +537,87 @@ function TableScore({ data }) {
       {scoreIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
-        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z.
+        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z.{" "}
+        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
-            <PlainTh label="#" title={positionThTitle} />
-            <SortTh label="score" colKey="score" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="classificação" colKey="classific" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="nome" colKey="nome" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="loja" colKey="loja" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="preço" colKey="preco" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="vendas" colKey="vendas" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="rating" colKey="rating" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <SortTh label="delta" colKey="delta" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
-            <PlainTh label="link" />
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+            <SortTh
+              label="score"
+              colKey="score"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={1}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="classificação"
+              colKey="classific"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="nome"
+              colKey="nome"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="loja"
+              colKey="loja"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={4}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="preço"
+              colKey="preco"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={5}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="vendas"
+              colKey="vendas"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={6}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="rating"
+              colKey="rating"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={7}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="delta"
+              colKey="delta"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={8}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -464,6 +651,8 @@ function TableScore({ data }) {
 
 function TableCategoryMap({ data }) {
   const masters = asArray(data?.masterCategories);
+  const colWSub = useColumnWidths(CW_MAP_SUB);
+  const colWTop = useColumnWidths(CW_MAP_TOP);
 
   const mapIntro = (
     <IntroCard title='O que é o "Mapa de categoria"?'>
@@ -627,21 +816,95 @@ function TableCategoryMap({ data }) {
         <strong>Ordem inicial (subcategorias):</strong> <strong>score</strong> médio da sub da maior para a menor.
         Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
         <strong>classificação</strong> em A→Z.{" "}
-        {data.scoreMethod ? <span style={{ opacity: 0.88 }}>{data.scoreMethod}</span> : null}
+        {data.scoreMethod ? <span style={{ opacity: 0.88 }}>{data.scoreMethod}</span> : null}.{" "}
+        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
+        <colgroup>{colWSub.colElements}</colgroup>
         <thead>
           <tr>
-            <PlainTh label="#" title={positionThTitle} />
-            <SortTh label="mestre" colKey="masterName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="categoria · ID" colKey="subName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="score" colKey="score" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="classificação" colKey="classification" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="produtos" colKey="totalProducts" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="vendas (Σ)" colKey="totalSales" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="rating méd." colKey="avgRating" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="preço méd." colKey="avgPrice" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="oport." colKey="opportunities" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colWSub.onGripMouseDown} />
+            <SortTh
+              label="mestre"
+              colKey="masterName"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={1}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="categoria · ID"
+              colKey="subName"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={2}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="score"
+              colKey="score"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={3}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="classificação"
+              colKey="classification"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={4}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="produtos"
+              colKey="totalProducts"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={5}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="vendas (Σ)"
+              colKey="totalSales"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={6}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="rating méd."
+              colKey="avgRating"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={7}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="preço méd."
+              colKey="avgPrice"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={8}
+              onGrip={colWSub.onGripMouseDown}
+            />
+            <SortTh
+              label="oport."
+              colKey="opportunities"
+              sortKey={sortSub.key}
+              sortDir={sortSub.dir}
+              onSort={onSortSub}
+              resizeColIdx={9}
+              onGrip={colWSub.onGripMouseDown}
+            />
           </tr>
         </thead>
         <tbody>
@@ -672,20 +935,88 @@ function TableCategoryMap({ data }) {
         <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor nesta listagem combinada.
         Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
         <strong>nome</strong> em A→Z. O link não é ordenável.
+        <span style={{ opacity: 0.85, display: "block", marginTop: "0.25rem" }}>
+          Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
+        </span>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <colgroup>{colWTop.colElements}</colgroup>
         <thead>
           <tr>
-            <PlainTh label="#" title={positionThTitle} />
-            <SortTh label="mestre" colKey="masterName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="categoria · ID" colKey="subName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="nome" colKey="nome" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="score" colKey="score" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="vendas" colKey="vendas" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="rating" colKey="rating" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="preço" colKey="preco" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="Δ vendas" colKey="delta" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <PlainTh label="link" />
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colWTop.onGripMouseDown} />
+            <SortTh
+              label="mestre"
+              colKey="masterName"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={1}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="categoria · ID"
+              colKey="subName"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={2}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="nome"
+              colKey="nome"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={3}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="score"
+              colKey="score"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={4}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="vendas"
+              colKey="vendas"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={5}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="rating"
+              colKey="rating"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={6}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="preço"
+              colKey="preco"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={7}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="Δ vendas"
+              colKey="delta"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={8}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={9} onGrip={colWTop.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -723,6 +1054,7 @@ function TableCategoryMap({ data }) {
 function TableScalableSections({ data }) {
   const rawV = asArray(data?.validatedToScale);
   const rawP = asArray(data?.potentialBets);
+  const colW = useColumnWidths(CW_SCALE);
 
   const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
 
@@ -764,7 +1096,8 @@ function TableScalableSections({ data }) {
       Clique num separador para ver só uma lista. Cada lista ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
       <strong>link</strong>).{" "}
       <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor — para <strong>vendas</strong> e{" "}
-      <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z.
+      <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z. Arraste a borda entre
+      colunas nos cabeçalhos para ajustar a largura.
     </p>
   );
 
@@ -863,15 +1196,48 @@ function TableScalableSections({ data }) {
           {rawV.length === 0 ? (
             <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;validados&quot;.</p>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+              <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>
-                  <PlainTh label="#" title={positionThTitle} />
-                  <SortTh label="nome" colKey="nome" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-                  <SortTh label="score" colKey="score" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-                  <SortTh label="vendas" colKey="vendas" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-                  <SortTh label="rating" colKey="rating" sortKey={sortVal.key} sortDir={sortVal.dir} onSort={onSortV} />
-                  <PlainTh label="link" />
+                  <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+                  <SortTh
+                    label="nome"
+                    colKey="nome"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={1}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="score"
+                    colKey="score"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={2}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="vendas"
+                    colKey="vendas"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={3}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="rating"
+                    colKey="rating"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={4}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={5} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(v)}</tbody>
@@ -895,15 +1261,48 @@ function TableScalableSections({ data }) {
           {rawP.length === 0 ? (
             <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;apostas&quot;.</p>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+              <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>
-                  <PlainTh label="#" title={positionThTitle} />
-                  <SortTh label="nome" colKey="nome" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-                  <SortTh label="score" colKey="score" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-                  <SortTh label="vendas" colKey="vendas" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-                  <SortTh label="rating" colKey="rating" sortKey={sortPot.key} sortDir={sortPot.dir} onSort={onSortP} />
-                  <PlainTh label="link" />
+                  <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+                  <SortTh
+                    label="nome"
+                    colKey="nome"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={1}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="score"
+                    colKey="score"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={2}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="vendas"
+                    colKey="vendas"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={3}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="rating"
+                    colKey="rating"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={4}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={5} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(p)}</tbody>
