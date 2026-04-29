@@ -1,0 +1,114 @@
+# Relatórios Analytics – regras técnicas (programador)
+
+Documento só de **consulta**. Reflete o estado do código nos módulos indicados (leitura Prisma ou agregações em memória). **Sem escrita na base.**
+
+Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Product Score) e **`docs/ANALYTICS-API.md`** (HTTP).
+
+---
+
+## Definições comuns
+
+- **Último run:** `ScrapeRun` ordenado por `created_at` descendente (`scripts/analytics/_common.mjs` → `getLatestAndPreviousRun`).
+- Os endpoints devolvem só leitura; o painel só invoca estas rotas ou equivalentes CLI.
+
+---
+
+## Top Products (`/analytics/top-products`)
+
+| O quê | Ficheiros |
+|-------|-----------|
+| Fonte | `scripts/analytics/lib/top-products.mjs` → `getTopProductsReport` |
+
+**Regra**
+
+- Produtos (`ProductSnapshot`) do **último** `ScrapeRun` com **`sales_count` não nulo**.
+- **`orderBy: sales_count desc`**, **`take: 20`** (`MAX_ROWS`).
+
+**Não há** filtro por desconto, categoria nem loja neste relatório.
+
+---
+
+## Opportunities (`/analytics/opportunities`)
+
+| | |
+|--|--|
+| Fonte | `scripts/analytics/lib/opportunities.mjs` |
+
+**Último run**, `ProductSnapshot`:
+
+- `price` não nulo  
+- `rating_average >= 4.5`  
+- `rating_total >= 5`  
+- `sales_count >= 10` e `<= 300`
+
+**Ordem servidor:** média descendente → vendas descendente (`take` 20).
+
+---
+
+## Product Score (`/analytics/product-score`)
+
+| | |
+|--|--|
+| Fonte | `scripts/analytics/lib/product-score.mjs` |
+
+**Todos** os snapshots do último run; pontuações 0–100 **em memória** (ver pesos/blocos na tabela de `docs/ANALYTICS.md`). Após ordenar por score descendente expõe **até 30** linhas ao cliente (`TOP_LIMIT`).  
+Função exportada também usada pelo mapa como `computeProductScoreLine` (**mesmos pesos**, sem duplicação manual de fórmulas).
+
+Para **Δ vendas**, necessita dois runs comparáveis com `sales_count` nos dois onde aplicável (`previousRun` nas respostas JSON).
+
+---
+
+## Escalar (`/analytics/scalable-products`)
+
+| | |
+|--|--|
+| Fonte | `scripts/analytics/scalable-products.mjs` |
+
+**Entrada obrigatória:** resultado de `getProductScoreReport(prisma)`, ou seja, só trabalha sobre o **`top`** já limitado aos **melhores 30 scores**.
+
+**Globais (ignora linha)**
+
+- Sem preço válido (`price` não numérico / `<= 0`)  
+- Vendas declaradas **`> 10_000`**  
+- Média de rating extraída do texto **`&lt; 4`**
+
+Depois avalia cada item (na ordem: **Validados primeiro**, depois só se não entrar lá **Apostas**):
+
+| Lista | Critérios (após filtros globais) |
+|--------|----------------------------------|
+| **Validados para escalar** | `300 ≤ vendas ≤ 3000`, média rating `≥ 4.3`, `score ≥ 55` |
+| **Apostas com potencial** | `10 ≤ vendas ≤ 300`, média `≥ 4.5`, `≥ 5 aval` no texto parsado do rating, `score ≥ 45` |
+
+Implementação faz parse do string `rating` do score (primeiro número + `\((n) aval`).
+
+---
+
+## Mapa (`/analytics/category-map`)
+
+| | |
+|--|--|
+| Fonte | `scripts/analytics/category-map.mjs` |
+
+- **Todos** os snapshots do **último** run (+ histórico de vendas anterior para delta no score igual ao Product Score).
+
+**Árvore esperada**
+
+- `Product.categoryUrl` → **`parseCategory`**: antes de despachar, strings com **slashes “com espaços”** típicos de cópias (ex. `shop.tiktok.com / br / c / …`) são **reunidas** num path de URL; breadcrumbs com ` / ` (com espaços) só quando **não** parecem URL; nunca tratar o primeiro segmento `https:` sozinho como mestre; **URLs TikTok Shop** (`…/c/<slug>/<id>`…) → slugs humanizados após `/c/`; o último segmento numérico é o **ID TikTok** da pasta e aparece na etiqueta **`nomeLegível · ID`** (sem query `?…`, sem mostrar o URL completo); com vários slugs, o último nome fica na sub e os anteriores na mestre, separados por ·; demais HTTPS → host + último segmento nomeável no path.
+
+**Por subcategoria**
+
+- Agrupa snaps; **score da sub** = **média arredondada** dos scores `computeProductScoreLine` desses produtos.  
+- Totais: soma vendas (numéricas), médias rating/preço onde existem dados, conta `isOpportunityV1` igual ao último valor `pontosOportunidade === 15` no score individual.
+- **`topProducts`:** até **`TOP_PRODUCTS_PER_SUB`** (actualmente **5**) por sub, ordenados só por score **desc** no servidor.
+- Mastres ordenadas pelo maior score de sub dentro; subs por score descendente.
+
+---
+
+## API & UI
+
+- **Autenticação:** `Authorization: Bearer` ou `x-api-key` — `scripts/analytics/server.mjs`.
+- Comportamento de ordenação **no cliente** (primeiro clique em métricas “desc” onde aplicável) está em **`frontend/src/App.jsx`** (`toggleSort`) e **`frontend/src/sortUtils.js`**; não altera valores servidos pela API.
+
+**Manutenção**
+
+- Ao mudar filtros nestes relatórios, atualizar **este documento**, `docs/ANALYTICS.md` se aplicável, e texto do painel só se mudar comunicação ao utilizador (ver regra **`frontend-analytics-ui`**).

@@ -11,8 +11,9 @@ globs:
 - **Nova aba ou componente tabular**: manter **o mesmo nível visual** das abas já existentes (Top, Opp, Score, Escalar).
 - **Estrutura recomendável** sempre que cabível:
   1. `IntroCard` com **dois `<p>`** (primeiro margem inferior `0.6rem`, segundo margem `0`), como nas outras secções.
-  2. Bloco **`Ordem inicial:`** logo abaixo, com **`fontSize: "0.75rem"`**, **`opacity: 0.7`**, **`marginBottom: "0.5rem"`**, explicando critério e excepções (`link` não ordenável quando aplicável).
+  2. Bloco **`Ordem inicial:`** logo abaixo (ou equivalente), com **`fontSize: "0.75rem"`**, **`opacity: 0.7`**, **`marginBottom: "0.5rem"`**, explicando critério e excepções (`link` não ordenável quando aplicável). **Mostrar Intro + estes textos mesmo antes de haver resposta da API** (`data == null`); só então a linha “Carregue…” / tabela ou mensagem de erro.
   3. **Tabela única principal** `<table style={{ width: "100%", borderCollapse: "collapse" }}>` com **`SortTh`** onde fizer sentido e **`PlainTh`** só para links ou colunas estritamente estáticas.
 - **Separações adicionais** (ex.: segundo bloco de dados): usar subtítulo opcional **`h3`** igual ao Escalar (`font-size` ~`0.95rem`, peso `600`, cor `#eaf2f9`, ídem margens), novo parágrafos de ajuda **`0.75rem`/`0.7`**, depois segunda tabela.
 - **Ordinação cliente**: usar `toggleSort` + lista `desc` para métricas “maior = melhor” e primeiro clique ascendente para nome/texto quando alinhado às restantes abas; funções específicas de sort em **`sortUtils.js`** se o formato das linhas for novo (`sortMapSubcatsByColumn`, etc.).
 - **Evitar** cartões paralelos só para este relatório quando as outras abas já usam tabela única por secção — preferir lista tabular clicável ao padrão comum salvo quando o conteúdo exigir claramente outro formato (diagramas, apenas).
+- **Regras de negócio / backend** dos relatórios: ver **`docs/ANALYTICS-RELATORIOS-REGRAS.md`** (mantê-lo alinhado ao código ao alterar filtros).

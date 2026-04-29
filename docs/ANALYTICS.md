@@ -106,5 +106,6 @@ Reflexo do que contribuiu (ex.: vendas fortes, boa avaliação, preço válido, 
 ## Ver também
 
 - `README.md` — comandos npm
+- **`docs/ANALYTICS-RELATORIOS-REGRAS.md`** — regras técnicas consolidadas (painel + Escalar + Mapa), para programadores
 - **`docs/ANALYTICS-API.md`** — servidor HTTP (`npm run analytics:api`) expondo os mesmos relatórios
 - `docs/ROADMAP.md` — tarefas e evoluções previstas

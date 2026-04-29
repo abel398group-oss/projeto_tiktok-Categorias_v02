@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { apiFetch } from "./api.js";
+import { mapCategoryTableLabels } from "./mapCategoryUi.js";
 import {
   sortMapSubcatsByColumn,
   sortMapTopProductsByColumn,
@@ -130,19 +131,6 @@ function asArray(x) {
 
 function TableTop({ data }) {
   const rawItems = asArray(data?.items);
-  /** Alinhado ao relatório Top: primeiro por vendas, maior→menor. */
-  const [sort, setSort] = useState(() => ({ key: "vendas", dir: /** @type {SortDir} */ ("desc") }));
-
-  const items = useMemo(() => {
-    if (rawItems.length === 0) return [];
-    return sortTopItemsByColumn(rawItems, sort.key, sort.dir);
-  }, [rawItems, sort]);
-
-  const onSort = useCallback((k) => {
-    setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
-  }, []);
-
-  if (data == null) return <p style={{ opacity: 0.75 }}>Carregue os dados com o botão acima.</p>;
 
   const topIntro = (
     <IntroCard title='O que é "Top Products"?'>
@@ -156,6 +144,31 @@ function TableTop({ data }) {
       </p>
     </IntroCard>
   );
+
+  /** Alinhado ao relatório Top: primeiro por vendas, maior→menor. */
+  const [sort, setSort] = useState(() => ({ key: "vendas", dir: /** @type {SortDir} */ ("desc") }));
+
+  const items = useMemo(() => {
+    if (rawItems.length === 0) return [];
+    return sortTopItemsByColumn(rawItems, sort.key, sort.dir);
+  }, [rawItems, sort]);
+
+  const onSort = useCallback((k) => {
+    setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
+  }, []);
+
+  if (data == null) {
+    return (
+      <>
+        {topIntro}
+        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
+          <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como quando a API responde). Altere
+          clicando nos cabeçalhos — não ordenamos <strong>link</strong>.
+        </p>
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
+      </>
+    );
+  }
 
   if (data?.message && rawItems.length === 0) {
     return (
@@ -218,19 +231,6 @@ function TableTop({ data }) {
 
 function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
-  /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
-  const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
-
-  const items = useMemo(() => {
-    if (rawItems.length === 0) return [];
-    return sortOppItemsByColumn(rawItems, sort.key, sort.dir);
-  }, [rawItems, sort]);
-
-  const onSort = useCallback((k) => {
-    setSort((s) => toggleSort(s.key, s.dir, k, SORT_OPP_DESC));
-  }, []);
-
-  if (data == null) return <p style={{ opacity: 0.75 }}>Carregue os dados com o botão acima.</p>;
 
   const oppIntro = (
     <IntroCard title='O que é "Opportunities" (oportunidades)?'>
@@ -245,6 +245,31 @@ function TableOpp({ data }) {
       </p>
     </IntroCard>
   );
+
+  /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
+  const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
+
+  const items = useMemo(() => {
+    if (rawItems.length === 0) return [];
+    return sortOppItemsByColumn(rawItems, sort.key, sort.dir);
+  }, [rawItems, sort]);
+
+  const onSort = useCallback((k) => {
+    setSort((s) => toggleSort(s.key, s.dir, k, SORT_OPP_DESC));
+  }, []);
+
+  if (data == null) {
+    return (
+      <>
+        {oppIntro}
+        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
+          <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> quando houver dados.
+          Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong>.
+        </p>
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
+      </>
+    );
+  }
 
   if (data?.message && rawItems.length === 0) {
     return (
@@ -311,18 +336,6 @@ function TableOpp({ data }) {
 
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
-  const [sort, setSort] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
-
-  const rows = useMemo(() => {
-    if (rawRows.length === 0) return [];
-    return sortScoreRowsByColumn(rawRows, sort.key, sort.dir);
-  }, [rawRows, sort]);
-
-  const onSort = useCallback((k) => {
-    setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
-  }, []);
-
-  if (data == null) return <p style={{ opacity: 0.75 }}>Carregue os dados com o botão acima.</p>;
 
   const scoreIntro = (
     <IntroCard title='O que é "Product Score" (score do produto)?'>
@@ -339,6 +352,30 @@ function TableScore({ data }) {
       </p>
     </IntroCard>
   );
+
+  const [sort, setSort] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
+
+  const rows = useMemo(() => {
+    if (rawRows.length === 0) return [];
+    return sortScoreRowsByColumn(rawRows, sort.key, sort.dir);
+  }, [rawRows, sort]);
+
+  const onSort = useCallback((k) => {
+    setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
+  }, []);
+
+  if (data == null) {
+    return (
+      <>
+        {scoreIntro}
+        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
+          <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong>. Métricas numéricas fazem primeiro
+          clique maior→menor; nome e loja A→Z — aplicável assim que os dados aparecerem.
+        </p>
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
+      </>
+    );
+  }
 
   if (data?.message && rawRows.length === 0) {
     return (
@@ -407,6 +444,22 @@ function TableScore({ data }) {
 
 function TableCategoryMap({ data }) {
   const masters = asArray(data?.masterCategories);
+
+  const mapIntro = (
+    <IntroCard title='O que é o "Mapa de categoria"?'>
+      <p style={{ margin: "0 0 0.6rem 0" }}>
+        Agrupa snapshots do <strong>último ScrapeRun</strong> segundo o <strong>categoryUrl</strong>. Para URLs do TikTok Shop,
+        a tabela mostra só o <strong>nome da categoria</strong> (derivado do slug) e o <strong>ID numérico</strong> no formato{" "}
+        <em>nome · ID</em> — não o link inteiro nem parâmetros como <code>source</code>/<code>enter_method</code>. Nos
+        breadcrumbs em texto, mantém-se mestre / sub quando aplicável.
+      </p>
+      <p style={{ margin: 0 }}>
+        As métricas por sub são agregações simples sobre os produtos dessa pasta; o <strong>score da subcategoria</strong> é
+        a média das pontuações do Product Score (<strong>só em memória</strong>). Os blocos seguintes repetem o padrão
+        das outras abas: texto de ordem + tabela com cabeçalhos clicáveis.
+      </p>
+    </IntroCard>
+  );
 
   /** @type {{
    * masterName: string,
@@ -499,21 +552,28 @@ function TableCategoryMap({ data }) {
     setSortTop((s) => toggleSort(s.key, s.dir, k, SORT_MAP_TOP_DESC));
   }, []);
 
-  if (data == null) return <p style={{ opacity: 0.75 }}>Carregue os dados com o botão acima.</p>;
-
-  const mapIntro = (
-    <IntroCard title='O que é o "Mapa de categoria"?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        Agrupa todos os snapshots do <strong>último ScrapeRun</strong> segundo o texto em{" "}
-        <strong>categoryUrl</strong> — em geral <strong>mestre / subcategoria</strong> quando o breadcrumb existe.
-      </p>
-      <p style={{ margin: 0 }}>
-        As métricas por sub são agregações simples sobre os produtos dessa pasta; o <strong>score da subcategoria</strong> é
-        a média das pontuações do Product Score (<strong>só em memória</strong>). Os blocos seguintes repetem o padrão
-        das outras abas: texto de ordem + tabela com cabeçalhos clicáveis.
-      </p>
-    </IntroCard>
-  );
+  if (data == null) {
+    return (
+      <>
+        {mapIntro}
+        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
+          <strong>Ordem inicial (subcategorias):</strong> <strong>score</strong> médio da sub da maior para a menor.
+          Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
+          <strong>classificação</strong> em A→Z. Depois de carregar, a resposta pode incluir uma nota técnica do servidor
+          sobre o método de score.
+        </p>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+          SKU em destaque (top por score em cada subcategoria)
+        </h3>
+        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
+          <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor na listagem combinada. Métricas
+          numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e <strong>nome</strong> em A→Z.
+          O link não é ordenável.
+        </p>
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher as tabelas.</p>
+      </>
+    );
+  }
 
   if (data?.message && masters.length === 0) {
     return (
@@ -545,15 +605,15 @@ function TableCategoryMap({ data }) {
       {mapIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial (subcategorias):</strong> <strong>score</strong> médio da sub da maior para a menor.
-        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>sub</strong> e{" "}
+        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
         <strong>classificação</strong> em A→Z.{" "}
         {data.scoreMethod ? <span style={{ opacity: 0.88 }}>{data.scoreMethod}</span> : null}
       </p>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
         <thead>
           <tr>
-            <SortTh label="categoria mestre" colKey="masterName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
-            <SortTh label="subcategoria" colKey="subName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
+            <SortTh label="mestre" colKey="masterName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
+            <SortTh label="categoria · ID" colKey="subName" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
             <SortTh label="score" colKey="score" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
             <SortTh label="classificação" colKey="classification" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
             <SortTh label="produtos" colKey="totalProducts" sortKey={sortSub.key} sortDir={sortSub.dir} onSort={onSortSub} />
@@ -564,10 +624,12 @@ function TableCategoryMap({ data }) {
           </tr>
         </thead>
         <tbody>
-          {sortedSubcats.map((row) => (
-            <tr key={row._key}>
-              <td style={tdStyle}>{row.masterName}</td>
-              <td style={tdStyle}>{row.subName}</td>
+          {sortedSubcats.map((row) => {
+            const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
+            return (
+              <tr key={row._key}>
+                <td style={tdStyle}>{mestre}</td>
+                <td style={tdStyle}>{categoria}</td>
               <td style={tdStyle}>{row.score}</td>
               <td style={tdStyle}>{row.classification}</td>
               <td style={tdStyle}>{row.totalProducts}</td>
@@ -576,7 +638,8 @@ function TableCategoryMap({ data }) {
               <td style={tdStyle}>{row.avgPrice}</td>
               <td style={tdStyle}>{row.opportunities}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 
@@ -585,14 +648,14 @@ function TableCategoryMap({ data }) {
       </h3>
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor nesta listagem combinada.
-        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>sub</strong> e{" "}
+        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
         <strong>nome</strong> em A→Z. O link não é ordenável.
       </p>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
             <SortTh label="mestre" colKey="masterName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
-            <SortTh label="sub" colKey="subName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
+            <SortTh label="categoria · ID" colKey="subName" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
             <SortTh label="nome" colKey="nome" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
             <SortTh label="score" colKey="score" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
             <SortTh label="vendas" colKey="vendas" sortKey={sortTop.key} sortDir={sortTop.dir} onSort={onSortTop} />
@@ -603,27 +666,30 @@ function TableCategoryMap({ data }) {
           </tr>
         </thead>
         <tbody>
-          {sortedTops.map((row, i) => (
-            <tr key={row.rowKey || i}>
-              <td style={tdStyle}>{row.masterName}</td>
-              <td style={tdStyle}>{row.subName}</td>
-              <td style={tdStyle}>{row.nome}</td>
-              <td style={tdStyle}>{row.score}</td>
-              <td style={tdStyle}>{row.vendas ?? "—"}</td>
-              <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
-              <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
-              <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
-              <td style={tdStyle}>
-                {row.link ? (
-                  <a href={row.link} target="_blank" rel="noopener noreferrer">
-                    abrir
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </td>
-            </tr>
-          ))}
+          {sortedTops.map((row, i) => {
+            const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
+            return (
+              <tr key={row.rowKey || i}>
+                <td style={tdStyle}>{mestre}</td>
+                <td style={tdStyle}>{categoria}</td>
+                <td style={tdStyle}>{row.nome}</td>
+                <td style={tdStyle}>{row.score}</td>
+                <td style={tdStyle}>{row.vendas ?? "—"}</td>
+                <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
+                <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
+                <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
+                <td style={tdStyle}>
+                  {row.link ? (
+                    <a href={row.link} target="_blank" rel="noopener noreferrer">
+                      abrir
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </>
@@ -657,10 +723,25 @@ function TableScalableSections({ data }) {
     setSortPot((s) => toggleSort(s.key, s.dir, k, SORT_SCALE_DESC));
   }, []);
 
-  if (data == null) return <p style={{ opacity: 0.75 }}>Carregue os dados com o botão acima.</p>;
-  if (data?.message && !data?.scrapeRun) {
-    return <p style={{ opacity: 0.85 }}>{data.message}</p>;
-  }
+  const escalarIntro = (
+    <IntroCard title='O que é "Escalar" neste painel?'>
+      <p style={{ margin: 0 }}>
+        <strong>Escalar</strong> significa aumentar esforço comercial num SKU do TikTok Shop — por exemplo criativos/paid,
+        reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo partem do mesmo{" "}
+        <strong>top do score analítico</strong> (até 30 produtos), mas <strong>cortam grupos diferentes</strong>: quem já
+        mostrou tração consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
+      </p>
+    </IntroCard>
+  );
+
+  const escalarOrdemP = (
+    <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.65rem" }}>
+      Clique num separador para ver só uma lista. Cada lista ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
+      <strong>link</strong>).{" "}
+      <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor — para <strong>vendas</strong> e{" "}
+      <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z.
+    </p>
+  );
 
   const pill = (active) => ({
     padding: "0.4rem 0.95rem",
@@ -672,6 +753,41 @@ function TableScalableSections({ data }) {
     fontWeight: active ? 600 : 400,
     fontSize: "0.85rem"
   });
+
+  if (data == null) {
+    return (
+      <>
+        {escalarIntro}
+        {escalarOrdemP}
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+          <button
+            type="button"
+            disabled
+            style={{ ...pill(false), opacity: 0.55, cursor: "not-allowed", pointerEvents: "none" }}
+          >
+            1 · Validados para escalar ({0})
+          </button>
+          <button
+            type="button"
+            disabled
+            style={{ ...pill(false), opacity: 0.55, cursor: "not-allowed", pointerEvents: "none" }}
+          >
+            2 · Apostas com potencial ({0})
+          </button>
+        </div>
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher as listas.</p>
+      </>
+    );
+  }
+
+  if (data?.message && !data?.scrapeRun) {
+    return (
+      <>
+        {escalarIntro}
+        <p style={{ opacity: 0.85 }}>{data.message}</p>
+      </>
+    );
+  }
 
   const renderRows = (list) =>
     list.map((row, i) => (
@@ -694,21 +810,8 @@ function TableScalableSections({ data }) {
 
   return (
     <>
-      <IntroCard title='O que é "Escalar" neste painel?'>
-        <p style={{ margin: 0 }}>
-          <strong>Escalar</strong> significa aumentar esforço comercial num SKU do TikTok Shop — por exemplo criativos/paid,
-          reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo partem do mesmo{" "}
-          <strong>top do score analítico</strong> (até 30 produtos), mas <strong>cortam grupos diferentes</strong>: quem já
-          mostrou tração consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
-        </p>
-      </IntroCard>
-
-      <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.65rem" }}>
-        Clique num separador para ver só uma lista. Cada lista ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
-        <strong>link</strong>).{" "}
-        <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor — para <strong>vendas</strong> e{" "}
-        <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z.
-      </p>
+      {escalarIntro}
+      {escalarOrdemP}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
         <button type="button" style={pill(scaleView === "validated")} onClick={() => setScaleView("validated")}>
@@ -856,17 +959,6 @@ export default function App() {
           {loading ? "Carregando..." : "Carregar dados"}
         </button>
       </div>
-
-      {data?.scrapeRun && (
-        <p style={{ fontSize: "0.8rem", opacity: 0.85 }}>
-          ScrapeRun: {data.scrapeRun.id}
-          {" · "}
-          {data.scrapeRun.collectedAt}
-          {["score", "scale", "map"].includes(tab) && data.previousRun
-            ? ` · run anterior: ${data.previousRun.id}`
-            : ""}
-        </p>
-      )}
 
       {error && (
         <p style={{ color: "#f97373", marginTop: "0.5rem" }}>
