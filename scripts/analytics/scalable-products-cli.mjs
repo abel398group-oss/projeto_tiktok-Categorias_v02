@@ -34,7 +34,7 @@ async function main() {
   console.log("");
   console.log("🔥 VALIDADOS PARA ESCALAR\n");
   if (report.validatedToScale.length === 0) {
-    console.log("  (nenhum item no top 30 do score com as regras actuais)");
+    console.log("  (nenhum item no universo pontuado do último run com as regras actuais)");
   } else {
     report.validatedToScale.forEach(printRow);
   }
@@ -42,15 +42,16 @@ async function main() {
   console.log("");
   console.log("🟡 APOSTAS COM POTENCIAL\n");
   if (report.potentialBets.length === 0) {
-    console.log("  (nenhum item no top 30 do score com as regras actuais)");
+    console.log("  (nenhum item no universo pontuado do último run com as regras actuais)");
   } else {
     report.potentialBets.forEach(printRow);
   }
 
   console.log("");
   printSeparator();
+  const n = report.scoredProductsAnalyzed ?? "?";
   console.log(
-    `Base: ScrapeRun ${report.scrapeRun.id} · listas derivadas do top score (máx. 30 produtos classificados pelo score v1).`
+    `Base: ScrapeRun ${report.scrapeRun.id} · análise Escalar sobre todas as linhas pontuadas do score v1 (N=${n} produtos), mesmas regras de filtro que antes (antes: só as 30 primeiras do ranking de score).`
   );
   console.log("");
 }

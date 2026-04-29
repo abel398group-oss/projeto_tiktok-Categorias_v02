@@ -5,6 +5,122 @@ import { getLatestAndPreviousRun } from "../_common.mjs";
 
 const TOP_LIMIT = 30;
 
+/** @param {ReturnType<typeof computeProductScoreLine>} line */
+function toReportShape(line) {
+  return {
+    score: line.score,
+    classific: line.classific,
+    nome: line.nome,
+    loja: line.loja,
+    preco: line.preco,
+    vendas: line.vendas,
+    rating: line.rating,
+    deltaVendas: line.deltaVendas,
+    motivos: line.motivos,
+    link: line.link,
+    productId: line.productId
+  };
+}
+
+/**
+ * Todas as linhas de score do último run (ordenado score descendente), antes do TOP_LIMIT do relatório geral.
+ *
+ * @param {import("@prisma/client").PrismaClient} prisma
+ */
+async function buildLatestRunScoreRows(prisma) {
+  const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
+
+  if (!latest) {
+    return { type: "no-run", message: "Sem dados: nenhum ScrapeRun. Importe primeiro (npm run db:import:output)." };
+  }
+
+  const scrapeRunPayload = {
+    id: latest.id,
+    collectedAt: latest.collectedAt.toISOString()
+  };
+  const previousPayload = previous ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() } : null;
+  const hasGrowthComparableRuns = !!(count >= 2 && previous);
+
+  const prevPorRef = new Map();
+  if (count >= 2 && previous) {
+    const prevSnaps = await prisma.productSnapshot.findMany({
+      where: { scrapeRunId: previous.id, salesCount: { not: null } },
+      select: { productRefId: true, salesCount: true }
+    });
+    for (const ps of prevSnaps) prevPorRef.set(ps.productRefId, ps.salesCount);
+  }
+
+  const snaps = await prisma.productSnapshot.findMany({
+    where: { scrapeRunId: latest.id },
+    include: {
+      product: { include: { seller: true } }
+    }
+  });
+
+  if (snaps.length === 0) {
+    return {
+      type: "empty-snaps",
+      scrapeRun: scrapeRunPayload,
+      previousRun: previousPayload,
+      hasGrowthComparableRuns,
+      message: "Último ScrapeRun sem ProductSnapshot."
+    };
+  }
+
+  const ctx = { prevPorRef, count, previous };
+  const linhas = [];
+  for (const s of snaps) {
+    linhas.push(toReportShape(computeProductScoreLine(s, ctx)));
+  }
+  linhas.sort((a, b) => b.score - a.score);
+
+  return {
+    type: "ok",
+    scrapeRun: scrapeRunPayload,
+    previousRun: previousPayload,
+    hasGrowthComparableRuns,
+    lines: linhas,
+    totalSnapshotsInLatestRun: snaps.length
+  };
+}
+
+/**
+ * Todas as linhas pontuadas do último ScrapeRun (score v1; sem limite 30 — ex.: relatório Escalar).
+ *
+ * @param {import("@prisma/client").PrismaClient} prisma
+ */
+export async function getProductScoreFull(prisma) {
+  const b = await buildLatestRunScoreRows(prisma);
+  if (b.type === "no-run") {
+    return {
+      scrapeRun: null,
+      previousRun: null,
+      hasGrowthComparableRuns: false,
+      lines: [],
+      totalSnapshotsInLatestRun: 0,
+      message: b.message
+    };
+  }
+  if (b.type === "empty-snaps") {
+    return {
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
+      hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+      lines: [],
+      totalSnapshotsInLatestRun: 0,
+      message: b.message
+    };
+  }
+  return {
+    scrapeRun: b.scrapeRun,
+    previousRun: b.previousRun,
+    hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+    lines: b.lines,
+    totalSnapshotsInLatestRun: b.totalSnapshotsInLatestRun,
+    scoredCount: b.lines.length
+  };
+}
+
 function pontosVendas(sc) {
   if (sc == null) return 0;
   if (sc >= 1000) return 35;
@@ -156,80 +272,38 @@ export function computeProductScoreLine(s, ctx) {
 }
 
 /**
+ * Product Score (lista “top”) — formato HTTP/CLI habitual; até TOP_LIMIT produtos ordenados por score descendente.
+ * Internamente reutiliza o mesmo conjunto de linhas que `getProductScoreFull` (todas antes do slice).
+ *
  * @param {import("@prisma/client").PrismaClient} prisma
  */
 export async function getProductScoreReport(prisma) {
-  const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
-
-  if (!latest) {
+  const b = await buildLatestRunScoreRows(prisma);
+  if (b.type === "no-run") {
     return {
       scrapeRun: null,
       previousRun: null,
       top: [],
       totalSnapshotsInLatestRun: 0,
-      message: "Sem dados: nenhum ScrapeRun. Importe primeiro (npm run db:import:output)."
+      message: b.message
     };
   }
-
-  const prevPorRef = new Map();
-  if (count >= 2 && previous) {
-    const prevSnaps = await prisma.productSnapshot.findMany({
-      where: { scrapeRunId: previous.id, salesCount: { not: null } },
-      select: { productRefId: true, salesCount: true }
-    });
-    for (const ps of prevSnaps) prevPorRef.set(ps.productRefId, ps.salesCount);
-  }
-
-  const snaps = await prisma.productSnapshot.findMany({
-    where: { scrapeRunId: latest.id },
-    include: {
-      product: { include: { seller: true } }
-    }
-  });
-
-  if (snaps.length === 0) {
+  if (b.type === "empty-snaps") {
     return {
-      scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
-      previousRun: previous
-        ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() }
-        : null,
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
       top: [],
       totalSnapshotsInLatestRun: 0,
-      message: "Último ScrapeRun sem ProductSnapshot."
+      message: b.message
     };
   }
-
-  const ctx = { prevPorRef, count, previous };
-  const linhas = [];
-
-  for (const s of snaps) {
-    const line = computeProductScoreLine(s, ctx);
-    linhas.push({
-      score: line.score,
-      classific: line.classific,
-      nome: line.nome,
-      loja: line.loja,
-      preco: line.preco,
-      vendas: line.vendas,
-      rating: line.rating,
-      deltaVendas: line.deltaVendas,
-      motivos: line.motivos,
-      link: line.link,
-      productId: line.productId
-    });
-  }
-
-  linhas.sort((a, b) => b.score - a.score);
-  const top = linhas.slice(0, TOP_LIMIT);
-
+  const top = b.lines.slice(0, TOP_LIMIT);
   return {
-    scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
-    previousRun: previous
-      ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() }
-      : null,
-    hasGrowthComparableRuns: !!(count >= 2 && previous),
+    scrapeRun: b.scrapeRun,
+    previousRun: b.previousRun,
+    hasGrowthComparableRuns: b.hasGrowthComparableRuns,
     top,
-    totalSnapshotsInLatestRun: snaps.length,
+    totalSnapshotsInLatestRun: b.totalSnapshotsInLatestRun,
     listedTop: top.length,
     maxListed: TOP_LIMIT,
     noteFaixas: "excelente ≥80 · bom ≥60 · observar ≥40 · fraco <40 (docs/ANALYTICS.md)."

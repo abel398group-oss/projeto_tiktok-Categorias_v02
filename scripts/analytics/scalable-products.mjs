@@ -1,8 +1,8 @@
 /**
- * Produtos para escalar — camada só leitura sobre getProductScoreReport (não altera score).
+ * Produtos para escalar — todas as linhas pontuadas do último run (getProductScoreFull), mesmo critérios de filtro.
  */
 import { analyzeProduct } from "./product-decision.mjs";
-import { getProductScoreReport } from "./lib/product-score.mjs";
+import { getProductScoreFull } from "./lib/product-score.mjs";
 
 /** @param {string | undefined | null} rating */
 function parseRatingParts(rating) {
@@ -86,24 +86,26 @@ function toRow(item, ratingStr) {
  * @param {import("@prisma/client").PrismaClient} prisma
  */
 export async function getScalableProductsReport(prisma) {
-  const report = await getProductScoreReport(prisma);
+  const scored = await getProductScoreFull(prisma);
 
-  if (!report.scrapeRun) {
+  if (!scored.scrapeRun) {
     return {
       scrapeRun: null,
-      previousRun: report.previousRun ?? null,
-      hasGrowthComparableRuns: report.hasGrowthComparableRuns ?? false,
+      previousRun: scored.previousRun ?? null,
+      hasGrowthComparableRuns: scored.hasGrowthComparableRuns ?? false,
       validatedToScale: [],
       potentialBets: [],
-      message: report.message ?? "Sem dados: nenhum ScrapeRun."
+      scoredProductsAnalyzed: 0,
+      message: scored.message ?? "Sem dados: nenhum ScrapeRun."
     };
   }
 
   const validatedToScale = [];
   const potentialBets = [];
 
-  const top = report.top ?? [];
-  for (const raw of top) {
+  const pool = scored.lines ?? [];
+
+  for (const raw of pool) {
     /** @type {import("./product-decision.mjs").ProductScoreItemLike & { score: number }} */
     const item = raw;
     const ratingStr =
@@ -127,10 +129,15 @@ export async function getScalableProductsReport(prisma) {
   }
 
   return {
-    scrapeRun: report.scrapeRun,
-    previousRun: report.previousRun ?? null,
-    hasGrowthComparableRuns: report.hasGrowthComparableRuns ?? false,
+    scrapeRun: scored.scrapeRun,
+    previousRun: scored.previousRun ?? null,
+    hasGrowthComparableRuns: scored.hasGrowthComparableRuns ?? false,
     validatedToScale,
-    potentialBets
+    potentialBets,
+    /** Linhas pontuadas analisadas (= snapshots no último run; antes o Escalar só via o subset “top” do relatório geral — máx. 30). */
+    scoredProductsAnalyzed: pool.length,
+    /** Total de snapshots no último ScrapeRun (igual ao agregador de score quando há dados). */
+    totalSnapshotsInLatestRun: scored.totalSnapshotsInLatestRun ?? pool.length,
+    ...(scored.message && pool.length === 0 ? { message: scored.message } : {})
   };
 }

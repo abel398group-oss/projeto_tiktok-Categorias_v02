@@ -64,13 +64,13 @@ Para **Δ vendas**, necessita dois runs comparáveis com `sales_count` nos dois 
 |--|--|
 | Fonte | `scripts/analytics/scalable-products.mjs` |
 
-**Entrada obrigatória:** resultado de `getProductScoreReport(prisma)`, ou seja, só trabalha sobre o **`top`** já limitado aos **melhores 30 scores**.
+**Entrada:** `getProductScoreFull(prisma)` — **todas** as linhas pontuadas do último ScrapeRun pela mesma função que o relatório product-score (equivale a **todos os snapshots**, ordenados por score; o relatório geral só **lista as 30 primeiras**, mas Escalar já não fica limitado a esse corte).
 
 **Globais (ignora linha)**
 
 - Sem preço válido (`price` não numérico / `<= 0`)  
 - Vendas declaradas **`> 10_000`**  
-- Média de rating extraída do texto **`&lt; 4`**
+- Média de rating extraída do texto **`< 4`**
 
 Depois avalia cada item (na ordem: **Validados primeiro**, depois só se não entrar lá **Apostas**):
 
