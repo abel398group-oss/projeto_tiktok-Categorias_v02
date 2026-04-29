@@ -82,6 +82,80 @@ function motivosLista(opts) {
 }
 
 /**
+ * Uma linha de score (mesma fórmula que o relatório product-score) — para reutilizar em agregações (ex.: mapa de categoria).
+ *
+ * @param {*} s ProductSnapshot com `product` (e `seller` opcional)
+ * @param {{ prevPorRef: Map<string, number | null | undefined>, count: number, previous: { id: string } | null }} ctx
+ */
+export function computeProductScoreLine(s, ctx) {
+  const { prevPorRef, count, previous } = ctx;
+  const sc = s.salesCount;
+  const avg = s.ratingAverage;
+  const tot = s.ratingTotal;
+
+  const vPts = pontosVendas(sc);
+  const rPts = pontosAvaliacao(avg, tot);
+  const pPts = pontosPreco(s.price);
+  const dPts = pontosDesconto(s.hasDiscount);
+  const oPts = pontosOportunidade(sc, avg, tot, s.price);
+
+  const prevSale = prevPorRef.get(s.productRefId);
+  const podeDelta = count >= 2 && previous != null && sc != null && prevSale != null;
+
+  const delta = podeDelta ? sc - prevSale : null;
+
+  let semBaseGrowth = false;
+  if (count < 2 || !previous) {
+    semBaseGrowth = true;
+  } else if (!podeDelta) {
+    semBaseGrowth = true;
+  } else if (delta == null || Number.isNaN(delta)) {
+    semBaseGrowth = true;
+  } else {
+    semBaseGrowth = false;
+  }
+
+  const { pts: gPts } = pontosCrescimento(delta ?? null, Boolean(podeDelta));
+
+  let totalPts = vPts + rPts + pPts + dPts + oPts + gPts;
+  if (totalPts > 100) totalPts = 100;
+
+  const motivosStr = motivosLista({
+    sc,
+    vPts,
+    rPts,
+    pPts,
+    dPts,
+    oPts,
+    gPts,
+    semBaseGrowth,
+    podeDelta: Boolean(podeDelta)
+  }).join("; ");
+
+  const ratingStr =
+    avg != null ? `${avg}${typeof tot === "number" ? ` (${tot} aval)` : ""}` : "";
+
+  return {
+    score: totalPts,
+    classific: rotuloScore(totalPts),
+    nome: (s.product.name ?? "—").slice(0, 40),
+    loja: (s.product.seller?.name ?? "—").slice(0, 24),
+    preco: s.price ?? "",
+    vendas: sc ?? "",
+    rating: ratingStr,
+    deltaVendas: podeDelta && delta != null ? String(delta) : "—",
+    motivos: motivosStr,
+    link: s.product.productUrl ?? "",
+    productId: s.product.productId,
+    /** @type {number | null} */
+    ratingAverage: avg ?? null,
+    /** @type {number | null} */
+    deltaNumeric: delta,
+    isOpportunityV1: oPts === 15
+  };
+}
+
+/**
  * @param {import("@prisma/client").PrismaClient} prisma
  */
 export async function getProductScoreReport(prisma) {
@@ -125,67 +199,23 @@ export async function getProductScoreReport(prisma) {
     };
   }
 
+  const ctx = { prevPorRef, count, previous };
   const linhas = [];
 
   for (const s of snaps) {
-    const sc = s.salesCount;
-    const avg = s.ratingAverage;
-    const tot = s.ratingTotal;
-
-    const vPts = pontosVendas(sc);
-    const rPts = pontosAvaliacao(avg, tot);
-    const pPts = pontosPreco(s.price);
-    const dPts = pontosDesconto(s.hasDiscount);
-    const oPts = pontosOportunidade(sc, avg, tot, s.price);
-
-    const prevSale = prevPorRef.get(s.productRefId);
-    const podeDelta = count >= 2 && previous != null && sc != null && prevSale != null;
-
-    const delta = podeDelta ? sc - prevSale : null;
-
-    let semBaseGrowth = false;
-    if (count < 2 || !previous) {
-      semBaseGrowth = true;
-    } else if (!podeDelta) {
-      semBaseGrowth = true;
-    } else if (delta == null || Number.isNaN(delta)) {
-      semBaseGrowth = true;
-    } else {
-      semBaseGrowth = false;
-    }
-
-    const { pts: gPts } = pontosCrescimento(delta ?? null, Boolean(podeDelta));
-
-    let totalPts = vPts + rPts + pPts + dPts + oPts + gPts;
-    if (totalPts > 100) totalPts = 100;
-
-    const motivosStr = motivosLista({
-      sc,
-      vPts,
-      rPts,
-      pPts,
-      dPts,
-      oPts,
-      gPts,
-      semBaseGrowth,
-      podeDelta: Boolean(podeDelta)
-    }).join("; ");
-
-    const ratingStr =
-      avg != null ? `${avg}${typeof tot === "number" ? ` (${tot} aval)` : ""}` : "";
-
+    const line = computeProductScoreLine(s, ctx);
     linhas.push({
-      score: totalPts,
-      classific: rotuloScore(totalPts),
-      nome: (s.product.name ?? "—").slice(0, 40),
-      loja: (s.product.seller?.name ?? "—").slice(0, 24),
-      preco: s.price ?? "",
-      vendas: sc ?? "",
-      rating: ratingStr,
-      deltaVendas: podeDelta && delta != null ? String(delta) : "—",
-      motivos: motivosStr,
-      link: s.product.productUrl ?? "",
-      productId: s.product.productId
+      score: line.score,
+      classific: line.classific,
+      nome: line.nome,
+      loja: line.loja,
+      preco: line.preco,
+      vendas: line.vendas,
+      rating: line.rating,
+      deltaVendas: line.deltaVendas,
+      motivos: line.motivos,
+      link: line.link,
+      productId: line.productId
     });
   }
 

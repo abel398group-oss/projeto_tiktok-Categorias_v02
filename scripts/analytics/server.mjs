@@ -14,6 +14,7 @@ import { getOpportunitiesReport } from "./lib/opportunities.mjs";
 import { getProductScoreReport } from "./lib/product-score.mjs";
 import { getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
+import { getCategoryMapReport } from "./category-map.mjs";
 
 requireDatabaseUrl();
 
@@ -71,6 +72,8 @@ fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma))
 fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
 
 fastify.get("/analytics/scalable-products", async () => getScalableProductsReport(prisma));
+
+fastify.get("/analytics/category-map", async () => getCategoryMapReport(prisma));
 
 const graceful = async () => {
   await fastify.close();

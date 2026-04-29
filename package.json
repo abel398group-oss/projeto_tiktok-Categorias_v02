@@ -18,6 +18,7 @@
     "analytics:product-score": "node --env-file=.env scripts/analytics/product-score.mjs",
     "analytics:decision": "node --env-file=.env scripts/analytics/product-decision-cli.mjs",
     "analytics:scalable": "node --env-file=.env scripts/analytics/scalable-products-cli.mjs",
+    "analytics:category-map": "node --env-file=.env scripts/analytics/category-map-cli.mjs",
     "analytics:api": "node --env-file=.env scripts/analytics/server.mjs",
     "api:dev": "npm run analytics:api",
     "frontend:dev": "cd frontend && npm run dev",

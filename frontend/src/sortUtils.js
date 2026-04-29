@@ -69,7 +69,8 @@ function cmpTopAsc(a, b, key) {
 }
 
 export function sortTopItemsByColumn(items, key, dir) {
-  return [...items].sort((a, b) =>
+  const list = Array.isArray(items) ? items : [];
+  return [...list].sort((a, b) =>
     applyDir(cmpTopAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
   );
 }
@@ -114,7 +115,8 @@ function cmpOppAsc(a, b, key) {
 
 /** @param {unknown[]} items @param {string} key @param {SortDir} dir */
 export function sortOppItemsByColumn(items, key, dir) {
-  return [...items].sort((a, b) =>
+  const list = Array.isArray(items) ? items : [];
+  return [...list].sort((a, b) =>
     applyDir(cmpOppAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
   );
 }
@@ -176,7 +178,8 @@ function cmpScoreAsc(a, b, key) {
 
 /** @param {unknown[]} rows @param {string} key @param {SortDir} dir */
 export function sortScoreRowsByColumn(rows, key, dir) {
-  return [...rows].sort((a, b) =>
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list].sort((a, b) =>
     applyDir(cmpScoreAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
   );
 }
@@ -218,7 +221,97 @@ function cmpScaleAsc(a, b, key) {
 
 /** @param {unknown[]} rows @param {string} key @param {SortDir} dir */
 export function sortScalableRowsByColumn(rows, key, dir) {
-  return [...rows].sort((a, b) =>
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list].sort((a, b) =>
     applyDir(cmpScaleAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
+  );
+}
+
+/** Linhas flatten do mapa de categoria — agregação por sub. */
+/** @param {Record<string, unknown>} a @param {Record<string, unknown>} b @param {string} key */
+function cmpMapSubcatsAsc(a, b, key) {
+  switch (key) {
+    case "masterName":
+      return cmpStrAZ(/** @type {string} */ (a.masterName), /** @type {string} */ (b.masterName));
+    case "subName":
+      return cmpStrAZ(/** @type {string} */ (a.subName), /** @type {string} */ (b.subName));
+    case "classification":
+      return cmpStrAZ(
+        /** @type {string} */ (a.classification),
+        /** @type {string} */ (b.classification)
+      );
+    case "score":
+    case "totalProducts":
+    case "totalSales":
+    case "avgRating":
+    case "avgPrice":
+    case "opportunities": {
+      const na = num(a[key]);
+      const nb = num(b[key]);
+      if (Number.isNaN(na) && Number.isNaN(nb))
+        return cmpStrAZ(/** @type {string} */ (a.subName), /** @type {string} */ (b.subName));
+      if (Number.isNaN(na)) return 1;
+      if (Number.isNaN(nb)) return -1;
+      return na - nb;
+    }
+    default:
+      return 0;
+  }
+}
+
+/** Produtos topo (flatten) — mapa. */
+/** @param {Record<string, unknown>} a @param {Record<string, unknown>} b @param {string} key */
+function cmpMapTopAsc(a, b, key) {
+  switch (key) {
+    case "masterName":
+      return cmpStrAZ(/** @type {string} */ (a.masterName), /** @type {string} */ (b.masterName));
+    case "subName":
+      return cmpStrAZ(/** @type {string} */ (a.subName), /** @type {string} */ (b.subName));
+    case "nome":
+      return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "score":
+    case "vendas":
+    case "rating": {
+      const na = num(a[key]);
+      const nb = num(b[key]);
+      if (Number.isNaN(na) && Number.isNaN(nb)) return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+      if (Number.isNaN(na)) return 1;
+      if (Number.isNaN(nb)) return -1;
+      return na - nb;
+    }
+    case "preco": {
+      const pa = num(a.preco);
+      const pb = num(b.preco);
+      if (Number.isNaN(pa) && Number.isNaN(pb)) return 0;
+      if (Number.isNaN(pa)) return 1;
+      if (Number.isNaN(pb)) return -1;
+      return pa - pb;
+    }
+    case "delta": {
+      const da = num(a.delta);
+      const db = num(b.delta);
+      if (Number.isNaN(da) && Number.isNaN(db)) return 0;
+      if (Number.isNaN(da)) return 1;
+      if (Number.isNaN(db)) return -1;
+      return da - db;
+    }
+    default:
+      return 0;
+  }
+}
+
+/** @param {unknown[]} rows @param {string} key @param {SortDir} dir */
+export function sortMapSubcatsByColumn(rows, key, dir) {
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list].sort((a, b) =>
+    applyDir(cmpMapSubcatsAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
+  );
+}
+
+/** @param {unknown[]} rows @param {string} key @param {SortDir} dir */
+export function sortMapTopProductsByColumn(rows, key, dir) {
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list].sort((a, b) =>
+    applyDir(cmpMapTopAsc(/** @type {Record<string, unknown>} */ (a), /** @type {Record<string, unknown>} */ (b), key), dir)
   );
 }
