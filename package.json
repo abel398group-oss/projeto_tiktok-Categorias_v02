@@ -16,6 +16,7 @@
     "analytics:growth": "node --env-file=.env scripts/analytics/growth.mjs",
     "analytics:opportunities": "node --env-file=.env scripts/analytics/opportunities.mjs",
     "analytics:product-score": "node --env-file=.env scripts/analytics/product-score.mjs",
+    "analytics:decision": "node --env-file=.env scripts/analytics/product-decision-cli.mjs",
     "analytics:api": "node --env-file=.env scripts/analytics/server.mjs",
     "prisma:generate": "prisma generate",
     "prisma:format": "prisma format",

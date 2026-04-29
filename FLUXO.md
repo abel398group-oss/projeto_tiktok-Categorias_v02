@@ -128,7 +128,47 @@ O repositório usa **`main`** (linha principal) e **`backup`** (cópia de segura
 
 ---
 
-### Resumo em três frases
+### 9. Servidor Analytics (API HTTP, `localhost`)
+
+Com **`DATABASE_URL`** e **`ANALYTICS_API_KEY`** no **`.env` na raiz** do projeto (ver **`.env.example`**):
+
+```bash
+npm run analytics:api
+```
+
+- Por defeito escuta em **`http://127.0.0.1:3333`** (opcional `ANALYTICS_API_PORT` / `ANALYTICS_API_HOST` no `.env`).
+- Endpoints só leitura: `GET /health`, `GET /analytics/top-products`, `…/opportunities`, `…/product-score`, `…/growth`, `…/new-products` — sempre com **`Authorization: Bearer <ANALYTICS_API_KEY>`** (detalhes em **`docs/ANALYTICS-API.md`**).
+
+Para **consultar relatórios no terminal** (sem subir servidor): `npm run analytics:top-products`, `…`, `npm run analytics:product-score`; interpretação extra: **`npm run analytics:decision`** (usa o mesmo score já calculado; ver `scripts/analytics/product-decision-cli.mjs`).
+
+---
+
+### 10. Frontend no browser (`localhost`, Vite)
+
+Interface mínima em **`frontend/`** (React): mostra dados da API através de **proxy do Vite** (evita CORS no desenvolvimento).
+
+**Primeiro terminal (na raiz do repo)** — mantém a API no ar:
+
+```bash
+npm run analytics:api
+```
+
+**Segundo terminal:**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+- O Vite indica um URL (**normalmente `http://localhost:5173/`**). Abrir no browser e usar **Carregar dados** nas abas.
+- No **`frontend/.env`** define **`VITE_ANALYTICS_API_KEY`** com o **mesmo** valor que **`ANALYTICS_API_KEY`** na raiz (ver **`frontend/README.md`** e **`frontend/.env.example`**).
+- Sem a API na porta combinada (**3333** por defeito ou a que configuraste), o navegador mostra erro e o terminal do Vite pode indicar **`ECONNREFUSED`** ao tentar proxificar `/analytics`.
+
+Alteraste **portas** (`ANALYTICS_API_PORT` ou `vite.config.js`)? Atualiza **este ficheiro** para quem ler no futuro encontrar URLs certas.
+
+---
 
 Instala com **`npm install`**, corre **`npm run coleta`** (rápida) ou **`npm run coleta:completa`** (categoria + `fotos_pdp`), lê **`output/dados_produtos.json`**.  
-Se der erro de sessão, **`npm run coleta:completa:login`** (ou o passo 5).
+Se der erro de sessão, **`npm run coleta:completa:login`** (ou o passo 5).  
+Para **painel analytics no browser**, dois terminais: **`npm run analytics:api`** + **`cd frontend && npm run dev`** (secções **9** e **10**).

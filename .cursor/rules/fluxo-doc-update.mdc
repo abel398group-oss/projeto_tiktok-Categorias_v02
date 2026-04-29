@@ -1,0 +1,15 @@
+---
+description: Ao introduzirem comandos npm, URLs localhost ou fluxos novos — actualizar FLUXO.md
+alwaysApply: true
+---
+
+# Fluxo documentado (`FLUXO.md`)
+
+Quando adicionarem ou mudarem na prática algo que envolva **ordem de passos**, **comandos de execução** (`npm run …`), **URLs/portas** (`localhost`, Prisma Studio, API analytics, Vite) ou **pré-requisitos** (`.env`, dois terminais):
+
+1. Actualizar **`FLUXO.md`** na raiz do repositório com uma secção clara ou tabela.
+2. Se o fluxo já estiver só no **`README.md`**, manter **FLUXO** como fonte de “passo-a-passo” e apontamentos cruzados; não deixar localhost/API/frontend apenas em conversa ou só no README disperso sem linha única no fluxo.
+
+**Não** é obrigatório duplicar o `package.json` completo — bastam os comandos novos ou alterados + portas esperadas.
+
+Referência habitual: **`docs/ROADMAP.md`** para backlog; **`FLUXO.md`** para “como correr já” incluindo **localhost**.

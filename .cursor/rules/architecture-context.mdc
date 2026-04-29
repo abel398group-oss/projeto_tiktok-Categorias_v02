@@ -5,9 +5,11 @@ alwaysApply: true
 
 # Arquitetura — projeto TikTok Shop (categorias)
 
-Não monorepo: um pacote **npm** (não pnpm workspaces). **Scraper:** `src/scrapeCategory.mjs`. **Persistência:** Prisma + Postgres (`prisma/schema.prisma`, `npm run db:import:output`) — não há API HTTP Nest/React neste repo.
+Não monorepo: um pacote **npm** (não pnpm workspaces). **Scraper:** `src/scrapeCategory.mjs`. **Persistência:** Prisma + Postgres (`prisma/schema.prisma`, `npm run db:import:output`). **Analytics:** comandos CLI + servidor HTTP opcional (`npm run analytics:api`). **Frontend** separado (`frontend/`, Vite + React para visualizar dados da API).
 
 ## Onde está documentado
+
+- **`FLUXO.md`** — instalação, coleta, `localhost` (API + UI), dois terminais, portas esperadas (**actualizar sempre que comandos/execuções mudarem** — ver também `.cursor/rules/fluxo-doc-update.mdc`).
 
 - **`docs/CURSOR-CONTEXTO-SISTEMA.md`** — resumo técnico completo e comparação com Hipervias v12 (para IA / Cursor).
 - **`docs/ARCHITECTURE.md`** — stack, fluxo, variáveis de ambiente, saídas, limitações, modelo Postgres.
