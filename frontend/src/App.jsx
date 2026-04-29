@@ -321,13 +321,17 @@ function TableOpp({ data }) {
   const oppIntro = (
     <IntroCard title='O que é "Opportunities" (oportunidades)?'>
       <p style={{ margin: "0 0 0.6rem 0" }}>
-        Filtra no <strong>último run</strong> uma lista <strong>exploratória</strong> (até <strong>20</strong> linhas):
-        <strong> média de avaliação ≥ 4,5</strong>, <strong>pelo menos 5 avaliações</strong>, vendas entre{" "}
-        <strong>10 e 300</strong> e preço preenchido — heurística <strong>v1</strong> no código.
+        Aqui o sistema faz uma <strong>pré-seleção automática</strong> entre os dados da última importação — no máximo{" "}
+        <strong>20</strong> linhas — com regras <strong>fixas mas simples</strong>: média das avaliações{" "}
+        <strong>pelo menos 4,5</strong>,{" "}
+        <strong>no mínimo 5 avaliações</strong>, vendas declaradas entre <strong>10 e 300</strong> unidades e com{" "}
+        <strong>preço preenchido</strong>. A ideia é destacar produtos bem avaliados que ainda <strong>não são megavolumes</strong>{" "}
+        (para explorares antes que fiquem saturados).
       </p>
       <p style={{ margin: 0 }}>
-        Serve para achar SKUs com boa percepção mas ainda sem volumes enormes: <strong>não substitui score oficial nem
-        garantia de margem</strong>; o campo motivo lembra apenas a regra.
+        Na coluna <strong>motivo</strong> aparece texto que relembra estes critérios. Isto ajuda à leitura, mas{" "}
+        <strong>não é recomendação de investimento nem substitui o score nem qualquer garantia comercial</strong> — apenas um filtro
+        útil dentro daquilo que já tens na base.
       </p>
     </IntroCard>
   );
@@ -479,15 +483,17 @@ function TableScore({ data }) {
   const scoreIntro = (
     <IntroCard title='O que é "Product Score" (score do produto)?'>
       <p style={{ margin: "0 0 0.6rem 0" }}>
-        Combina vários blocos dos snapshots do <strong>último run</strong> — vendas, avaliações, preço válido,
-        eventual desconto, faixa &quot;oportunidade&quot; e, quando há <strong>dois runs comparáveis</strong>, também a{" "}
-        <strong>variação de vendas</strong> versus o run anterior — numa pontuação <strong>única entre 0 e 100</strong> só
-        em memória.
+        O <strong>score de 0 a 100</strong> junta vários indícios da <strong>última importação</strong> — por exemplo vendas
+        anunciadas, avaliações, se o preço faz sentido, desconto, se cai na faixa de &quot;oportunidade&quot; e, quando há{" "}
+        <strong>duas importações comparáveis</strong>, também a <strong>subida ou descida de vendas</strong> relativamente à anterior.
+        É calculado <strong>só quando abres esta vista</strong> ou corres o relatório — <strong>não fica gravado</strong> na base como
+        coluna oficial.
       </p>
       <p style={{ margin: 0 }}>
-        A lista mostra até os <strong>30</strong> melhores valores de score (por defeito do servidor ordenado por pontos
-        desc.). As etiquetas (excelente, bom…) são faixas de leitura; <strong>não substitui</strong> modelo de ML nem promessa
-        de revenue — ver <code style={{ opacity: 0.85 }}>docs/ANALYTICS.md</code> nos detalhes dos pesos.
+        Por defeito vês até <strong>30</strong> produtos ordenados pelo <strong>score mais alto primeiro</strong>; nos cabeçalhos podes ordenar por outras colunas (nome, loja, etc.).
+        Etiquetas como &quot;excelente&quot; ou &quot;bom&quot; são <strong>faixas de leitura</strong>, não promessa de lucro nem modelo de IA; os pesos exactos da fórmula estão descritos na{" "}
+        <code style={{ opacity: 0.85 }}>documentação ANALYTICS</code>{" "}
+        do projeto para quem quiser ir ao detalhe.
       </p>
     </IntroCard>
   );
@@ -657,15 +663,16 @@ function TableCategoryMap({ data }) {
   const mapIntro = (
     <IntroCard title='O que é o "Mapa de categoria"?'>
       <p style={{ margin: "0 0 0.6rem 0" }}>
-        Agrupa snapshots do <strong>último ScrapeRun</strong> segundo o <strong>categoryUrl</strong>. Para URLs do TikTok Shop,
-        a tabela mostra só o <strong>nome da categoria</strong> (derivado do slug) e o <strong>ID numérico</strong> no formato{" "}
-        <em>nome · ID</em> — não o link inteiro nem parâmetros como <code>source</code>/<code>enter_method</code>. Nos
-        breadcrumbs em texto, mantém-se mestre / sub quando aplicável.
+        O mapa agrupa os produtos da <strong>última importação</strong> por <strong>pasta ou categoria do TikTok Shop</strong>{" "}
+        (a partir do link de categoria de cada produto). Em vez de mostrar o URL completo, a tabela apresenta o{" "}
+        <strong>nome da categoria</strong> e o <strong>identificador numérico</strong> num formato simples tipo &quot;nome · ID&quot;{" "}
+        — assim fica legível onde havia apenas parâmetros e endereços compridos atrás das cenas.
+      </p>
+      <p style={{ margin: "0 0 0.6rem 0" }}>
+        A <strong>primeira tabela</strong> faz um resumo por sub-categoria: quantos produtos, totais de vendas, médias de preço e avaliações, uma coluna de <strong>score médio</strong> (é a <strong>média simples</strong> das pontuações 0–100 desses produtos, como na aba Product Score, apenas calculada enquanto estás aqui), e conta de «oportunidades» com as mesmas regras gerais usadas mais acima neste painel.
       </p>
       <p style={{ margin: 0 }}>
-        As métricas por sub são agregações simples sobre os produtos dessa pasta; o <strong>score da subcategoria</strong> é
-        a média das pontuações do Product Score (<strong>só em memória</strong>). Os blocos seguintes repetem o padrão
-        das outras abas: texto de ordem + tabela com cabeçalhos clicáveis.
+        <strong>Mais abaixo</strong>, uma <strong>segunda tabela</strong> lista <strong>exemplos de produtos em destaque</strong> dentro de cada pasta — para ver casos concretos; tal como nas outras abas, só estás a ler dados já importados e ordenar no ecrã pelos cabeçalhos.
       </p>
     </IntroCard>
   );
@@ -1081,12 +1088,12 @@ function TableScalableSections({ data }) {
 
   const escalarIntro = (
     <IntroCard title='O que é "Escalar" neste painel?'>
+      <p style={{ margin: "0 0 0.6rem 0" }}>
+        <strong>Escalar</strong>, neste contexto, é pensar <strong>onde investir mais esforço ou visibilidade</strong> num produto do TikTok Shop — por
+        exemplo mais anúncios, mais stock ou repetir um formato de vídeo que funciona — <strong>com base na última vez que os dados foram importados</strong>.
+      </p>
       <p style={{ margin: 0 }}>
-        <strong>Escalar</strong> significa aumentar esforço comercial num SKU do TikTok Shop — por exemplo criativos/paid,
-        reposição ou repetir formato — com base na <strong>última coleta</strong>. As duas listas abaixo percorrem{" "}
-        <strong>todos os produtos já pontuados nesse scrape</strong> (o mesmo universo do score analítico total, não só os{" "}
-        primeiros da tabela resumida de score), mas <strong>cortam grupos diferentes</strong>: quem já mostrou tração{" "}
-        consistente versus quem ainda está numa faixa mais cedo mas com bons sinais.
+        Há <strong>duas listas</strong> com regras diferentes: uma para artigos com <strong>vendas e avaliações já mais sólidas</strong> (candidatos a &quot;validados&quot;) e outra para <strong>artigos ainda pequenos mas com bons sinais</strong> (candidatos a &quot;apostas&quot;). As duas olham para <strong>todos os produtos que já receberam score nesta importação</strong>, não só para as primeiras linhas da tabela resumida de score — servem para apoiar decisões, <strong>sem substituir o teu julgamento nem números internos de margem</strong>.
       </p>
     </IntroCard>
   );
