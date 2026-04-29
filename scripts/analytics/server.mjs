@@ -13,6 +13,7 @@ import { getNewProductsReport } from "./lib/new-products.mjs";
 import { getOpportunitiesReport } from "./lib/opportunities.mjs";
 import { getProductScoreReport } from "./lib/product-score.mjs";
 import { getTopProductsReport } from "./lib/top-products.mjs";
+import { getScalableProductsReport } from "./scalable-products.mjs";
 
 requireDatabaseUrl();
 
@@ -68,6 +69,8 @@ fastify.get("/analytics/product-score", async () => getProductScoreReport(prisma
 fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma));
 
 fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
+
+fastify.get("/analytics/scalable-products", async () => getScalableProductsReport(prisma));
 
 const graceful = async () => {
   await fastify.close();

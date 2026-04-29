@@ -10,7 +10,8 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
-    strictPort: true,
+    /** Se 5173 estiver ocupada, o Vite usa outra (ex. 5174). Abre o URL indicado no terminal. */
+    strictPort: false,
     proxy: {
       "/analytics": { target: "http://127.0.0.1:3333", changeOrigin: true },
       "/health": { target: "http://127.0.0.1:3333", changeOrigin: true }

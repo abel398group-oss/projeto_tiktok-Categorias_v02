@@ -97,7 +97,7 @@ npm run dev:all
 ```
 
 - **API** → por defeito **`http://127.0.0.1:3333`** (`npm run analytics:api` atrás de `api:dev`).
-- **Frontend** → **`http://localhost:5173/`** (Vite tenta abrir o browser ao arrancar; se a porta **5173** estiver ocupada, o comando falha — fecha o outro processo nessa porta e torna a correr).
+- **Frontend** → normalmente **`http://localhost:5173/`** (Vite tenta abrir o browser; se **5173** estiver ocupada, o Vite pode arrancar em **outra porta** — vê o URL no terminal, ex. `http://localhost:5174/`).
 
 **Pré-requisitos**
 

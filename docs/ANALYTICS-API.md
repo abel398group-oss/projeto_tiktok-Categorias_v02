@@ -43,6 +43,7 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/product-score` | `npm run analytics:product-score` |
 | GET | `/analytics/new-products` | `npm run analytics:new-products` |
 | GET | `/analytics/growth` | `npm run analytics:growth` |
+| GET | `/analytics/scalable-products` | `npm run analytics:scalable` |
 
 ## Formato de resposta
 
