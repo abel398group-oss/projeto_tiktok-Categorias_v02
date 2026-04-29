@@ -1,5 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { apiFetch } from "./api.js";
+import {
+  INITIAL_FILTER_STATE,
+  PRODUCT_SCORE_PRESETS,
+  applyProductFilters,
+  filtersAreInactive
+} from "./productFilters.js";
 import { mapCategoryTableLabels } from "./mapCategoryUi.js";
 import { ColumnResizeGrip, useColumnWidths } from "./useColumnWidths.jsx";
 import {
@@ -542,6 +548,146 @@ function TableOpp({ data }) {
   );
 }
 
+const scoreFilterInput = {
+  width: "4rem",
+  padding: "0.28rem 0.35rem",
+  fontSize: "0.78rem",
+  borderRadius: 4,
+  border: "1px solid #38444d",
+  background: "#121a22",
+  color: "#e7e9ea",
+  boxSizing: "border-box"
+};
+const scorePresetBtn = {
+  padding: "0.32rem 0.6rem",
+  fontSize: "0.76rem",
+  cursor: "pointer",
+  borderRadius: 7,
+  border: "1px solid #38444d",
+  background: "#16212b",
+  color: "#e7e9ea",
+  lineHeight: 1.35
+};
+
+/**
+ * Presets preenchem apenas rascunho — o utilizador clica em «Aplicar filtros».
+ * @param {{
+ *   filterDraft: import("./productFilters.js").ProductFilterState,
+ *   setFilterDraft: (u: import("./productFilters.js").ProductFilterState | ((p: import("./productFilters.js").ProductFilterState) => import("./productFilters.js").ProductFilterState)) => void,
+ *   onApply: () => void,
+ *   onClear: () => void,
+ *   rawCount: number,
+ *   filteredCount: number,
+ *   appliedInactive: boolean,
+ * }} props
+ */
+function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCount, filteredCount, appliedInactive }) {
+  /** @param {keyof import("./productFilters.js").ProductFilterState} key */
+  const mk = (key) => ({
+    value: filterDraft[key],
+    onChange: /** @param {React.ChangeEvent<HTMLInputElement>} e */ (e) =>
+      setFilterDraft((f) => ({ ...f, [key]: e.target.value }))
+  });
+
+  return (
+    <section
+      style={{
+        marginBottom: "0.85rem",
+        padding: "0.65rem 0.75rem",
+        borderRadius: 8,
+        border: "1px solid #32404c",
+        background: "#141d26"
+      }}
+      aria-label="Filtros da tabela Product Score"
+    >
+      <div style={{ fontSize: "0.76rem", opacity: 0.88, marginBottom: "0.45rem", fontWeight: 600 }}>Presets rápidos</div>
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
+        {PRODUCT_SCORE_PRESETS.map((p) => (
+          <button key={p.id} type="button" style={scorePresetBtn} title={p.description} onClick={() => setFilterDraft(p.fill)}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ fontSize: "0.76rem", opacity: 0.82, marginBottom: "0.38rem" }}>Campos (preenchem o rascunho; vazio = sem limite)</div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.5rem 0.85rem",
+          alignItems: "baseline",
+          marginBottom: "0.55rem",
+          fontSize: "0.76rem"
+        }}
+      >
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Preço min</span>
+          <input {...mk("precoMin")} type="text" inputMode="decimal" style={scoreFilterInput} autoComplete="off" />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Preço max</span>
+          <input {...mk("precoMax")} type="text" inputMode="decimal" style={scoreFilterInput} autoComplete="off" />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Vendas min</span>
+          <input {...mk("vendasMin")} type="text" inputMode="numeric" style={scoreFilterInput} autoComplete="off" />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Vendas max</span>
+          <input {...mk("vendasMax")} type="text" inputMode="numeric" style={scoreFilterInput} autoComplete="off" />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Rating min</span>
+          <input {...mk("ratingMin")} type="text" inputMode="decimal" style={scoreFilterInput} autoComplete="off" />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={{ opacity: 0.9 }}>Score min</span>
+          <input {...mk("scoreMin")} type="text" inputMode="numeric" style={scoreFilterInput} autoComplete="off" />
+        </label>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={onApply}
+          style={{
+            padding: "0.35rem 0.85rem",
+            fontSize: "0.78rem",
+            cursor: "pointer",
+            borderRadius: 6,
+            border: "1px solid #2978b8",
+            background: "#1d6fa5",
+            color: "#fff",
+            fontWeight: 600
+          }}
+        >
+          Aplicar filtros
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          style={{
+            padding: "0.35rem 0.75rem",
+            fontSize: "0.78rem",
+            cursor: "pointer",
+            borderRadius: 6,
+            border: "1px solid #38444d",
+            background: "#192833",
+            color: "#e7e9ea"
+          }}
+        >
+          Limpar
+        </button>
+        <span style={{ fontSize: "0.72rem", opacity: 0.78 }}>
+          Mostrando <strong>{filteredCount}</strong> de <strong>{rawCount}</strong> produtos (lista API{" "}
+          {rawCount <= 30 ? "até 30" : String(rawCount)} · filtros só no cliente).
+        </span>
+        {!appliedInactive ? (
+          <span style={{ fontSize: "0.7rem", opacity: 0.75, color: "#7ec8ff" }}>Filtros activos</span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
@@ -576,11 +722,24 @@ function TableScore({ data }) {
   );
 
   const [sort, setSort] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
+  const [filterDraft, setFilterDraft] = useState(() => ({ ...INITIAL_FILTER_STATE }));
+  const [filterApplied, setFilterApplied] = useState(() => ({ ...INITIAL_FILTER_STATE }));
+
+  const filteredRows = useMemo(() => applyProductFilters(rawRows, filterApplied), [rawRows, filterApplied]);
 
   const rows = useMemo(() => {
-    if (rawRows.length === 0) return [];
-    return sortScoreRowsByColumn(rawRows, sort.key, sort.dir);
-  }, [rawRows, sort]);
+    if (filteredRows.length === 0) return [];
+    return sortScoreRowsByColumn(filteredRows, sort.key, sort.dir);
+  }, [filteredRows, sort]);
+
+  const onApplyFilters = useCallback(() => {
+    setFilterApplied({ ...filterDraft });
+  }, [filterDraft]);
+
+  const onClearFilters = useCallback(() => {
+    setFilterDraft({ ...INITIAL_FILTER_STATE });
+    setFilterApplied({ ...INITIAL_FILTER_STATE });
+  }, []);
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
@@ -618,12 +777,24 @@ function TableScore({ data }) {
   return (
     <>
       {scoreIntro}
+      <ScoreFilterPanel
+        filterDraft={filterDraft}
+        setFilterDraft={setFilterDraft}
+        onApply={onApplyFilters}
+        onClear={onClearFilters}
+        rawCount={rawRows.length}
+        filteredCount={filteredRows.length}
+        appliedInactive={filtersAreInactive(filterApplied)}
+      />
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
         Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+      {filteredRows.length === 0 ? (
+        <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros actuais — ajuste os limites ou clique em Limpar.</p>
+      ) : (
+        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
@@ -728,6 +899,7 @@ function TableScore({ data }) {
           ))}
         </tbody>
       </table>
+      )}
     </>
   );
 }
