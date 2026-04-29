@@ -127,10 +127,53 @@ function IntroCard({ title, children }) {
       }}
     >
       <h2 style={{ fontSize: "0.98rem", fontWeight: 600, margin: "0 0 0.5rem 0" }}>{title}</h2>
-      <div style={{ fontSize: "0.8rem", opacity: 0.9, lineHeight: 1.55 }}>{children}</div>
+      <div style={{ fontSize: "0.8rem", opacity: 0.92, lineHeight: 1.55 }}>{children}</div>
     </section>
   );
 }
+
+/** Avisos (⚠️) e listas dentro dos IntroCard */
+const introWarn = {
+  margin: "0.55rem 0 0",
+  padding: "0.5rem 0.65rem",
+  fontSize: "0.78rem",
+  lineHeight: 1.45,
+  borderRadius: 6,
+  borderLeft: "3px solid #eab308",
+  background: "#161c18",
+  opacity: 0.93
+};
+const introBullet = {
+  margin: "0 0 0.6rem",
+  paddingLeft: "1.15rem",
+  lineHeight: 1.55
+};
+const introLead = { margin: "0 0 0.55rem", lineHeight: 1.55 };
+const introLabel = {
+  margin: "0 0 0.3rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  opacity: 0.95
+};
+/** Caixa discreta “lógica por dentro” (alinhada ao relatório na API). */
+const introLogicBox = {
+  margin: "0.55rem 0 0",
+  padding: "0.5rem 0.65rem",
+  fontSize: "0.76rem",
+  lineHeight: 1.52,
+  borderRadius: 6,
+  border: "1px solid #2f3f4d",
+  background: "#111820",
+  opacity: 0.94
+};
+const introLogicUl = { margin: "0.35rem 0 0", paddingLeft: "1.05rem", lineHeight: 1.5 };
+const introLogicLabel = {
+  margin: "0 0 0.15rem",
+  fontSize: "0.79rem",
+  fontWeight: 600,
+  opacity: 0.92,
+  letterSpacing: "0.01em"
+};
 
 /**
  * Ao mudar de coluna: primeiro clique usa desc para métricas onde "maior = mais relevante"
@@ -170,19 +213,31 @@ function TableTop({ data }) {
   const colW = useColumnWidths(CW_TOP);
 
   const topIntro = (
-    <IntroCard title='O que é "Top Products"?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        Esta lista mostra os <strong>produtos (SKU) com mais vendas anunciadas</strong> segundo os dados da{" "}
-        <strong>última vez que importaste a coleta</strong> para a base. O TikTok apresenta um número de vendas no anúncio;
-        aqui usamos esse valor para montar um <strong>ranking por vendas do maior para o menor</strong>, com no máximo{" "}
-        <strong>20</strong> linhas. Se quiseres comparar de outra forma, podes <strong>clicar nos títulos das colunas</strong>{" "}
-        (por exemplo preço ou nome) — isso só muda a ordem <strong>no ecrã</strong>, não altera os dados na base.
+    <IntroCard title="Top Products">
+      <p style={introLead}>
+        <strong>Produtos com mais vendas na sua base.</strong> Mostra os itens com maior número de vendas da{" "}
+        <strong>última importação</strong> realizada no sistema — até <strong>20</strong> linhas ordenadas pelas vendas do snapshot.
       </p>
-      <p style={{ margin: 0 }}>
-        Vês <strong>nome do produto, loja, preço, vendas anunciadas e avaliações</strong> conforme foram gravados nessa atualização — é uma
-        foto do que está guardado no sistema. <strong>Não é sugestão de compra nem previsão de vendas</strong>; apenas o ranking com base nos
-        números que vieram na importação mais recente.
-      </p>
+      <div style={introLabel}>👉 Use para:</div>
+      <ul style={introBullet}>
+        <li>ver o que já está funcionando</li>
+        <li>identificar padrões de produtos</li>
+      </ul>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Como funciona (por dentro)</div>
+        <ul style={introLogicUl}>
+          <li>usa só o último scrape importado;</li>
+          <li>
+            ordena por <strong>vendas</strong> (maior → menor) e corta em <strong>20</strong> linhas;
+          </li>
+          <li>
+            só entram snapshots com <strong>número de vendas registado</strong> — sem vendas na base ficam de fora.
+          </li>
+        </ul>
+      </div>
+      <div style={introWarn}>
+        ⚠️ Baseado nos dados importados — não é previsão nem dado em tempo real do TikTok.
+      </div>
     </IntroCard>
   );
 
@@ -319,20 +374,31 @@ function TableOpp({ data }) {
   const colW = useColumnWidths(CW_OPP);
 
   const oppIntro = (
-    <IntroCard title='O que é "Opportunities" (oportunidades)?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        Aqui o sistema faz uma <strong>pré-seleção automática</strong> entre os dados da última importação — no máximo{" "}
-        <strong>20</strong> linhas — com regras <strong>fixas mas simples</strong>: média das avaliações{" "}
-        <strong>pelo menos 4,5</strong>,{" "}
-        <strong>no mínimo 5 avaliações</strong>, vendas declaradas entre <strong>10 e 300</strong> unidades e com{" "}
-        <strong>preço preenchido</strong>. A ideia é destacar produtos bem avaliados que ainda <strong>não são megavolumes</strong>{" "}
-        (para explorares antes que fiquem saturados).
+    <IntroCard title="Opportunities">
+      <p style={introLead}>
+        <strong>Produtos bem avaliados que ainda não são grandes volumes.</strong> Seleccionados automaticamente na última
+        importação com regras simples: <strong>avaliação média alta</strong>, <strong>mínimo de avaliações</strong>, vendas na{" "}
+        <strong>faixa intermediária</strong> e <strong>preço definido</strong> — até <strong>20</strong> linhas (detalhes em Analytics v1 nos docs).
       </p>
-      <p style={{ margin: 0 }}>
-        Na coluna <strong>motivo</strong> aparece texto que relembra estes critérios. Isto ajuda à leitura, mas{" "}
-        <strong>não é recomendação de investimento nem substitui o score nem qualquer garantia comercial</strong> — apenas um filtro
-        útil dentro daquilo que já tens na base.
-      </p>
+      <div style={introLabel}>👉 Use para:</div>
+      <ul style={introBullet}>
+        <li>encontrar produtos com boa aceitação</li>
+        <li>entrar antes de ficarem saturados</li>
+      </ul>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Como funciona (por dentro)</div>
+        <ul style={introLogicUl}>
+          <li>último scrape;</li>
+          <li>
+            filtros na base: <strong>preço</strong> definido; média de avaliação <strong>≥ 4,5</strong>; total de avaliações{" "}
+            <strong>≥ 5</strong>; vendas entre <strong>10 e 300</strong>;
+          </li>
+          <li>
+            ordenação principal: melhor média de avaliação (com desempate por vendas); <strong>máx. 20</strong> linhas.
+          </li>
+        </ul>
+      </div>
+      <div style={introWarn}>⚠️ É um filtro exploratório — não garante resultado.</div>
     </IntroCard>
   );
 
@@ -481,20 +547,31 @@ function TableScore({ data }) {
   const colW = useColumnWidths(CW_SCORE);
 
   const scoreIntro = (
-    <IntroCard title='O que é "Product Score" (score do produto)?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        O <strong>score de 0 a 100</strong> junta vários indícios da <strong>última importação</strong> — por exemplo vendas
-        anunciadas, avaliações, se o preço faz sentido, desconto, se cai na faixa de &quot;oportunidade&quot; e, quando há{" "}
-        <strong>duas importações comparáveis</strong>, também a <strong>subida ou descida de vendas</strong> relativamente à anterior.
-        É calculado <strong>só quando abres esta vista</strong> ou corres o relatório — <strong>não fica gravado</strong> na base como
-        coluna oficial.
+    <IntroCard title="Product Score">
+      <p style={introLead}>
+        <strong>Ranking com base em múltiplos factores.</strong> O sistema calcula uma nota de <strong>0 a 100</strong> combinando (entre
+        outros) <strong>vendas</strong>, <strong>avaliações</strong>, <strong>preço</strong>, <strong>desconto</strong>,{" "}
+        <strong>faixa de oportunidade</strong> e <strong>variação de vendas</strong> face ao run anterior, quando esse cálculo é possível —
+        sempre sobre a <strong>última importação</strong>, apenas <strong>em memória</strong> (não grava coluna oficial na base).
       </p>
-      <p style={{ margin: 0 }}>
-        Por defeito vês até <strong>30</strong> produtos ordenados pelo <strong>score mais alto primeiro</strong>; nos cabeçalhos podes ordenar por outras colunas (nome, loja, etc.).
-        Etiquetas como &quot;excelente&quot; ou &quot;bom&quot; são <strong>faixas de leitura</strong>, não promessa de lucro nem modelo de IA; os pesos exactos da fórmula estão descritos na{" "}
-        <code style={{ opacity: 0.85 }}>documentação ANALYTICS</code>{" "}
-        do projeto para quem quiser ir ao detalhe.
+      <p style={{ ...introLead, marginBottom: "0.45rem" }}>
+        👉 Lista principal até <strong>30 produtos</strong> ordenados por score (cabeçalhos permitem ordenar só no ecrã).
       </p>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Como funciona (por dentro)</div>
+        <ul style={introLogicUl}>
+          <li>
+            pontua cada produto do último import de <strong>0 a 100</strong> (vendas, avaliações, preço, desconto, faixa de
+            oportunidade e — quando existe run anterior comparável — <strong>variação de vendas</strong>);
+          </li>
+          <li>
+            ordena todos por score; este ecrã mostra só o <strong>top 30</strong> (o restante entra no cálculo geral quando aplicável).
+          </li>
+        </ul>
+      </div>
+      <div style={introWarn}>
+        ⚠️ Score interno da aplicação — não representa lucro nem é um indicador oficial do TikTok.
+      </div>
     </IntroCard>
   );
 
@@ -661,22 +738,43 @@ function TableCategoryMap({ data }) {
   const colWTop = useColumnWidths(CW_MAP_TOP);
 
   const mapIntro = (
-    <IntroCard title='O que é o "Mapa de categoria"?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        O mapa agrupa os produtos da <strong>última importação</strong> por <strong>pasta ou categoria do TikTok Shop</strong>{" "}
-        (a partir do link de categoria de cada produto). Em vez de mostrar o URL completo, a tabela apresenta o{" "}
-        <strong>nome da categoria</strong> e o <strong>identificador numérico</strong> num formato simples tipo &quot;nome · ID&quot;{" "}
-        — assim fica legível onde havia apenas parâmetros e endereços compridos atrás das cenas.
+    <IntroCard title='Mapa de categorias'>
+      <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55 }}>
+        <strong>Visão geral dos produtos agrupados por categoria.</strong> Agrupa com base nas categorias/ligações já{" "}
+        guardadas nos produtos (<strong>a partir do texto ou URL na importação</strong> — normalmente TikTok Shop: nome legível e ID, sem repetir trackers longos).
       </p>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        A <strong>primeira tabela</strong> faz um resumo por sub-categoria: quantos produtos, totais de vendas, médias de preço e avaliações, uma coluna de <strong>score médio</strong> (é a <strong>média simples</strong> das pontuações 0–100 desses produtos, como na aba Product Score, apenas calculada enquanto estás aqui), e conta de «oportunidades» com as mesmas regras gerais usadas mais acima neste painel.
+      <div style={introLabel}>📊 Métricas agregadas por pasta (primeira tabela):</div>
+      <ul style={{ ...introBullet, marginBottom: "0.5rem" }}>
+        <li>quantidade de produtos</li>
+        <li>vendas totais</li>
+        <li>médias de preço e de avaliação</li>
+        <li>score médio da pasta (média simples das pontuações 0–100 dos produtos dali)</li>
+      </ul>
+      <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55 }}>
+        Há também uma segunda listagem combinada <strong>SKU em destaque</strong> entre pastas — até <strong>cinco</strong> por subcategoria ordenados por score.
       </p>
-      <p style={{ margin: 0 }}>
-        <strong>Mais abaixo</strong>, uma <strong>segunda tabela</strong> lista <strong>exemplos de produtos em destaque</strong> dentro de cada pasta — para ver casos concretos; tal como nas outras abas, só estás a ler dados já importados e ordenar no ecrã pelos cabeçalhos.
-      </p>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Como funciona (por dentro)</div>
+        <ul style={introLogicUl}>
+          <li>
+            agrupa produtos da última importação pela <strong>categoria</strong> extraída do texto ou URL gravados (heurística de pasta / TikTok quando aplica);
+          </li>
+          <li>
+            por pasta calcula contagens, somas de vendas, médias de preço e rating; o <strong>score da pasta</strong> é a média simples das pontuações 0–100 dos produtos;
+          </li>
+          <li>
+            em cada subcategoria lista até <strong>cinco</strong> produtos exemplo, pela ordem de score descendente.
+          </li>
+        </ul>
+      </div>
+      <div style={introLabel}>👉 Use para:</div>
+      <ul style={introBullet}>
+        <li>entender quais categorias estão mais fortes</li>
+        <li>identificar onde focar</li>
+      </ul>
+      <div style={introWarn}>⚠️ Categorias derivadas dos dados importados — não são classificações oficiais do TikTok.</div>
     </IntroCard>
   );
-
   /** @type {{
    * masterName: string,
    * subName: string,
@@ -1087,14 +1185,49 @@ function TableScalableSections({ data }) {
   }, []);
 
   const escalarIntro = (
-    <IntroCard title='O que é "Escalar" neste painel?'>
-      <p style={{ margin: "0 0 0.6rem 0" }}>
-        <strong>Escalar</strong>, neste contexto, é pensar <strong>onde investir mais esforço ou visibilidade</strong> num produto do TikTok Shop — por
-        exemplo mais anúncios, mais stock ou repetir um formato de vídeo que funciona — <strong>com base na última vez que os dados foram importados</strong>.
+    <IntroCard title="🔥 Escalar">
+      <p style={introLead}>
+        <strong>Sugestão de onde focar esforço</strong> com base nos dados já importados. Em duas vistas —{" "}
+        <strong>Validados para escalar</strong> e <strong>Apostas com potencial</strong> — aplica filtros diferentes sobre{" "}
+        candidatos que passaram por triagem técnica.
       </p>
-      <p style={{ margin: 0 }}>
-        Há <strong>duas listas</strong> com regras diferentes: uma para artigos com <strong>vendas e avaliações já mais sólidas</strong> (candidatos a &quot;validados&quot;) e outra para <strong>artigos ainda pequenos mas com bons sinais</strong> (candidatos a &quot;apostas&quot;). As duas olham para <strong>todos os produtos que já receberam score nesta importação</strong>, não só para as primeiras linhas da tabela resumida de score — servem para apoiar decisões, <strong>sem substituir o teu julgamento nem números internos de margem</strong>.
+      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "0.45rem" }}>
+        <div style={{ flex: "1 1 200px" }}>
+          <strong>✅ Validados</strong>
+          <ul style={{ ...introBullet, marginTop: "0.25rem", marginBottom: "0.15rem" }}>
+            <li>já têm vendas consistentes</li>
+            <li>boas avaliações (segundo critérios do relatório)</li>
+          </ul>
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <strong>🧪 Potencial</strong>
+          <ul style={{ ...introBullet, marginTop: "0.25rem", marginBottom: "0.15rem" }}>
+            <li>vendas menores</li>
+            <li>bons sinais de qualidade</li>
+          </ul>
+        </div>
+      </div>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Como funciona (por dentro)</div>
+        <ul style={introLogicUl}>
+          <li>
+            parte da <strong>pontuação completa</strong> de todos os produtos do último import (mesma fórmula do Product Score, não apenas os ~30 da outra vista);
+          </li>
+          <li>
+            aplica <strong>exclusões globais</strong> primeiro (por exemplo preço inválido, vendas demasiado altas, avaliação média baixa segundo as regras do relatório);
+          </li>
+          <li>
+            depois divide o que sobrou em <strong>Validados</strong> (critérios de volume + avaliações + score) e <strong>Apostas com potencial</strong> (vendas mais baixas mas com bons sinais de avaliações e score).
+          </li>
+        </ul>
+      </div>
+      <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55 }}>
+        👉 Este relatório atravessa <strong>todos os produtos já pontuados</strong> no último import (universo do score completo na base), não
+        só os ~30 primeiro da vista Product Score.
       </p>
+      <div style={introWarn}>
+        ⚠️ Não considera margem, logística nem estratégia de venda próprios — apenas sinais calculados sobre os dados.
+      </div>
     </IntroCard>
   );
 
@@ -1350,6 +1483,11 @@ export default function App() {
       <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Analytics (API read-only)</h1>
       <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
         Mesmos endpoints da API Fastify. Em dev usa-se o proxy do Vite para evitar CORS.
+      </p>
+      <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
+        <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
+        ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos dados
+        importados.
       </p>
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
