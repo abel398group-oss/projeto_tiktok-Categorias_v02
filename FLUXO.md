@@ -161,9 +161,15 @@ npm install
 npm run dev
 ```
 
-- O Vite indica um URL (**normalmente `http://localhost:5173/`**). Abrir no browser e usar **Carregar dados** nas abas.
+- O Vite usa **`http://localhost:5173/`** por defeito (tenta abrir o browser ao arrancar; se **5173** estiver ocupada, o `npm run dev` falha — fecha o que estiver nessa porta). Usar **Carregar dados** nas abas.
 - No **`frontend/.env`** define **`VITE_ANALYTICS_API_KEY`** com o **mesmo** valor que **`ANALYTICS_API_KEY`** na raiz (ver **`frontend/README.md`** e **`frontend/.env.example`**).
 - Sem a API na porta combinada (**3333** por defeito ou a que configuraste), o navegador mostra erro e o terminal do Vite pode indicar **`ECONNREFUSED`** ao tentar proxificar `/analytics`.
+
+**Um terminal (API + Vite)** — desenvolvimento rápido, logs no mesmo terminal com prefixos **`API`** / **`FRONT`** (`concurrently`):
+
+```bash
+npm run dev:all
+```
 
 Alteraste **portas** (`ANALYTICS_API_PORT` ou `vite.config.js`)? Atualiza **este ficheiro** para quem ler no futuro encontrar URLs certas.
 
@@ -171,4 +177,4 @@ Alteraste **portas** (`ANALYTICS_API_PORT` ou `vite.config.js`)? Atualiza **este
 
 Instala com **`npm install`**, corre **`npm run coleta`** (rápida) ou **`npm run coleta:completa`** (categoria + `fotos_pdp`), lê **`output/dados_produtos.json`**.  
 Se der erro de sessão, **`npm run coleta:completa:login`** (ou o passo 5).  
-Para **painel analytics no browser**, dois terminais: **`npm run analytics:api`** + **`cd frontend && npm run dev`** (secções **9** e **10**).
+Para **painel analytics no browser**, **`npm run dev:all`** (secção **10**, um terminal) ou dois terminais: **`npm run analytics:api`** + **`cd frontend && npm run dev`** (secções **9** e **10**).

@@ -18,6 +18,9 @@
     "analytics:product-score": "node --env-file=.env scripts/analytics/product-score.mjs",
     "analytics:decision": "node --env-file=.env scripts/analytics/product-decision-cli.mjs",
     "analytics:api": "node --env-file=.env scripts/analytics/server.mjs",
+    "api:dev": "npm run analytics:api",
+    "frontend:dev": "cd frontend && npm run dev",
+    "dev:all": "concurrently -n API,FRONT -c green,blue \"npm run api:dev\" \"npm run frontend:dev\"",
     "prisma:generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:studio": "prisma studio",
@@ -47,6 +50,7 @@
   },
   "devDependencies": {
     "ajv": "^8.20.0",
+    "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "prisma": "5.22.0"
   },

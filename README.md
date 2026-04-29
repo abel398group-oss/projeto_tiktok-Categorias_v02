@@ -87,6 +87,29 @@ Com `DATABASE_URL` definida:
 
 Detalhes, limitações e contrato com `DATA_POLICY`: **[`docs/ANALYTICS.md`](docs/ANALYTICS.md)**.
 
+## Desenvolvimento rápido
+
+Um único comando para subir **API (Fastify)** + **frontend (Vite)** ao mesmo tempo, no **mesmo terminal**, com cores por processo (`concurrently`):
+
+```bash
+npm install
+npm run dev:all
+```
+
+- **API** → por defeito **`http://127.0.0.1:3333`** (`npm run analytics:api` atrás de `api:dev`).
+- **Frontend** → **`http://localhost:5173/`** (Vite tenta abrir o browser ao arrancar; se a porta **5173** estiver ocupada, o comando falha — fecha o outro processo nessa porta e torna a correr).
+
+**Pré-requisitos**
+
+- `.env` na **raiz** com **`DATABASE_URL`** e **`ANALYTICS_API_KEY`**.
+- **`frontend/.env`** com **`VITE_ANALYTICS_API_KEY`** igual ao valor da API (mesmo Bearer).
+
+Detalhes de endpoints e proxy: [`docs/ANALYTICS-API.md`](docs/ANALYTICS-API.md) · fluxo alternativo em dois terminais: [`FLUXO.md`](FLUXO.md) secções **9–10**.
+
+Script individual útil para debug: **`npm run api:dev`** só API · **`npm run frontend:dev`** só frontend.
+
+Para parar os dois processos: **Ctrl+C** no terminal onde correu `dev:all`.
+
 ## Desenvolvimento
 
 ```bash
