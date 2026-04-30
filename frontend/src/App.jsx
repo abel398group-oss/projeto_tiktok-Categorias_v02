@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
-import { apiFetch, apiPost } from "./api.js";
+import { apiPost } from "./api.js";
 import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
 import AppShell from "./AppShell.jsx";
+import { useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
 import {
   INITIAL_FILTER_STATE,
@@ -20,14 +21,6 @@ import {
   sortScoreRowsByColumn,
   sortTopItemsByColumn
 } from "./sortUtils.js";
-
-const tabs = [
-  { id: "top", label: "Top Products", path: "/analytics/top-products", key: "top" },
-  { id: "opp", label: "Opportunities", path: "/analytics/opportunities", key: "opp" },
-  { id: "score", label: "Product Score", path: "/analytics/product-score", key: "score" },
-  { id: "scale", label: "🔥 Escalar", path: "/analytics/scalable-products", key: "scale" },
-  { id: "map", label: "🧭 Mapa", path: "/analytics/category-map", key: "map" }
-];
 
 /** @typedef {'asc' | 'desc'} SortDir */
 
@@ -1811,26 +1804,9 @@ function TableScalableSections({ data }) {
 }
 
 function AnalyticsDashboard() {
-  const [tab, setTab] = useState("top");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [cache, setCache] = useState({ top: null, opp: null, score: null, scale: null, map: null });
+  const { tab, setTab, cache, loading, error, load, tabs, setError } = useAnalyticsDashboardCache();
 
   const current = tabs.find((t) => t.id === tab);
-
-  const load = useCallback(async () => {
-    if (!current) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const json = await apiFetch(current.path);
-      setCache((c) => ({ ...c, [current.key]: json }));
-    } catch (e) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [current]);
 
   const data = current ? cache[current.key] : null;
 
@@ -1844,6 +1820,10 @@ function AnalyticsDashboard() {
         <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
         ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
         dados importados.
+      </p>
+      <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
+        Ao voltar do <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, os dados já carregados
+        mantêm-se nesta sessão — use <strong>Carregar dados</strong> só quando quiser actualizar da API.
       </p>
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
@@ -1909,10 +1889,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/produto/:productId" element={<ProductWorkspacePage />} />
         <Route path="/" element={<AppShell />}>
           <Route index element={<AnalyticsDashboard />} />
           <Route path="a-mao" element={<HandsOnPage />} />
+          <Route path="produto/:productId" element={<ProductWorkspacePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
