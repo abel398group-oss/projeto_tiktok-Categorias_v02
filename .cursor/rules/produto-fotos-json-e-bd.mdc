@@ -1,0 +1,28 @@
+---
+description: Contrato fotos/fotos_pdp no JSON versus images/pdp_images na BD (evitar coluna images vazia).
+globs: src/scrapeCategory.mjs,scripts/import-output-to-db.mjs
+alwaysApply: false
+---
+
+# Produto — fotos no JSON vs snapshots na BD
+
+## Mapa obrigatório
+
+- **`dados_produtos.json`**: campo **`fotos`** e **`fotos_pdp`**.
+- **`ProductSnapshot`** (Prisma): **`images`** ← vem da importação; **`pdpImages`** ← `fotos_pdp`.
+
+Ou seja: **UI e relatórios que olham só `images`** continuam dependentes de **`fotos`** no JSON. **Nunca** gravar apenas em `pdpImages` esperando substituir `images`.
+
+## Anti-regressão (abril 2026)
+
+Ao existir **`fotos_pdp`** preenchido (PDP/router), **`toDadosProdutoClean`** usa **`subtractFotosOverlappingPdp`** para não duplicar a mesma foto da grelha na lista PDP. **Se o subtract remover toda a grelha**, a capa já está coberta pela PDP mas o campo **`fotos`** **não pode** ficar `null`: é obrigatório **fallback para a lista deduplicada da grelha** (`dedupeImageUrlsByAssetId` + `dedupeImageUrlsByPathname` sobre `n.images`), para **`fotos` / coluna `images`** não ficarem vazios.
+
+## Importação (`scripts/import-output-to-db.mjs`)
+
+- Se **`item.fotos`** vier vazio / null mas **`item.fotos_pdp`** tiver URLs, **`images`** no snapshot deve usar **`fotos_pdp`** como fallback (snapshots já exportados antes da correção não podem ficar sem coluna **`images`** após novo import).
+
+## Checklist antes de merge
+
+- Ao alterar **`toDadosProdutoClean`**, **`subtractFotosOverlappingPdp`**, **`enrichByProductIdWithPdpGallery`** ou extracção **`images_pdp`**: confirmar **`output/dados_produtos.json`** com **`fotos`** não-null quando a grelha tinha pelo menos uma imagem OU há **`fotos_pdp`** com URLs após nova **`coleta:completa:db`**.
+- Ao alterar o import de snapshots: garantir **`images`** + **`pdpImages`** coerentes com o fallback acima.
+- Correr **`npm test`** se tocar na cadeia de imagens PDP ou em **`toDadosProdutoClean`**.
