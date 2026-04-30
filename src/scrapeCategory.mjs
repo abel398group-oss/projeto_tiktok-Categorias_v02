@@ -220,6 +220,12 @@ function toDadosProdutoClean(n, categoriaUrl) {
   if (Array.isArray(n.images) && n.images.length) {
     if (pdp) {
       fotos = subtractFotosOverlappingPdp(n.images, pdp);
+      /* Regressão: se toda a grelha coincide com assets já em fotos_pdp, subtract devolve null.
+       * `import-output-to-db` mapeia `fotos` → coluna `images`; manter sempre as URLs da grelha
+       * deduplicadas para não ficar BD/UI sem thumbnails. */
+      if (!fotos || !fotos.length) {
+        fotos = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(n.images));
+      }
     } else {
       fotos = dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname(n.images));
     }

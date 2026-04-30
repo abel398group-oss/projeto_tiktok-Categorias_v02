@@ -223,6 +223,14 @@ async function importMain() {
     });
     productsUpserted++;
 
+    /** Regressão: JSON com fotos:null e fotos_pdp preenchido (subtract total) gravava BD sem imagens. */
+    const snapshotImages =
+      Array.isArray(item.fotos) && item.fotos.length > 0
+        ? item.fotos
+        : Array.isArray(item.fotos_pdp) && item.fotos_pdp.length > 0
+          ? item.fotos_pdp
+          : null;
+
     await prisma.productSnapshot.create({
       data: {
         capturedAt: t,
@@ -237,7 +245,7 @@ async function importMain() {
         ratingAverage: item.avaliacao_media ?? null,
         ratingTotal: item.avaliacoes_total != null ? Math.trunc(Number(item.avaliacoes_total)) : null,
         votesByStar: toJson(item.votos_por_estrela),
-        images: toJson(item.fotos),
+        images: toJson(snapshotImages),
         pdpImages: toJson(item.fotos_pdp),
         dataQuality: null,
         productRefId: row.id,
