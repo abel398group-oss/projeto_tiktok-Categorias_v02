@@ -67,7 +67,9 @@ async function main() {
     credentials: {
       accessKeyId,
       secretAccessKey
-    }
+    },
+    /** Espaços DO costumam responder melhor com path-style no SDK v3. */
+    forcePathStyle: true
   });
 
   await client.send(
@@ -100,5 +102,17 @@ async function main() {
 main().catch((err) => {
   // eslint-disable-next-line no-console
   console.error("Falha no teste Spaces:", err?.message ?? err);
+  if (err?.name) {
+    // eslint-disable-next-line no-console
+    console.error("  código/nome:", err.name);
+  }
+  if (err?.$metadata) {
+    // eslint-disable-next-line no-console
+    console.error("  requestId:", err.$metadata.requestId, "| httpStatus:", err.$metadata.httpStatusCode);
+  }
+  if (process.env.DEBUG_SPACES) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+  }
   process.exit(1);
 });
