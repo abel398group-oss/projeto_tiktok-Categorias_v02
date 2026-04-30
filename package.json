@@ -10,6 +10,7 @@
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
     "test": "node --test test/scrape-regression.test.mjs",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
+    "test:spaces": "node --env-file=.env scripts/test-spaces-upload.mjs",
     "validate:db-vs-json": "node --env-file=.env scripts/validate-db-vs-json.mjs",
     "analytics:top-products": "node --env-file=.env scripts/analytics/top-products.mjs",
     "analytics:new-products": "node --env-file=.env scripts/analytics/new-products.mjs",
@@ -57,6 +58,7 @@
     "prisma": "5.22.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.787.0",
     "@prisma/client": "5.22.0",
     "fastify": "^4.29.1",
     "puppeteer": "^24.6.0",
