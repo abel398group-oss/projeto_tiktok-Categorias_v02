@@ -1,6 +1,6 @@
 # Analytics API v1
 
-Servidor HTTP expõe os mesmos relatórios em **GET** que os comandos CLI em `npm run analytics:*`, e **um POST** opcional para exportar um produto para DigitalOcean Spaces. A lógica de relatórios partilha `scripts/analytics/lib/` com os scripts de linha de comando; o núcleo de export partilha `scripts/lib/export-product-to-spaces-core.mjs` com `npm run export:product-spaces`.
+Servidor HTTP expõe os mesmos relatórios em **GET** que os comandos CLI em `npm run analytics:*`, **GET por produto** para a página «workspace», e **POST** opcional para exportar um produto para DigitalOcean Spaces. A lógica de relatórios partilha `scripts/analytics/lib/` com os scripts de linha de comando; o núcleo de export partilha `scripts/lib/export-product-to-spaces-core.mjs` com `npm run export:product-spaces`.
 
 ## Pré-requisitos
 
@@ -46,7 +46,15 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/growth` | Equiv. `npm run analytics:growth` |
 | GET | `/analytics/scalable-products` | Equiv. `npm run analytics:scalable` |
 | GET | `/analytics/category-map` | Equiv. `npm run analytics:category-map` |
+| GET | `/analytics/product-workspace/:productId` | Detalhe de um produto no **último** ScrapeRun (score alinhado a `product-score`, URLs de imagens do snapshot, etc.). `productId` = ID TikTok (URL-encoded se necessário). |
 | POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (último snapshot). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
+
+### GET product-workspace
+
+- **200** com corpo completo: campos de métricas/resumo do score; **`nome`** (nome na base) e **`nomeLista`** (truncado como na tabela); **`categorySlug`**, **`exportPrefix`** (pastas do export Space, com `SPACES_EXPORT_*` do servidor); preços extra (**`originalPrice`**, **`estimatedShowcasePrice`**, gaps), **`salesText`**, **`currency`**, **`sellerId`**, **`snapshotCapturedAt`**, **`firstSeenAt`** / **`lastSeenAt`**, **`votesByStar`** e **`dataQuality`** (JSON quando existir), **`deltaHint`** quando Δ não se aplica, **`imageUrls`**. Ver `scripts/analytics/lib/product-workspace.mjs`.
+- **404** se o produto não existir ou não tiver snapshot no último run.
+- **200** com `{ "error": "no_run", "message": "…" }` se não houver ScrapeRun (sem base importada).
+- **400** se o segmento do path estiver vazio após trim.
 
 ### POST export-product-to-spaces
 
@@ -76,6 +84,11 @@ Equivale conceitualmente a `npm run export:product-spaces -- --product-id <id>`;
 
 ```bash
 curl -s -H "Authorization: Bearer SUA_CHAVE" http://127.0.0.1:3333/analytics/top-products
+```
+
+```bash
+curl -s -H "Authorization: Bearer SUA_CHAVE" \
+  http://127.0.0.1:3333/analytics/product-workspace/1732593847560123456
 ```
 
 Export (POST):

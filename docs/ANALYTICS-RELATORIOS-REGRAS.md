@@ -51,6 +51,8 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |--|--|
 | Fonte | `scripts/analytics/lib/product-score.mjs` |
 
+**Página por produto (React `/produto/:productId`):** **GET** `/analytics/product-workspace/:productId` em `scripts/analytics/lib/product-workspace.mjs` — último ScrapeRun, mesma pontuação `computeProductScoreLine` que o relatório.
+
 **Todos** os snapshots do último run; pontuações 0–100 **em memória** (ver pesos/blocos na tabela de `docs/ANALYTICS.md`). Após ordenar por score descendente expõe **até 30** linhas ao cliente (`TOP_LIMIT`).  
 Função exportada também usada pelo mapa como `computeProductScoreLine` (**mesmos pesos**, sem duplicação manual de fórmulas).
 

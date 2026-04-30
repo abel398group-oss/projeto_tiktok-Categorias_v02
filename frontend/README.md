@@ -29,6 +29,8 @@ Copiar `.env.example` → `.env` e ajustar `VITE_ANALYTICS_API_KEY`.
 
 Cinco separadores — **Top Products**, **Opportunities**, **Product Score**, **Escalar**, **Mapa** (endpoints `/analytics/top-products`, `…/opportunities`, `…/product-score`, `…/scalable-products`, `…/category-map`). Botão **Carregar dados** para fazer o pedido ao endpoint da aba activa.
 
+**Página por produto:** `/produto/<productId TikTok>` (liga no nome na tabela Product Score). Chama **GET** `/analytics/product-workspace/:productId` e grava **notas** apenas em **localStorage** neste browser.
+
 ## Erro ao carregar: `ECONNREFUSED 127.0.0.1:3333` (terminal do Vite)
 
 Significa que **a API analytics não está a correr**. Em **outro terminal**, na raiz do repositório: `npm run analytics:api` (com `.env` válido na raiz). Só depois use `npm run dev` no `frontend/` e atualize no browser.

@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
+import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
 import {
   INITIAL_FILTER_STATE,
   PRODUCT_SCORE_PRESETS,
@@ -730,6 +732,9 @@ function TableScore({ data }) {
           <li>
             <strong>Coluna Space:</strong> envia esse produto ao DigitalOcean Spaces via API (credenciais <code>SPACES_*</code> só no servidor, não no browser).
           </li>
+          <li>
+            Clica no <strong>nome</strong> do produto para abrir a <strong>página de trabalho</strong> (<code>/produto/…</code>) com notas no browser e export.
+          </li>
         </ul>
       </div>
       <div style={introWarn}>
@@ -934,7 +939,15 @@ function TableScore({ data }) {
               <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.score}</td>
               <td>{row.classific}</td>
-              <td>{row.nome}</td>
+              <td>
+                <Link
+                  to={`/produto/${encodeURIComponent(row.productId)}`}
+                  title="Abrir página de trabalho deste produto"
+                  style={{ color: "#6ec4ff", textDecoration: "none" }}
+                >
+                  {row.nome}
+                </Link>
+              </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
               <td>{row.vendas ?? "—"}</td>
@@ -1694,7 +1707,7 @@ function TableScalableSections({ data }) {
   );
 }
 
-export default function App() {
+function AnalyticsDashboard() {
   const [tab, setTab] = useState("top");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1720,9 +1733,9 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem" }}>
-      <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Analytics (API read-only)</h1>
+      <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Analytics (API)</h1>
       <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
-        Mesmos endpoints da API Fastify. Em dev usa-se o proxy do Vite para evitar CORS.
+        Métricas em GET pelo Fastify · export Space e página por produto (ver doc). Proxy do Vite em dev para evitar CORS.
       </p>
       <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
         <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
@@ -1786,5 +1799,16 @@ export default function App() {
       {!loading && tab === "scale" && <TableScalableSections data={data} />}
       {!loading && tab === "map" && <TableCategoryMap data={data} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/produto/:productId" element={<ProductWorkspacePage />} />
+        <Route path="/" element={<AnalyticsDashboard />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

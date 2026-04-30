@@ -72,6 +72,7 @@ npm install
 | **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). A parte **API** usa `node --watch` e reinicia ao alterar `server.mjs`. | `npm run dev:all` |
 
 - Chave no browser: `frontend/.env` → **`VITE_ANALYTICS_API_KEY`** igual a **`ANALYTICS_API_KEY`** na raiz. Ver `frontend/README.md`, `.env.example` na raiz e `frontend/.env.example`.
+- Rota **`/produto/<id TikTok>`** para a página de trabalho do produto (link no nome do Product Score).
 - Sem API a correr na porta certa, o proxy do Vite pode dar **ECONNREFUSED**.
 
 ### Qualidade / schemas

@@ -17,6 +17,7 @@ import { getProductScoreReport } from "./lib/product-score.mjs";
 import { getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
+import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
 
 requireDatabaseUrl();
@@ -77,6 +78,22 @@ fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
 fastify.get("/analytics/scalable-products", async () => getScalableProductsReport(prisma));
 
 fastify.get("/analytics/category-map", async () => getCategoryMapReport(prisma));
+
+fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {
+  const raw = req.params.productId != null ? String(req.params.productId).trim() : "";
+  const result = await getProductWorkspaceDetail(prisma, decodeURIComponent(raw));
+  if ("error" in result) {
+    const { error, message } = result;
+    if (error === "bad_request") {
+      return reply.code(400).send({ error, message });
+    }
+    if (error === "not_found" || error === "no_snapshot") {
+      return reply.code(404).send({ error, message });
+    }
+    return reply.code(200).send({ error, message });
+  }
+  return reply.send(result);
+});
 
 /** Exporta um produto (ID TikTok) para Spaces; valida credenciais SPACES na primeira execução real. */
 fastify.post("/analytics/export-product-to-spaces", async (req, reply) => {
