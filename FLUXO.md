@@ -1,159 +1,144 @@
 # Fluxo do projeto
 
-Passos na ordem — da instalação até ao ficheiro com os produtos.
-
-### Um comando (recomendado)
-
-O script **já corre tudo em sequência** no mesmo `node` (primeiro a categoria, depois o opcional de fotos no PDP). **Não** é preciso lançar dois comandos em fila.
-
-| O quê | Comando |
-|--------|--------|
-| **Duas** categorias (rápido; só grelha) + `output/dados_*.json` consolidados | `npm run coleta` |
-| Idem, e **no fim** importa para o Postgres (precisa de `DATABASE_URL` no `.env`) | `npm run coleta:db` |
-| **Duas** categorias + galeria no PDP (`fotos_pdp`, mais lento) + consolidado | `npm run coleta:completa` |
-| Idem + **import** para o banco | `npm run coleta:completa:db` |
-| Mesmo que a linha anterior, e no fim **`analytics:product-score`** | `npm start` |
-| Igual à completa, com browser visível p/ login | `npm run coleta:completa:login` |
-| Idem com login + **import** para o banco | `npm run coleta:completa:login:db` |
-| Uma categoria só, com PDP (`OUTPUT_DIR` / `CATEGORY_URL` se precisar) | `npm run coleta:uma:completa` |
-| Uma categoria, só grelha (sem `PDP_GALLERY`) + **import** | `npm run coleta:uma:db` |
-| Uma categoria com PDP + **import** | `npm run coleta:uma:completa:db` |
-
-O script `scrape-both` propaga as variáveis de ambiente (incl. `PDP_GALLERY`) a cada corrida. Atalhos equivalentes: `scrape:category` / `scrape:category:pdp` (uma categoria).
+Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser.
 
 ---
 
-### 1. Preparar o ambiente (só da primeira vez)
+## Guia rápido — comandos `npm run`
 
-Abre o terminal **na pasta do projeto** e instala dependências:
+**Instalação (uma vez na raiz do repo):**
 
 ```bash
 npm install
 ```
 
-Precisas de **Node.js** instalado no PC.
+### Coleta (duas categorias) + JSON
+
+| Situação | Comando |
+|---------|---------|
+| Só grelha, rápido; gera `output/dados_*.json` | `npm run coleta` |
+| Igual + **import** para Postgres (`DATABASE_URL` no `.env`) | `npm run coleta:db` |
+| Grelha + **galeria PDP** (`fotos_pdp`), mais lento | `npm run coleta:completa` |
+| Completa + **import** para o banco | `npm run coleta:completa:db` |
+| Como `coleta:completa:db` e no fim corre **`analytics:product-score`** no terminal | `npm start` |
+
+*(O `scrape-both` propaga env, p.ex. `PDP_GALLERY`. Não precisas de dois comandos em fila para grelha + PDP na mesma corrida completa.)*
+
+### Coleta — uma categoria só
+
+| Situação | Comando |
+|---------|---------|
+| Uma categoria, PDP + galeria (`OUTPUT_DIR` / `CATEGORY_URL` se precisares) | `npm run coleta:uma:completa` |
+| Uma categoria, só grelha + **import** | `npm run coleta:uma:db` |
+| Uma categoria, PDP + **import** | `npm run coleta:uma:completa:db` |
+| Atalho: uma cat., só grelha | `npm run scrape:category` |
+| Atalho: uma cat., com PDP | `npm run scrape:category:pdp` |
+
+### Coleta — login / browser visível (TikTok a bloquear ou pedir sessão)
+
+| Situação | Comando |
+|---------|---------|
+| Completa com browser visível para login | `npm run coleta:completa:login` |
+| Idem + **import** Postgres | `npm run coleta:completa:login:db` |
+| Só abrir browser com script de categoria (`src/scrapeCategory.mjs`) | `npm run scrape:category:headed` |
+
+### Banco e Prisma
+
+| Situação | Comando |
+|---------|---------|
+| Importar `output/dados_*.json` → Postgres (isolado) | `npm run db:import:output` |
+| Interface web para ver dados (`localhost:5555` típico) | `npm run prisma:studio` |
+| Gerar cliente Prisma | `npm run prisma:generate` |
+
+### Analytics no terminal (CLI, precisa `DATABASE_URL` + `.env`)
+
+| Relatório | Comando |
+|-----------|---------|
+| Top produtos | `npm run analytics:top-products` |
+| Oportunidades | `npm run analytics:opportunities` |
+| Product score | `npm run analytics:product-score` |
+| Crescimento | `npm run analytics:growth` |
+| Novos produtos | `npm run analytics:new-products` |
+| Decisão / interpretação (score) | `npm run analytics:decision` |
+| Escalar (validados + apostas) | `npm run analytics:scalable` |
+| Mapa de categorias | `npm run analytics:category-map` |
+
+### API HTTP + frontend (painel no browser)
+
+| Situação | Comando |
+|---------|---------|
+| Só API Fastify (`127.0.0.1:3333` por defeito). Env: `DATABASE_URL`, **`ANALYTICS_API_KEY`** | `npm run analytics:api` |
+| Só Vite (precisa `cd frontend` + `npm install` na primeira vez) | `cd frontend` → `npm run dev` |
+| **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs) | `npm run dev:all` |
+
+- Chave no browser: `frontend/.env` → **`VITE_ANALYTICS_API_KEY`** igual a **`ANALYTICS_API_KEY`** na raiz. Ver `frontend/README.md`, `.env.example` na raiz e `frontend/.env.example`.
+- Sem API a correr na porta certa, o proxy do Vite pode dar **ECONNREFUSED**.
+
+### Qualidade / schemas
+
+| Situação | Comando |
+|---------|---------|
+| Testes de regressão do scrape | `npm test` |
+| Validar outputs contra schema | `npm run validate:schemas` |
+| Comparar DB vs JSON | `npm run validate:db-vs-json` |
 
 ---
 
-### 2. Correr a coleta
+## Onde estão os dados
 
-**Rápida (só grelha):**
-```bash
-npm run coleta
-```
-
-**Completa (as **duas** categorias, grelha + fotos do PDP, demora mais; depois consolida em `output/dados_*.json`):**
-```bash
-npm run coleta:completa
-```
-
-Uma categoria só com PDP: `npm run coleta:uma:completa` (ou `npm run scrape:category:pdp`).
-
-Os comandos `*:db` acrescentam **só o passo** `import-output-to-db` (Prisma) depois de existirem `output/dados_*.json`. Continuam a ser criados os mesmos ficheiros JSON; o banco fica alinhado à última consolidação. Se não quiseres importar, usa `coleta` / `coleta:completa` / … sem sufixo `:db`.
-
-Espera a execução acabar sozinha.
+- **JSON (análise rápida):** `output/dados_produtos.json` e `output/dados_lojas.json` na raiz de `output/`.
+- **Apoio / debug:** `output/extra/`.
+- **Modelo canónico Postgres:** `docs/ARCHITECTURE.md` (contrato, modelo híbrido, Prisma).
 
 ---
 
-### 3. Abrir o ficheiro com os dados dos produtos
+## Detalhes (quando usar cada fluxo)
 
-O resultado que interessa para análise está **na raiz de `output/`**:
+### 1. Primeira vez
 
-**`output/dados_produtos.json`** · **`output/dados_lojas.json`**
+Terminal na pasta do projeto, **Node ≥ 20**, `npm install`.
 
-(Ficheiros de apoio — debug, cópia técnica, etc. — ficam em **`output/extra/`**.)
+### 2. Coleta “normal” vs “completa”
 
-**Produto e loja no output (contrato):**
+- **`coleta`** / **`coleta:db`** — duas categorias, **sem** PDP galeria (mais rápido).
+- **`coleta:completa`** / **`…:db`** — duas categorias **com** visita aos PDPs (URLs em `fotos_pdp` quando a extracção funcionar).
 
-- `dados_produtos.json` — lista de **produtos**; cada item inclui `seller_id` e campos de loja **desnormalizados** (`nome_loja`, `loja_*`, …) para leitura rápida.
-- `output/dados_lojas.json` (na **raiz** de `output/`, ao lado de `dados_produtos.json`) — **uma linha por `seller_id`**, com dados de loja **consolidados** (fonte agregada; liga-se ao produto pela mesma chave `seller_id`).
+Comandos com sufixo **`:db`** acrescentam **`import-output-to-db`** depois dos JSON já existentes. Sem `:db`, não tocas no Postgres.
 
-Detalhe e modelo (produto / loja / snapshots no Postgres): **`docs/ARCHITECTURE.md`** — ver secções **Contrato dos outputs**, **Decisão arquitetural: modelo híbrido** e **Modelo Postgres (Prisma) — implementado**.
+### 3. Mudar categoria / pasta de saída
 
-Para **consultar dados já importados** no Postgres sem SQL direto: com `DATABASE_URL` no `.env`, corre **`npm run prisma:studio`** (interface web tipo `localhost:5555`; ver **`README.md`**).
-
----
-
-### 4. (Se precisares) Mudar a categoria
-
-Por defeito o script usa uma URL de exemplo dentro do código. Para outra categoria, define a variável **antes** do comando:
+Define **`CATEGORY_URL`** (e se precisares **`OUTPUT_DIR`**) **antes** do comando.
 
 **Windows (cmd):**
+
 ```bat
-set CATEGORY_URL=https://shop.tiktok.com/br/c/... 
+set CATEGORY_URL=https://shop.tiktok.com/br/c/...
 npm run coleta
 ```
 
 **Git Bash / Mac / Linux:**
+
 ```bash
 export CATEGORY_URL="https://shop.tiktok.com/br/c/..."
 npm run coleta
 ```
 
----
+### 4. API analytics (somente leitura hoje)
 
-### 5. (Se o TikTok bloquear ou pedir login)
+- Arranque: **`npm run analytics:api`**.
+- Auth: **`Authorization: Bearer <ANALYTICS_API_KEY>`** (ou `x-api-key`). Endpoints em **`docs/ANALYTICS-API.md`**.
 
-Usa o browser **visível**, faz login na janela e espera o script continuar:
+Relatórios equivalentes aos da tabela CLI; **Escalar** e **category-map** no painel espelham o mesmo universo que `analytics:scalable` e `analytics:category-map`.
 
-```bash
-npm run scrape:category:headed
-```
+### 5. Frontend (dois terminais em vez de `dev:all`)
 
-Ou, se quiseres já a coleta completa com login visível: **`npm run coleta:completa:login`**.
-
-O login pode ficar guardado no perfil `.chrome-tiktok-profile` nas próximas vezes.
-
----
-
-### 6. Fotos do PDP (já incluído em `coleta:completa`)
-
-Não precisas de um segundo comando: **`npm run coleta:completa`** abre a categoria e, a seguir, os PDPs (até 25 por defeito) numa **única** execução. As URLs extra ficam em **`fotos_pdp`** no `dados_produtos.json` (quando a recolha conseguir obtê-las).
-
----
-
-### 7. Antes de alterar o parser / lógica de extração
-
-Confirma que nada quebrou:
-
-```bash
-npm test
-```
-
----
-
-### 8. Branches no Git
-
-O repositório usa **`main`** (linha principal) e **`backup`** (cópia de segurança). Trabalha na que estiveres a usar; com **`git branch`** vês em qual estás.
-
----
-
-### 9. Servidor Analytics (API HTTP, `localhost`)
-
-Com **`DATABASE_URL`** e **`ANALYTICS_API_KEY`** no **`.env` na raiz** do projeto (ver **`.env.example`**):
+**Terminal 1 (raiz):**
 
 ```bash
 npm run analytics:api
 ```
 
-- Por defeito escuta em **`http://127.0.0.1:3333`** (opcional `ANALYTICS_API_PORT` / `ANALYTICS_API_HOST` no `.env`).
-- Endpoints só leitura: `GET /health`, `GET /analytics/top-products`, `…/opportunities`, `…/product-score`, `…/growth`, `…/new-products`, `…/scalable-products`, `…/category-map` — sempre com **`Authorization: Bearer <ANALYTICS_API_KEY>`** (detalhes em **`docs/ANALYTICS-API.md`**).
-
-Para **consultar relatórios no terminal** (sem subir servidor): `npm run analytics:top-products`, `…`, `npm run analytics:product-score`; interpretação extra: **`npm run analytics:decision`** (usa o mesmo score já calculado; ver `scripts/analytics/product-decision-cli.mjs`) · **`npm run analytics:scalable`** (listas «validados» e «potenciais apostas» sobre **todas** as linhas já pontuadas no último import — mesmo universo do score analítico, não só os 30 primeiros do relatório resumido — ver `scripts/analytics/scalable-products.mjs`) · **`npm run analytics:category-map`** (mapa de categorias; ver `scripts/analytics/category-map.mjs`).
-
----
-
-### 10. Frontend no browser (`localhost`, Vite)
-
-Interface mínima em **`frontend/`** (React): mostra dados da API através de **proxy do Vite** (evita CORS no desenvolvimento).
-
-**Primeiro terminal (na raiz do repo)** — mantém a API no ar:
-
-```bash
-npm run analytics:api
-```
-
-**Segundo terminal:**
+**Terminal 2:**
 
 ```bash
 cd frontend
@@ -161,20 +146,24 @@ npm install
 npm run dev
 ```
 
-- O Vite usa por defeito **`http://localhost:5173/`** (tenta abrir o browser ao arrancar). Se **5173** estiver ocupada, pode arrancar **outra porta** — confirma o URL no terminal antes de abrir o link à mão. Usar **Carregar dados** nas abas.
-- No **`frontend/.env`** define **`VITE_ANALYTICS_API_KEY`** com o **mesmo** valor que **`ANALYTICS_API_KEY`** na raiz (ver **`frontend/README.md`** e **`frontend/.env.example`**).
-- Sem a API na porta combinada (**3333** por defeito ou a que configuraste), o navegador mostra erro e o terminal do Vite pode indicar **`ECONNREFUSED`** ao tentar proxificar `/analytics`.
+Por defeito **http://localhost:5173/** (outra porta se 5173 estiver ocupada — vê o URL no terminal).
 
-**Um terminal (API + Vite)** — desenvolvimento rápido, logs no mesmo terminal com prefixos **`API`** / **`FRONT`** (`concurrently`):
+### 6. PDP / `fotos_pdp`
 
-```bash
-npm run dev:all
-```
+Já coberto por **`npm run coleta:completa`** (única execução; até ~25 PDPs por defeito). Não é obrigatório um segundo comando só para fotos.
 
-Alteraste **portas** (`ANALYTICS_API_PORT` ou `vite.config.js`)? Atualiza **este ficheiro** para quem ler no futuro encontrar URLs certas.
+### 7. Git
+
+Branches usuais: **`main`** (principal) e **`backup`**. **`git branch`** mostra onde estás.
+
+### 8. Portas customizadas
+
+Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), documenta nos teus README locais ou actualiza esta nota aqui para a equipa.
 
 ---
 
-Instala com **`npm install`**, corre **`npm run coleta`** (rápida) ou **`npm run coleta:completa`** (categoria + `fotos_pdp`), lê **`output/dados_produtos.json`**.  
-Se der erro de sessão, **`npm run coleta:completa:login`** (ou o passo 5).  
-Para **painel analytics no browser**, **`npm run dev:all`** (secção **10**, um terminal) ou dois terminais: **`npm run analytics:api`** + **`cd frontend && npm run dev`** (secções **9** e **10**).
+## Resumo em três linhas
+
+1. **`npm install`**
+2. Dados em ficheiro: **`npm run coleta`** ou **`npm run coleta:completa`** (e **`:db`** se quiseres Postgres logo).
+3. Painel no browser: **`npm run dev:all`** ou **`npm run analytics:api`** + **`cd frontend && npm run dev`**.
