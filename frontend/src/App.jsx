@@ -732,10 +732,10 @@ function TableScore({ data }) {
             ordena todos por score; este ecrã mostra só o <strong>top 30</strong> (o restante entra no cálculo geral quando aplicável).
           </li>
           <li>
-            Coluna <strong>Ações</strong>: botão <strong>Página</strong> (detalhes locais) e <strong>Exportar</strong> ao Spaces (credenciais <code>SPACES_*</code> só no servidor).
+            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao Spaces (credenciais <code>SPACES_*</code> só no servidor). O <strong>nome</strong> da linha é o atalho para a página de trabalho.
           </li>
           <li>
-            Botão <strong>Página</strong> (ou o <strong>nome</strong>) abre a <strong>página de trabalho</strong> (<code>/produto/…</code>); o histórico de aberturas fica em <strong>À mão</strong> (<code>/a-mao</code>).
+            O <strong>nome</strong> abre a <strong>página de trabalho</strong> (<code>/produto/…</code>); o histórico de aberturas fica em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
           </li>
         </ul>
       </div>
@@ -933,7 +933,7 @@ function TableScore({ data }) {
             />
             <PlainTh
               label="Ações"
-              title="Página de trabalho do produto e export ao DigitalOcean Spaces"
+              title="Exportar ao DigitalOcean Spaces"
               resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
@@ -961,46 +961,18 @@ function TableScore({ data }) {
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
               <td>
-                <div
+                <button
+                  type="button"
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.28rem",
-                    alignItems: "stretch"
+                    ...scoreExportBtn,
+                    opacity: exportingProductId === row.productId ? 0.55 : 1,
+                    cursor: exportingProductId === row.productId ? "wait" : "pointer"
                   }}
+                  disabled={exportingProductId != null}
+                  onClick={() => onExportToSpace(row.productId)}
                 >
-                  <Link
-                    to={`/produto/${encodeURIComponent(row.productId)}`}
-                    title="Abrir página de trabalho (detalhes, fotos, notas)"
-                    style={{
-                      display: "block",
-                      textAlign: "center",
-                      padding: "0.22rem 0.38rem",
-                      fontSize: "0.66rem",
-                      fontWeight: 600,
-                      borderRadius: 5,
-                      border: "1px solid #3978a8",
-                      background: "#1e4a63",
-                      color: "#eaf6ff",
-                      textDecoration: "none",
-                      whiteSpace: "nowrap"
-                    }}
-                  >
-                    Página
-                  </Link>
-                  <button
-                    type="button"
-                    style={{
-                      ...scoreExportBtn,
-                      opacity: exportingProductId === row.productId ? 0.55 : 1,
-                      cursor: exportingProductId === row.productId ? "wait" : "pointer"
-                    }}
-                    disabled={exportingProductId != null}
-                    onClick={() => onExportToSpace(row.productId)}
-                  >
-                    {exportingProductId === row.productId ? "…" : "Exportar"}
-                  </button>
-                </div>
+                  {exportingProductId === row.productId ? "…" : "Exportar"}
+                </button>
               </td>
               <td>
                 {row.link ? (

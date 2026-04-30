@@ -12,7 +12,7 @@ const navLinkStyle = /** @param {{ isActive: boolean }} p */ ({ isActive }) => (
 });
 
 /**
- * Envolve relatórios Analytics e página «À mão» — sempre acessível por cima sem carregar a API.
+ * Envolve relatórios Analytics e «Produtos em análise» (/a-mao) — sempre acessível por cima sem carregar a API.
  */
 export default function AppShell() {
   return (
@@ -33,7 +33,7 @@ export default function AppShell() {
           Analytics
         </NavLink>
         <NavLink to="/a-mao" style={navLinkStyle}>
-          À mão
+          Produtos em análise
         </NavLink>
         <span style={{ flex: "1 1 auto" }} />
         <span style={{ fontSize: "0.68rem", opacity: 0.55 }}>Painel TikTok Shop · relatórios e atalhos</span>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { clearRecentWorkspace, getRecentWorkspace } from "./recentWorkspace.js";
 
 /**
- * **À mão** (`/a-mao`): atalhos e histórico **sem** carregar relatórios da API.
+ * **Produtos em análise** (`/a-mao`): histórico local de produtos visitados — **sem** carregar relatórios da API.
  */
 export default function HandsOnPage() {
   const [recentPages, setRecentPages] = useState(() => getRecentWorkspace());
@@ -16,9 +16,9 @@ export default function HandsOnPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem" }}>
-      <h1 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "0 0 0.35rem" }}>À mão</h1>
-      <p style={{ fontSize: "0.82rem", opacity: 0.82, margin: "0 0 1rem", maxWidth: "40rem", lineHeight: 1.5 }}>
-        Página rápida: <strong>sem carregar relatórios</strong> aqui — só atalhos e o que já abriu neste browser.
+      <h1 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "0 0 0.35rem" }}>Produtos em análise</h1>
+      <p style={{ fontSize: "0.82rem", opacity: 0.82, margin: "0 0 1rem", maxWidth: "42rem", lineHeight: 1.5 }}>
+        Lista dos produtos que abriu para análise. Use para continuar a avaliar ou comparar e para reabrir o workspace; o envio ao <strong>DigitalOcean Spaces</strong> faz-se em <strong>Analytics</strong> › <strong>Product Score</strong> com o botão <strong>Exportar</strong> na coluna <strong>Ações</strong>. Histórico apenas neste browser — não é necessário carregar relatórios aqui.
       </p>
 
       <section
@@ -31,7 +31,7 @@ export default function HandsOnPage() {
         }}
       >
         <div style={{ fontSize: "0.74rem", opacity: 0.88, marginBottom: "0.45rem" }}>
-          <strong>Histórico</strong> — páginas de produto vistas (ordenado do mais recente).
+          <strong>Produtos abertos</strong> — ordenados do mais recente para o mais antigo.
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.38rem", alignItems: "center", marginBottom: "0.5rem" }}>
           <button
@@ -99,8 +99,8 @@ export default function HandsOnPage() {
           </div>
         ) : (
           <p style={{ margin: "0.35rem 0 0", fontSize: "0.76rem", opacity: 0.72, lineHeight: 1.45 }}>
-            Ainda está vazio. Em <strong>Analytics</strong>, carregue o score se precisar e use o botão <strong>Página</strong>{" "}
-            num produto — ao voltar a <strong>À mão</strong>, o nome surge aqui (ou toque em «Actualizar lista»).
+            Ainda não há produtos aqui. Em <strong>Analytics</strong> › <strong>Product Score</strong>, carregue os dados se precisar e clique no <strong>nome</strong> do produto para abrir o workspace; ao voltar a{" "}
+            <strong>Produtos em análise</strong>, o item aparece nesta lista (ou use «Actualizar lista»).
           </p>
         )}
       </section>
