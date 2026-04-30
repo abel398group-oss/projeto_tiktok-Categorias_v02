@@ -61,8 +61,14 @@ function cmpTopAsc(a, b, key) {
       if (Number.isNaN(vb)) return -1;
       return va - vb;
     }
-    case "rating":
-      return cmpStrAZ(/** @type {string} */ (a.avaliacao), /** @type {string} */ (b.avaliacao));
+    case "rating": {
+      const ra = num(a.avaliacao);
+      const rb = num(b.avaliacao);
+      if (Number.isNaN(ra) && Number.isNaN(rb)) return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+      if (Number.isNaN(ra)) return 1;
+      if (Number.isNaN(rb)) return -1;
+      return ra - rb;
+    }
     default:
       return 0;
   }

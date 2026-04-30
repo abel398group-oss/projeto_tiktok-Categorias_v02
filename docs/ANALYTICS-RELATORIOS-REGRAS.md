@@ -23,6 +23,7 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 
 - Produtos (`ProductSnapshot`) do **último** `ScrapeRun` com **`sales_count` não nulo**.
 - **`orderBy: sales_count desc`**, **`take: 20`** (`MAX_ROWS`).
+- **`items[].avaliacao`**: média como **número** ou **`null`** (sem string vazia); `nome` e `loja` sem truncar na API (truncagem só pode ser feita no UI).
 
 **Não há** filtro por desconto, categoria nem loja neste relatório.
 

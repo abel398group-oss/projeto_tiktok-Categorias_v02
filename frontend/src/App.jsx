@@ -123,6 +123,14 @@ const tdPosStyle = {
   fontVariantNumeric: "tabular-nums",
   opacity: 0.9
 };
+/** Células com ellipsis; texto completo no `title` (tooltip). */
+const tdEllipsis = {
+  maxWidth: "14rem",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  verticalAlign: "middle"
+};
 const positionThTitle = "Posição na ordenação atual (1, 2, 3…)";
 /** Caixa introdutória (mesmo padrão visual da aba Escalar). */
 function IntroCard({ title, children }) {
@@ -225,28 +233,12 @@ function TableTop({ data }) {
   const topIntro = (
     <IntroCard title="Top Products">
       <p style={introLead}>
-        <strong>Produtos com mais vendas na sua base.</strong> Mostra os itens com maior número de vendas da{" "}
-        <strong>última importação</strong> realizada no sistema — até <strong>20</strong> linhas ordenadas pelas vendas do snapshot.
+        Mostra os produtos com mais vendas na <strong>última importação</strong>. Use para entender o que já tem demanda,
+        mas lembre-se: produtos muito vendidos também podem ter mais concorrência.
       </p>
-      <div style={introLabel}>👉 Use para:</div>
-      <ul style={introBullet}>
-        <li>ver o que já está funcionando</li>
-        <li>identificar padrões de produtos</li>
-      </ul>
-      <div style={introLogicBox}>
-        <div style={introLogicLabel}>Como funciona (por dentro)</div>
-        <ul style={introLogicUl}>
-          <li>usa só o último scrape importado;</li>
-          <li>
-            ordena por <strong>vendas</strong> (maior → menor) e corta em <strong>20</strong> linhas;
-          </li>
-          <li>
-            só entram snapshots com <strong>número de vendas registado</strong> — sem vendas na base ficam de fora.
-          </li>
-        </ul>
-      </div>
-      <div style={introWarn}>
-        ⚠️ Baseado nos dados importados — não é previsão nem dado em tempo real do TikTok.
+      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "#6b7280", background: "#1a2128" }}>
+        Até <strong>20</strong> linhas, ordenação inicial por vendas (maior → menor); dados do snapshot na base —
+        não são tempo real do TikTok.
       </div>
     </IntroCard>
   );
@@ -357,11 +349,22 @@ function TableTop({ data }) {
           {items.map((row, i) => (
             <tr key={`${row.productId}-${i}`}>
               <td style={tdPosStyle}>{i + 1}</td>
-              <td>{row.nome}</td>
-              <td>{row.loja}</td>
+              <td style={tdEllipsis} title={typeof row.nome === "string" ? row.nome : undefined}>
+                {row.nome ?? "—"}
+              </td>
+              <td style={tdEllipsis} title={typeof row.loja === "string" ? row.loja : undefined}>
+                {row.loja ?? "—"}
+              </td>
               <td>{row.preco ?? "—"}</td>
               <td>{row.vendas ?? "—"}</td>
-              <td>{row.avaliacao ?? "—"}</td>
+              <td>
+                {typeof row.avaliacao === "number" && Number.isFinite(row.avaliacao)
+                  ? row.avaliacao.toLocaleString("pt-BR", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 2
+                    })
+                  : "—"}
+              </td>
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">

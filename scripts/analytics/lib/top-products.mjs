@@ -41,11 +41,11 @@ export async function getTopProductsReport(prisma) {
 
   const items = rows.map((s) => ({
     productId: s.product.productId,
-    nome: (s.product.name ?? "").slice(0, 48),
-    loja: (s.product.seller?.name ?? "—").slice(0, 32),
+    nome: (s.product.name ?? "").trim() || "—",
+    loja: (s.product.seller?.name ?? "").trim() || "—",
     preco: s.price,
     vendas: s.salesCount,
-    avaliacao: s.ratingAverage != null ? String(s.ratingAverage) : "",
+    avaliacao: s.ratingAverage != null ? s.ratingAverage : null,
     link: s.product.productUrl ?? ""
   }));
 
