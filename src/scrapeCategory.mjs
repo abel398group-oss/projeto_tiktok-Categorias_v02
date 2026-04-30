@@ -1393,6 +1393,68 @@ function findProductNodeByIdInTree(node, productId, depth) {
 }
 
 /**
+ * Fallback quando o nó estrito (`product_price_info`) não aparece: mesmo `product_id` com imagens de produto.
+ * @param {object} rootData
+ * @param {string} productId
+ * @returns {object | null}
+ */
+function findProductNodeByIdInModernRouterLoose(rootData, productId) {
+  if (!rootData || typeof rootData !== "object" || !productId) {
+    return null;
+  }
+  const roots = [rootData, rootData.loaderData].filter((x) => x && typeof x === "object");
+  for (const r of roots) {
+    const found = findProductNodeByIdInTreeLooseImages(r, String(productId), 0);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * @param {unknown} node
+ * @param {string} productId
+ * @param {number} depth
+ * @returns {object | null}
+ */
+function findProductNodeByIdInTreeLooseImages(node, productId, depth) {
+  if (depth > 45 || node == null) {
+    return null;
+  }
+  if (Array.isArray(node)) {
+    for (const el of node) {
+      const r = findProductNodeByIdInTreeLooseImages(el, productId, depth + 1);
+      if (r) {
+        return r;
+      }
+    }
+    return null;
+  }
+  if (typeof node !== "object") {
+    return null;
+  }
+  const id = getProductId(node);
+  if (
+    id != null &&
+    String(id) === productId &&
+    !isReviewOnlyProductNode(node) &&
+    extractImages(mergeProductLayers(node)).length > 0
+  ) {
+    return node;
+  }
+  for (const v of Object.values(node)) {
+    if (v && typeof v === "object") {
+      const r = findProductNodeByIdInTreeLooseImages(v, productId, depth + 1);
+      if (r) {
+        return r;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * `normalizeItem` sobre o nó vindo de `#__MODERN_ROUTER_DATA__` (PDP) — o loader costuma ter
  * `format_price` / `show_price` mais alinhados ao card do que o XHR mínimo da grelha.
  * @param {object | null} root
@@ -1416,6 +1478,28 @@ function pdpPriceFromLoaderRoot(root, productId, categoriaUrl) {
 }
 
 /**
+ * Lista de URLs de imagem a partir do `__MODERN_ROUTER_DATA__` na PDP (complemento ao DOM de miniaturas).
+ * Referência de restauro acordada: **the best** → ver tag git `the-best`.
+ *
+ * @param {object | null} root — {@link getModernRouterDataFromPage}
+ * @param {string} productId
+ * @returns {string[]}
+ */
+function extractPdpImageUrlsFromModernRouterRoot(root, productId) {
+  if (!root || !productId) {
+    return [];
+  }
+  let raw = findProductNodeByIdInModernRouter(root, String(productId));
+  if (!raw) {
+    raw = findProductNodeByIdInModernRouterLoose(root, String(productId));
+  }
+  if (!raw) {
+    return [];
+  }
+  return extractImages(mergeProductLayers(raw));
+}
+
+/**
  * @param {import("puppeteer").Page} page
  * @returns {Promise<string[]>}
  */
@@ -1430,9 +1514,10 @@ async function collectPdpGalleryUrlsFromPage(page) {
  * @param {import("puppeteer").Page} page
  * @param {string} productId
  * @param {string} categoriaUrl
+ * @param {object | null | undefined} [preloadRoot] — se definido (`null` incluído), não volta a ler o script `#__MODERN_ROUTER_DATA__`
  * @returns {Promise<{ sale: number | null, listPrice: number | null }>}
  */
-async function collectPdpProductPricesFromPage(page, productId, categoriaUrl) {
+async function collectPdpProductPricesFromPage(page, productId, categoriaUrl, preloadRoot) {
   const evalDom = () =>
     page.evaluate(() => {
     const combine = (a, b) => {
@@ -1594,7 +1679,16 @@ async function collectPdpProductPricesFromPage(page, productId, categoriaUrl) {
     return { sale: bestSale, listPrice };
   });
 
-  const [root, fromDom] = await Promise.all([getModernRouterDataFromPage(page), evalDom()]);
+  /** @type {object | null} */
+  let root;
+  /** @type {{ sale: number | null; listPrice: number | null }} */
+  let fromDom;
+  if (preloadRoot !== undefined) {
+    root = preloadRoot ?? null;
+    fromDom = await evalDom();
+  } else {
+    [root, fromDom] = await Promise.all([getModernRouterDataFromPage(page), evalDom()]);
+  }
   const fromNorm = pdpPriceFromLoaderRoot(root, productId, categoriaUrl);
   const hasDom = fromDom.sale != null && !Number.isNaN(fromDom.sale) && fromDom.sale > 0;
   if (hasDom && fromNorm && fromNorm.sale > fromDom.sale * 1.05) {
@@ -1637,16 +1731,27 @@ async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
       await page
         .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
         .catch(() => undefined);
-      const [raw, pdpDom] = await Promise.all([
+      const [rawDom, routerRoot] = await Promise.all([
         collectPdpGalleryUrlsFromPage(page),
-        collectPdpProductPricesFromPage(page, String(n.product_id), categoriaUrl)
+        getModernRouterDataFromPage(page)
       ]);
-      const cleaned = dedupePdpImageUrls(raw);
-      n.images_pdp = cleaned.length > 0 ? cleaned : null;
+      const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
+      const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
+      const pdpDom = await collectPdpProductPricesFromPage(
+        page,
+        String(n.product_id),
+        categoriaUrl,
+        routerRoot
+      );
+      n.images_pdp = merged.length > 0 ? merged : null;
       applyPdpDomPrices(n, pdpDom);
       visited += 1;
-      if (debugLines && cleaned.length) {
-        debugLines.push(`[pdp_gallery] ${n.product_id} → ${cleaned.length} url(s)`);
+      if (debugLines && merged.length) {
+        const rN = fromRouter.length;
+        const dN = rawDom.length;
+        debugLines.push(
+          `[pdp_gallery] ${n.product_id} → ${merged.length} url(s) (router:${rN} dom:${dN})`
+        );
       }
       if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
         const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
