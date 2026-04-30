@@ -62,6 +62,7 @@
     "@aws-sdk/client-s3": "^3.787.0",
     "@prisma/client": "5.22.0",
     "fastify": "^4.29.1",
+    "jszip": "^3.10.1",
     "puppeteer": "^24.6.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"

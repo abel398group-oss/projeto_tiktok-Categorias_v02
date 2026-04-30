@@ -18,6 +18,7 @@ import { getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
+import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
 
 requireDatabaseUrl();
@@ -93,6 +94,77 @@ fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {
     return reply.code(200).send({ error, message });
   }
   return reply.send(result);
+});
+
+/**
+ * ZIP com fotos do snapshot (servidor faz fetch CDN — sem CORS no browser).
+ * Corpo opcional `{ "urls": ["https://...", ...] }`; se omitir urls → todas pela ordem do workspace.
+ */
+fastify.post("/analytics/product-workspace/:productId/images-zip", async (req, reply) => {
+  const raw = req.params.productId != null ? String(req.params.productId).trim() : "";
+  const tiktokId = decodeURIComponent(raw);
+  const detail = await getProductWorkspaceDetail(prisma, tiktokId);
+  if ("error" in detail) {
+    const { error, message } = detail;
+    if (error === "bad_request") {
+      return reply.code(400).send({ error, message });
+    }
+    if (error === "not_found" || error === "no_snapshot") {
+      return reply.code(404).send({ error, message });
+    }
+    return reply.code(503).send({ error, message });
+  }
+
+  const allowed = Array.isArray(detail.imageUrls) ? detail.imageUrls : [];
+  const allowedSet = new Set(allowed);
+
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const urlsBody = Array.isArray(body.urls) ? body.urls : null;
+
+  /** @type {string[]} */
+  let list = [];
+  if (urlsBody != null && urlsBody.length > 0) {
+    for (const item of urlsBody) {
+      if (typeof item !== "string") {
+        return reply
+          .code(400)
+          .send({ error: "bad_request", message: 'Cada entrada em "urls" tem de ser uma string.' });
+      }
+      const t = item.trim();
+      if (!allowedSet.has(t)) {
+        return reply.code(400).send({
+          error: "invalid_urls",
+          message: "Alguma URL não pertence ao snapshot deste produto."
+        });
+      }
+      list.push(t);
+    }
+  } else {
+    list = [...allowed];
+  }
+
+  if (list.length === 0) {
+    return reply.code(400).send({
+      error: "no_images",
+      message: "Não há imagens disponíveis para este produto no snapshot actual."
+    });
+  }
+
+  try {
+    const { buffer, downloaded, failedCount } = await buildImagesZipBuffer(list);
+    const fnameRaw = `produto-${detail.productId}-fotos.zip`;
+    const fname = fnameRaw.replace(/[^a-zA-Z0-9._-]/g, "_");
+    return reply
+      .code(200)
+      .header("Content-Type", "application/zip")
+      .header("Content-Disposition", `attachment; filename="${fname}"`)
+      .header("X-Zip-Downloaded", String(downloaded))
+      .header("X-Zip-Failed", String(failedCount))
+      .send(buffer);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return reply.code(502).send({ error: "zip_failed", message: msg });
+  }
 });
 
 /** Exporta um produto (ID TikTok) para Spaces; valida credenciais SPACES na primeira execução real. */

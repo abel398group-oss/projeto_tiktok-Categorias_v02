@@ -71,3 +71,37 @@ export async function apiPost(path, body) {
 
   return parsed;
 }
+
+/**
+ * POST que devolve ficheiro binário (ZIP) com Bearer; para download no browser via Blob.
+ * @param {string} path caminho sob o proxy (ex.: `/analytics/product-workspace/123/images-zip`)
+ * @param {Record<string, unknown>} body
+ */
+export async function apiPostBlob(path, body) {
+  const base = API_URL.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const url = `${base}${p}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body ?? {})
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let parsed;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+    const msg = parsed?.message || parsed?.error || text || `HTTP ${res.status}`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+
+  return res.blob();
+}

@@ -47,6 +47,7 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/scalable-products` | Equiv. `npm run analytics:scalable` |
 | GET | `/analytics/category-map` | Equiv. `npm run analytics:category-map` |
 | GET | `/analytics/product-workspace/:productId` | Detalhe de um produto no **último** ScrapeRun (score alinhado a `product-score`, URLs de imagens do snapshot, etc.). `productId` = ID TikTok (URL-encoded se necessário). |
+| POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
 | POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (último snapshot). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
 
 ### GET product-workspace
@@ -55,6 +56,14 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 - **404** se o produto não existir ou não tiver snapshot no último run.
 - **200** com `{ "error": "no_run", "message": "…" }` se não houver ScrapeRun (sem base importada).
 - **400** se o segmento do path estiver vazio após trim.
+
+### POST product-workspace … / images-zip
+
+- Resposta **binary** `application/zip` (`Content-Disposition: attachment`). Cabeçalhos **`X-Zip-Downloaded`** e **`X-Zip-Failed`** (contagens).
+- Corpo JSON: **`{}`** ou omitir `urls` → empacota todas as `imageUrls` do workspace (por ordem); **`{ "urls": [ "https://…", … ] }`** → só essas URLs, na ordem enviada (cada uma tem de existir exactamente nas `imageUrls` do produto).
+- O servidor faz o download das imagens (evita CORS no browser). Se algumas falharem, o ZIP inclui as que correram bem e, quando há falhas, o ficheiro **`_falhas-download.txt`** dentro do ZIP.
+- **400** `no_images` | **400** `invalid_urls` | **404** / **503** alinhados ao GET workspace | **502** `zip_failed`.
+- Env opcional: **`WORKSPACE_IMAGE_ZIP_MAX_BYTES`**, **`WORKSPACE_IMAGE_ZIP_TIMEOUT_MS`** — ver `scripts/analytics/lib/product-images-zip.mjs`.
 
 ### POST export-product-to-spaces
 
