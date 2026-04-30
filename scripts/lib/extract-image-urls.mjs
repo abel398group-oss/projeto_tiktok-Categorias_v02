@@ -1,0 +1,41 @@
+/**
+ * Extrai lista ordenada de URLs HTTP a partir dos campos JSON `images` / `pdpImages` do snapshot.
+ * PDP primeiro (maior riqueza), depois grelha, sem duplicados.
+ */
+
+/**
+ * @param {unknown} block
+ */
+function collectFromBlock(block, /** @type {string[]} */ out) {
+  if (block == null) return;
+  if (typeof block === "string" && block.startsWith("http")) {
+    out.push(block.trim());
+    return;
+  }
+  if (!Array.isArray(block)) return;
+  for (const x of block) {
+    if (typeof x === "string" && x.startsWith("http")) {
+      out.push(x.trim());
+    } else if (x && typeof x === "object" && typeof (/** @type {Record<string, unknown>} */ (x)).url === "string") {
+      const u = String((/** @type {{ url: string }} */ (x)).url).trim();
+      if (u.startsWith("http")) out.push(u);
+    }
+  }
+}
+
+/**
+ * @param {{ pdpImages?: unknown, images?: unknown }} snapshot
+ */
+export function extractOrderedImageUrls(snapshot) {
+  const raw = [];
+  collectFromBlock(snapshot?.pdpImages, raw);
+  collectFromBlock(snapshot?.images, raw);
+  const seen = new Set();
+  const deduped = [];
+  for (const u of raw) {
+    if (seen.has(u)) continue;
+    seen.add(u);
+    deduped.push(u);
+  }
+  return deduped;
+}

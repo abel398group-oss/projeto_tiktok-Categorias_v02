@@ -1,16 +1,15 @@
 /**
  * Teste: conexão DigitalOcean Spaces + PutObject (árvore de pastas acordada).
  *
- * Estrutura por defeito:
- *   {SPACES_EXPORT_ROOT}/{SPACES_EXPORT_PLATFORM}/{categoria}/{produto}__{id}/teste.txt
- *   + produto.json (metadata mínima)
+ * Por defeito (sem SPACES_EXPORT_ROOT): tiktok-shop/{categoria}/{produto}__{id}/teste.txt (+ produto.json demo)
+ * Com SPACES_OBJECTS_PUBLIC_READ=1 os URLs abrem no browser (ACL public-read nos objectos).
  *
- * Modo legado (ficheiro único): EXPORT_SPACES_FLAT=1 → usa SPACES_BASE_PATH ou product-research/teste.txt
+ * Modo legado plano: EXPORT_SPACES_FLAT=1 → SPACES_BASE_PATH/teste.txt ou _smoke-test/teste.txt
  *
  * Uso: node --env-file=.env scripts/test-spaces-upload.mjs
  */
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { buildProductExportPrefix, DEFAULT_PLATFORM, DEFAULT_ROOT } from "./lib/spaces-export-paths.mjs";
+import { buildProductExportPrefix, DEFAULT_PLATFORM, resolvedExportRoot } from "./lib/spaces-export-paths.mjs";
+import { createSpacesS3Client, putSpacesObject, spacesPutExtrasFromEnv } from "./lib/spaces-s3.mjs";
 
 const required = [
   "SPACES_ENDPOINT",
@@ -70,16 +69,16 @@ async function main() {
 
   if (flat) {
     const prefix = normalizePrefix(process.env.SPACES_BASE_PATH);
-    keyTeste = prefix ? `${prefix}/teste.txt` : "product-research/teste.txt";
+    keyTeste = prefix ? `${prefix}/teste.txt` : "_smoke-test/teste.txt";
     keyMeta = "";
-    folderPrefix = prefix || "product-research";
+    folderPrefix = prefix || "_smoke-test";
   } else {
     const categorySlug = process.env.SPACES_TEST_CATEGORY_SLUG?.trim() || "demo-categoria";
     const productName = process.env.SPACES_TEST_PRODUCT_NAME?.trim() || "produto-demo";
     const productId = process.env.SPACES_TEST_PRODUCT_ID?.trim() || "test-local-001";
 
     folderPrefix = buildProductExportPrefix({
-      root: process.env.SPACES_EXPORT_ROOT?.trim() || DEFAULT_ROOT,
+      root: resolvedExportRoot(),
       platform: process.env.SPACES_EXPORT_PLATFORM?.trim() || DEFAULT_PLATFORM,
       categorySlug,
       productName,
@@ -96,7 +95,7 @@ async function main() {
     {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      root: process.env.SPACES_EXPORT_ROOT?.trim() || DEFAULT_ROOT,
+      root: resolvedExportRoot(),
       platform: process.env.SPACES_EXPORT_PLATFORM?.trim() || DEFAULT_PLATFORM,
       categorySlug: process.env.SPACES_TEST_CATEGORY_SLUG?.trim() || "demo-categoria",
       productName: process.env.SPACES_TEST_PRODUCT_NAME?.trim() || "produto-demo",
@@ -108,40 +107,26 @@ async function main() {
     2
   );
 
-  const client = new S3Client({
-    endpoint,
-    region,
-    credentials: {
-      accessKeyId,
-      secretAccessKey
-    },
-    forcePathStyle: true
-  });
+  const client = createSpacesS3Client({ endpoint, region, accessKeyId, secretAccessKey });
+  const acl = spacesPutExtrasFromEnv();
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: keyTeste,
-      Body: body,
-      ContentType: "text/plain; charset=utf-8"
-    })
-  );
+  await putSpacesObject(client, bucket, keyTeste, body, "text/plain; charset=utf-8", acl);
 
   if (!flat && keyMeta) {
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: keyMeta,
-        Body: Buffer.from(metaJson, "utf8"),
-        ContentType: "application/json; charset=utf-8"
-      })
+    await putSpacesObject(
+      client,
+      bucket,
+      keyMeta,
+      Buffer.from(metaJson, "utf8"),
+      "application/json; charset=utf-8",
+      acl
     );
   }
 
   // eslint-disable-next-line no-console
   console.log("Upload concluído.");
   // eslint-disable-next-line no-console
-  console.log(`  modo:   ${flat ? "legado (ficheiro único)" : "árvore product-research / plataforma / categoria / produto__id"}`);
+  console.log(`  modo:   ${flat ? "legado (ficheiro único)" : "tiktok-shop / categoria / produto__id (opc. SPACES_EXPORT_ROOT)"}`);
   // eslint-disable-next-line no-console
   console.log(`  bucket: ${bucket}`);
   // eslint-disable-next-line no-console
@@ -158,11 +143,11 @@ async function main() {
   console.log("");
   // eslint-disable-next-line no-console
   console.log(
-    "Nota: a URL só abre sem login se o ficheiro (ou bucket) estiver público, ou usar URL assinada noutro passo."
+    "URLs públicas só funcionam no browser se SPACES_OBJECTS_PUBLIC_READ=1 (ACL public-read) ou se gerar URL assinada."
   );
   // eslint-disable-next-line no-console
   console.log(
-    "Dica: override SPACES_TEST_CATEGORY_SLUG, SPACES_TEST_PRODUCT_NAME, SPACES_TEST_PRODUCT_ID, SPACES_EXPORT_PLATFORM."
+    "Dica: SPACES_TEST_CATEGORY_SLUG, SPACES_TEST_PRODUCT_NAME, SPACES_TEST_PRODUCT_ID, SPACES_EXPORT_PLATFORM."
   );
 }
 
