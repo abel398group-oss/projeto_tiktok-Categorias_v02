@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch, apiPost, apiPostBlob } from "./api.js";
+import { buildProductBriefingFromWorkspace } from "./productBriefing.js";
 import { pushRecentWorkspace } from "./recentWorkspace.js";
 
 const NOTES_LS_PREFIX = "tiktok-analytics-product-notes:";
@@ -146,6 +147,11 @@ export default function ProductWorkspacePage() {
 
   const decodedId =
     typeof paramId === "string" && paramId.trim() !== "" ? decodeURIComponent(paramId.trim()) : "";
+
+  const briefing = useMemo(
+    () => (isWorkspace(workspace) ? buildProductBriefingFromWorkspace(/** @type {WorkspacePayload & Record<string, unknown>} */ (workspace)) : null),
+    [workspace]
+  );
 
   useEffect(() => {
     if (!decodedId) {
@@ -370,6 +376,61 @@ export default function ProductWorkspacePage() {
               </p>
             ) : null}
           </header>
+
+          {briefing ? (
+            <section style={box}>
+              <Subsection title="Briefing · Resumo do produto">
+                <p style={{ margin: 0, fontSize: "0.81rem", lineHeight: 1.58, opacity: 0.94 }}>
+                  {briefing.resumo}
+                </p>
+                {briefing.scoreSentence ? (
+                  <p
+                    style={{
+                      margin: "0.65rem 0 0",
+                      fontSize: "0.79rem",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                      color: "#8ecdfa"
+                    }}
+                  >
+                    {briefing.scoreSentence}
+                  </p>
+                ) : null}
+              </Subsection>
+
+              <hr style={divider} />
+
+              <Subsection title="Motivos positivos">
+                {briefing.positivos.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "1.05rem", fontSize: "0.78rem", lineHeight: 1.55, opacity: 0.9 }}>
+                    {briefing.positivos.map((t, i) => (
+                      <li key={i} style={{ marginBottom: "0.35rem" }}>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ margin: 0, fontSize: "0.76rem", opacity: 0.68 }}>Nenhum critério automático destacou motivos fortes — veja os números abaixo.</p>
+                )}
+              </Subsection>
+
+              <hr style={divider} />
+
+              <Subsection title="Riscos">
+                {briefing.riscos.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "1.05rem", fontSize: "0.78rem", lineHeight: 1.55, opacity: 0.9 }}>
+                    {briefing.riscos.map((t, i) => (
+                      <li key={i} style={{ marginBottom: "0.35rem" }}>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ margin: 0, fontSize: "0.76rem", opacity: 0.68 }}>Nenhum risco automático destacado — continua a validar manualmente.</p>
+                )}
+              </Subsection>
+            </section>
+          ) : null}
 
           <section style={box}>
             <Subsection title="Resumo (última importação)">
