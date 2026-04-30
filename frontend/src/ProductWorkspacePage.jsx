@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch, apiPost, apiPostBlob } from "./api.js";
+import { pushRecentWorkspace } from "./recentWorkspace.js";
 
 const NOTES_LS_PREFIX = "tiktok-analytics-product-notes:";
 const NOTES_MAX = 20_000;
@@ -179,6 +180,14 @@ export default function ProductWorkspacePage() {
       cancel = true;
     };
   }, [decodedId]);
+
+  useEffect(() => {
+    if (loading || !isWorkspace(workspace)) return;
+    pushRecentWorkspace({
+      productId: workspace.productId,
+      nome: typeof workspace.nome === "string" ? workspace.nome : "—"
+    });
+  }, [loading, workspace]);
 
   useEffect(() => {
     setSelectedUrls(new Set());
