@@ -1025,16 +1025,78 @@ function computePrecoEstimadoVitrineFields(price, originalPrice, ppi) {
 function extractImages(p) {
   const imgs = new Set();
   const pushUrl = (u) => {
-    if (u && typeof u === "string" && u.startsWith("http")) imgs.add(u);
+    if (u == null || typeof u !== "string") return;
+    let t = u.trim();
+    if (t.startsWith("//")) t = `https:${t}`;
+    if (t.startsWith("http")) imgs.add(t);
   };
-  if (Array.isArray(p.images)) p.images.forEach((x) => pushUrl(x?.url ?? x));
-  if (Array.isArray(p.image_list)) p.image_list.forEach(pushUrl);
+  if (Array.isArray(p.images))
+    p.images.forEach((x) => pushUrl(typeof x === "string" ? x : (x?.url ?? x?.uri ?? x?.pic_url ?? x?.thumb_url?.[0])));
+  if (Array.isArray(p.image_list)) p.image_list.forEach((x) => pushUrl(typeof x === "string" ? x : (x?.url ?? x?.uri)));
+  if (Array.isArray(p.product_image_list)) {
+    for (const x of p.product_image_list) {
+      pushUrl(typeof x === "string" ? x : x?.url ?? x?.thumb_url ?? x?.uri ?? x?.image?.url);
+    }
+  }
   if (Array.isArray(p.image?.url_list)) p.image.url_list.forEach(pushUrl);
   if (p.image?.url) pushUrl(p.image.url);
   if (p.cover_image?.url) pushUrl(p.cover_image.url);
   if (p.cover) pushUrl(typeof p.cover === "string" ? p.cover : p.cover?.url);
   if (p.main_image?.url) pushUrl(p.main_image.url);
   return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname([...imgs]));
+}
+
+/**
+ * No sub-JSON dum produto PDP: apanha todos os HTTPS que pareçam foto de produto (estruturas OEC heterogéneas).
+ * @param {unknown} node
+ * @param {number} [maxDepth]
+ * @param {number} [maxUrls]
+ * @returns {string[]}
+ */
+function extractHttpImageUrlsDeep(node, maxDepth = 14, maxUrls = 80) {
+  const acc = [];
+  const seen = new Set();
+  (function walk(n, d) {
+    if (d > maxDepth || n == null || acc.length >= maxUrls) return;
+    if (typeof n === "string") {
+      let t = n.trim();
+      if (t.startsWith("//")) t = `https:${t}`;
+      if (t.startsWith("http") && /p16-|p19-|ibyteimg|tiktokcdn\.com/i.test(t)) {
+        if (!/\/(avt|sign\/)/i.test(t) && !/aweme-avt|user_?avatar|common-sign|user_nick/i.test(t)) {
+          if (!seen.has(t)) {
+            seen.add(t);
+            acc.push(t);
+          }
+        }
+      }
+      return;
+    }
+    if (Array.isArray(n)) {
+      for (const x of n) {
+        walk(x, d + 1);
+        if (acc.length >= maxUrls) return;
+      }
+      return;
+    }
+    if (typeof n !== "object") return;
+    for (const v of Object.values(n)) {
+      walk(v, d + 1);
+      if (acc.length >= maxUrls) return;
+    }
+  })(node, 0);
+  return acc;
+}
+
+/**
+ * Imagens combinadas dum nó de produto vindo do `__MODERN_ROUTER_DATA__` na PDP (campos conhecidos + varredura profunda limitada).
+ * @param {object} raw
+ */
+function extractAllImageUrlsFromRouterProductNode(raw) {
+  if (!raw || typeof raw !== "object") return [];
+  const m = mergeProductLayers(raw);
+  const shallow = extractImages(m);
+  const deep = extractHttpImageUrlsDeep(m, 14, 90);
+  return dedupeImageUrlsByAssetId(dedupeImageUrlsByPathname([...shallow, ...deep]));
 }
 
 /**
@@ -1461,6 +1523,62 @@ function findProductNodeByIdInTreeLooseImages(node, productId, depth) {
 }
 
 /**
+ * DFS: todas as refs de produto com o mesmo id no `__MODERN_ROUTER_DATA__` (vários blobs por produto).
+ * @param {unknown} node
+ * @param {string} productId
+ * @param {number} depth
+ * @param {object[]} acc
+ * @param {WeakSet<object>} seen
+ */
+function collectNodesByProductIdDFS(node, productId, depth, acc, seen) {
+  if (depth > 45 || node == null) {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const el of node) {
+      collectNodesByProductIdDFS(el, productId, depth + 1, acc, seen);
+    }
+    return;
+  }
+  if (typeof node !== "object") {
+    return;
+  }
+  const id = getProductId(node);
+  if (id != null && String(id) === productId && !isReviewOnlyProductNode(node)) {
+    if (!seen.has(node)) {
+      seen.add(node);
+      acc.push(node);
+    }
+  }
+  for (const v of Object.values(node)) {
+    if (v && typeof v === "object") {
+      collectNodesByProductIdDFS(v, productId, depth + 1, acc, seen);
+    }
+  }
+}
+
+/**
+ * Todas os nós de produto com este `product_id` em `root` + `loaderData`.
+ * @param {object} rootData
+ * @param {string} productId
+ * @returns {object[]}
+ */
+function collectAllProductNodesByIdUnderRouter(rootData, productId) {
+  if (!rootData || typeof rootData !== "object" || !productId) {
+    return [];
+  }
+  const roots = [rootData, rootData.loaderData].filter((x) => x && typeof x === "object");
+  /** @type {WeakSet<object>} */
+  const seen = new WeakSet();
+  /** @type {object[]} */
+  const acc = [];
+  for (const r of roots) {
+    collectNodesByProductIdDFS(r, String(productId), 0, acc, seen);
+  }
+  return acc;
+}
+
+/**
  * `normalizeItem` sobre o nó vindo de `#__MODERN_ROUTER_DATA__` (PDP) — o loader costuma ter
  * `format_price` / `show_price` mais alinhados ao card do que o XHR mínimo da grelha.
  * @param {object | null} root
@@ -1495,14 +1613,16 @@ function extractPdpImageUrlsFromModernRouterRoot(root, productId) {
   if (!root || !productId) {
     return [];
   }
-  let raw = findProductNodeByIdInModernRouter(root, String(productId));
-  if (!raw) {
-    raw = findProductNodeByIdInModernRouterLoose(root, String(productId));
+  const pid = String(productId);
+  const nodes = collectAllProductNodesByIdUnderRouter(root, pid);
+  let best = [];
+  for (const node of nodes) {
+    const urls = extractAllImageUrlsFromRouterProductNode(node);
+    if (urls.length > best.length) {
+      best = urls;
+    }
   }
-  if (!raw) {
-    return [];
-  }
-  return extractImages(mergeProductLayers(raw));
+  return best;
 }
 
 /**
@@ -1737,10 +1857,27 @@ async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
       await page
         .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
         .catch(() => undefined);
-      const [rawDom, routerRoot] = await Promise.all([
-        collectPdpGalleryUrlsFromPage(page),
-        getModernRouterDataFromPage(page)
-      ]);
+      await page.waitForSelector("#__MODERN_ROUTER_DATA__", { timeout: 22_000 }).catch(() => undefined);
+      await page
+        .waitForFunction(
+          () => {
+            const el = document.getElementById("__MODERN_ROUTER_DATA__");
+            const t = el?.textContent != null ? String(el.textContent).trim() : "";
+            return t.length > 80 && t.includes("{") && t.includes("}");
+          },
+          { timeout: 14_000 }
+        )
+        .catch(() => undefined);
+      await humanPause(page, 350, 800);
+      const rawDom = await collectPdpGalleryUrlsFromPage(page);
+      let routerRoot = await getModernRouterDataFromPage(page);
+      if (
+        routerRoot == null ||
+        (typeof routerRoot === "object" && Object.keys(routerRoot).length === 0)
+      ) {
+        await humanPause(page, 750, 1500);
+        routerRoot = await getModernRouterDataFromPage(page);
+      }
       const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
       const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
       const pdpDom = await collectPdpProductPricesFromPage(
