@@ -214,12 +214,25 @@ const SORT_MAP_SUB_DESC = ["score", "totalSales", "avgRating", "avgPrice", "tota
 const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
-const CW_TOP = [52, 210, 150, 80, 90, 100, 76];
+const CW_TOP = [52, 185, 125, 76, 82, 90, 100, 72];
 const CW_OPP = [52, 200, 150, 80, 90, 100, 148, 76];
 const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 108, 76];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
 const CW_MAP_TOP = [52, 120, 200, 200, 64, 90, 80, 80, 76, 76];
 const CW_SCALE = [52, 220, 64, 90, 100, 76];
+
+/** Estilo do botão Exportar (Product Score e Top Products). */
+const scoreExportBtn = {
+  padding: "0.22rem 0.45rem",
+  fontSize: "0.68rem",
+  cursor: "pointer",
+  borderRadius: 5,
+  border: "1px solid #4a7a9e",
+  background: "#1a3a52",
+  color: "#e8f4ff",
+  fontWeight: 600,
+  whiteSpace: "nowrap"
+};
 
 /** Aceita só arrays; evita crash se a API devolver object ou outro tipo onde esperamos lista. */
 function asArray(x) {
@@ -229,6 +242,8 @@ function asArray(x) {
 function TableTop({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
+  const [exportingProductId, setExportingProductId] = useState(/** @type {string | null} */ (null));
+  const [exportFeedback, setExportFeedback] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
   const topIntro = (
     <IntroCard title="Top Products">
@@ -236,6 +251,19 @@ function TableTop({ data }) {
         Mostra os produtos com mais vendas na <strong>última importação</strong>. Use para entender o que já tem demanda,
         mas lembre-se: produtos muito vendidos também podem ter mais concorrência.
       </p>
+      <div style={introLogicBox}>
+        <div style={introLogicLabel}>Complemento ao ecrã (como Product Score)</div>
+        <ul style={introLogicUl}>
+          <li>
+            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces — credenciais{" "}
+            <code>SPACES_*</code> só no servidor; mesmo POST que Product Score.
+          </li>
+          <li>
+            O <strong>nome</strong> abre a <strong>página de trabalho</strong> (<code>/produto/…</code>); a coluna{" "}
+            <strong>link</strong> abre o PDP no TikTok.
+          </li>
+        </ul>
+      </div>
       <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "#6b7280", background: "#1a2128" }}>
         Até <strong>20</strong> linhas, ordenação inicial por vendas (maior → menor); dados do snapshot na base —
         não são tempo real do TikTok.
@@ -255,13 +283,34 @@ function TableTop({ data }) {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
   }, []);
 
+  const onExportToSpace = useCallback(async (tiktokProductId) => {
+    setExportingProductId(tiktokProductId);
+    setExportFeedback(null);
+    try {
+      const res = await apiPost("/analytics/export-product-to-spaces", { productId: tiktokProductId });
+      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
+      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
+      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
+      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
+      setExportFeedback({
+        kind: "ok",
+        text: `Enviado: ${prefix || "ok"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}.`
+      });
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      setExportFeedback({ kind: "err", text });
+    } finally {
+      setExportingProductId(null);
+    }
+  }, []);
+
   if (data == null) {
     return (
       <>
         {topIntro}
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como quando a API responde). Altere
-          clicando nos cabeçalhos — não ordenamos <strong>link</strong>.
+          clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -289,9 +338,25 @@ function TableTop({ data }) {
       {topIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como na API). Altere clicando nos
-        cabeçalhos — não ordenamos <strong>link</strong>.{" "}
+        cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong> abre a{" "}
+        <strong>página de trabalho</strong> (<code>/produto/…</code>) quando o produto tem <code>productId</code>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {exportFeedback ? (
+        <p
+          role="status"
+          style={{
+            fontSize: "0.72rem",
+            marginBottom: "0.45rem",
+            padding: "0.35rem 0.5rem",
+            borderRadius: 6,
+            background: exportFeedback.kind === "ok" ? "rgba(40, 120, 80, 0.2)" : "rgba(180, 60, 60, 0.18)",
+            color: exportFeedback.kind === "ok" ? "#b8e6c8" : "#ffb3b3"
+          }}
+        >
+          {exportFeedback.text}
+        </p>
+      ) : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
@@ -342,40 +407,80 @@ function TableTop({ data }) {
               resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
+            <PlainTh
+              label="Ações"
+              title="Exportar ao DigitalOcean Spaces"
+              resizeColIdx={6}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={7} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
-          {items.map((row, i) => (
-            <tr key={`${row.productId}-${i}`}>
-              <td style={tdPosStyle}>{i + 1}</td>
-              <td style={tdEllipsis} title={typeof row.nome === "string" ? row.nome : undefined}>
-                {row.nome ?? "—"}
-              </td>
-              <td style={tdEllipsis} title={typeof row.loja === "string" ? row.loja : undefined}>
-                {row.loja ?? "—"}
-              </td>
-              <td>{row.preco ?? "—"}</td>
-              <td>{row.vendas ?? "—"}</td>
-              <td>
-                {typeof row.avaliacao === "number" && Number.isFinite(row.avaliacao)
-                  ? row.avaliacao.toLocaleString("pt-BR", {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 2
-                    })
-                  : "—"}
-              </td>
-              <td>
-                {row.link ? (
-                  <a href={row.link} target="_blank" rel="noopener noreferrer">
-                    abrir
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </td>
-            </tr>
-          ))}
+          {items.map((row, i) => {
+            const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
+            const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
+            const pid = row.productId;
+            const hasProductId = pid != null && String(pid).trim() !== "";
+            return (
+              <tr key={`${row.productId}-${i}`}>
+                <td style={tdPosStyle}>{i + 1}</td>
+                <td>
+                  {hasProductId ? (
+                    <Link
+                      to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                      title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                      style={{ color: "#6ec4ff", textDecoration: "none" }}
+                    >
+                      {row.nome ?? "—"}
+                    </Link>
+                  ) : (
+                    <span title={nomeTitle}>{row.nome ?? "—"}</span>
+                  )}
+                </td>
+                <td style={tdEllipsis} title={typeof row.loja === "string" ? row.loja : undefined}>
+                  {row.loja ?? "—"}
+                </td>
+                <td>{row.preco ?? "—"}</td>
+                <td>{row.vendas ?? "—"}</td>
+                <td>
+                  {typeof row.avaliacao === "number" && Number.isFinite(row.avaliacao)
+                    ? row.avaliacao.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 2
+                      })
+                    : "—"}
+                </td>
+                <td>
+                  {hasProductId ? (
+                    <button
+                      type="button"
+                      style={{
+                        ...scoreExportBtn,
+                        opacity: exportingProductId === String(pid).trim() ? 0.55 : 1,
+                        cursor: exportingProductId === String(pid).trim() ? "wait" : "pointer"
+                      }}
+                      disabled={exportingProductId != null}
+                      onClick={() => onExportToSpace(String(pid).trim())}
+                    >
+                      {exportingProductId === String(pid).trim() ? "…" : "Exportar"}
+                    </button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td>
+                  {row.link ? (
+                    <a href={row.link} target="_blank" rel="noopener noreferrer">
+                      abrir
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </>
@@ -694,18 +799,6 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
     </section>
   );
 }
-
-const scoreExportBtn = {
-  padding: "0.22rem 0.45rem",
-  fontSize: "0.68rem",
-  cursor: "pointer",
-  borderRadius: 5,
-  border: "1px solid #4a7a9e",
-  background: "#1a3a52",
-  color: "#e8f4ff",
-  fontWeight: 600,
-  whiteSpace: "nowrap"
-};
 
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
@@ -1749,8 +1842,8 @@ function AnalyticsDashboard() {
       </p>
       <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
         <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
-        ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos dados
-        importados.
+        ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
+        dados importados.
       </p>
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
