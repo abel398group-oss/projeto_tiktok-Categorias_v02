@@ -69,7 +69,7 @@ npm install
 |---------|---------|
 | Só API Fastify (`127.0.0.1:3333` por defeito). Env: `DATABASE_URL`, **`ANALYTICS_API_KEY`** | `npm run analytics:api` |
 | Só Vite (precisa `cd frontend` + `npm install` na primeira vez) | `cd frontend` → `npm run dev` |
-| **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs) | `npm run dev:all` |
+| **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). A parte **API** usa `node --watch` e reinicia ao alterar `server.mjs`. | `npm run dev:all` |
 
 - Chave no browser: `frontend/.env` → **`VITE_ANALYTICS_API_KEY`** igual a **`ANALYTICS_API_KEY`** na raiz. Ver `frontend/README.md`, `.env.example` na raiz e `frontend/.env.example`.
 - Sem API a correr na porta certa, o proxy do Vite pode dar **ECONNREFUSED**.
@@ -123,10 +123,11 @@ export CATEGORY_URL="https://shop.tiktok.com/br/c/..."
 npm run coleta
 ```
 
-### 4. API analytics (somente leitura hoje)
+### 4. API analytics (GET relatórios + POST export Spaces)
 
 - Arranque: **`npm run analytics:api`**.
 - Auth: **`Authorization: Bearer <ANALYTICS_API_KEY>`** (ou `x-api-key`). Endpoints em **`docs/ANALYTICS-API.md`**.
+- **POST** opcional **`/analytics/export-product-to-spaces`**: exporta produto ao DigitalOcean Spaces (credenciais `SPACES_*` no servidor). No painel **Product Score**, botão por linha na coluna **Space**.
 
 Relatórios equivalentes aos da tabela CLI; **Escalar** e **category-map** no painel espelham o mesmo universo que `analytics:scalable` e `analytics:category-map`.
 

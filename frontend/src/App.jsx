@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { apiFetch } from "./api.js";
+import { apiFetch, apiPost } from "./api.js";
 import {
   INITIAL_FILTER_STATE,
   PRODUCT_SCORE_PRESETS,
@@ -204,7 +204,7 @@ const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
 const CW_TOP = [52, 210, 150, 80, 90, 100, 76];
 const CW_OPP = [52, 200, 150, 80, 90, 100, 148, 76];
-const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 76];
+const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 92, 76];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
 const CW_MAP_TOP = [52, 120, 200, 200, 64, 90, 80, 80, 76, 76];
 const CW_SCALE = [52, 220, 64, 90, 100, 76];
@@ -688,9 +688,23 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
   );
 }
 
+const scoreExportBtn = {
+  padding: "0.22rem 0.45rem",
+  fontSize: "0.68rem",
+  cursor: "pointer",
+  borderRadius: 5,
+  border: "1px solid #4a7a9e",
+  background: "#1a3a52",
+  color: "#e8f4ff",
+  fontWeight: 600,
+  whiteSpace: "nowrap"
+};
+
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
+  const [exportingProductId, setExportingProductId] = useState(/** @type {string | null} */ (null));
+  const [exportFeedback, setExportFeedback] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
   const scoreIntro = (
     <IntroCard title="Product Score">
@@ -712,6 +726,9 @@ function TableScore({ data }) {
           </li>
           <li>
             ordena todos por score; este ecrã mostra só o <strong>top 30</strong> (o restante entra no cálculo geral quando aplicável).
+          </li>
+          <li>
+            <strong>Coluna Space:</strong> envia esse produto ao DigitalOcean Spaces via API (credenciais <code>SPACES_*</code> só no servidor, não no browser).
           </li>
         </ul>
       </div>
@@ -743,6 +760,27 @@ function TableScore({ data }) {
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
+  }, []);
+
+  const onExportToSpace = useCallback(async (tiktokProductId) => {
+    setExportingProductId(tiktokProductId);
+    setExportFeedback(null);
+    try {
+      const res = await apiPost("/analytics/export-product-to-spaces", { productId: tiktokProductId });
+      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
+      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
+      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
+      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
+      setExportFeedback({
+        kind: "ok",
+        text: `Enviado: ${prefix || "ok"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}.`
+      });
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      setExportFeedback({ kind: "err", text });
+    } finally {
+      setExportingProductId(null);
+    }
   }, []);
 
   if (data == null) {
@@ -791,6 +829,21 @@ function TableScore({ data }) {
         Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {exportFeedback ? (
+        <p
+          role="status"
+          style={{
+            fontSize: "0.72rem",
+            marginBottom: "0.45rem",
+            padding: "0.35rem 0.5rem",
+            borderRadius: 6,
+            background: exportFeedback.kind === "ok" ? "rgba(40, 120, 80, 0.2)" : "rgba(180, 60, 60, 0.18)",
+            color: exportFeedback.kind === "ok" ? "#b8e6c8" : "#ffb3b3"
+          }}
+        >
+          {exportFeedback.text}
+        </p>
+      ) : null}
       {filteredRows.length === 0 ? (
         <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros actuais — ajuste os limites ou clique em Limpar.</p>
       ) : (
@@ -871,7 +924,8 @@ function TableScore({ data }) {
               resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="Space" title="Enviar produto ao DigitalOcean Spaces (servidor)" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -886,6 +940,20 @@ function TableScore({ data }) {
               <td>{row.vendas ?? "—"}</td>
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
+              <td>
+                <button
+                  type="button"
+                  style={{
+                    ...scoreExportBtn,
+                    opacity: exportingProductId === row.productId ? 0.55 : 1,
+                    cursor: exportingProductId === row.productId ? "wait" : "pointer"
+                  }}
+                  disabled={exportingProductId != null}
+                  onClick={() => onExportToSpace(row.productId)}
+                >
+                  {exportingProductId === row.productId ? "…" : "Exportar"}
+                </button>
+              </td>
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">

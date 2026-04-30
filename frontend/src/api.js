@@ -36,3 +36,38 @@ export async function apiFetch(path) {
 
   return body;
 }
+
+/**
+ * POST JSON com a mesma autenticação que {@link apiFetch}.
+ * @param {string} path ex.: "/analytics/export-product-to-spaces"
+ * @param {Record<string, unknown>} body
+ */
+export async function apiPost(path, body) {
+  const base = API_URL.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const url = `${base}${p}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body ?? {})
+  });
+
+  const text = await res.text();
+  let parsed;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(text || `Resposta inválida (HTTP ${res.status})`);
+  }
+
+  if (!res.ok) {
+    const msg = parsed?.message || parsed?.error || `HTTP ${res.status}`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+
+  return parsed;
+}

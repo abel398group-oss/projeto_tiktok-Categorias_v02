@@ -9,7 +9,7 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 ## Definições comuns
 
 - **Último run:** `ScrapeRun` ordenado por `created_at` descendente (`scripts/analytics/_common.mjs` → `getLatestAndPreviousRun`).
-- Os endpoints devolvem só leitura; o painel só invoca estas rotas ou equivalentes CLI.
+- Os **GET** de relatório são só leitura (`items`/`top`/etc.). O painel também pode invocar **`POST /analytics/export-product-to-spaces`** (gravar produto no DigitalOcean Spaces, sem mudar Postgres) — ver **`docs/ANALYTICS-API.md`** e `scripts/lib/export-product-to-spaces-core.mjs`.
 
 ---
 
@@ -106,7 +106,8 @@ Implementação faz parse do string `rating` do score (primeiro número + `\((n)
 
 ## API & UI
 
-- **Autenticação:** `Authorization: Bearer` ou `x-api-key` — `scripts/analytics/server.mjs`.
+- **Autenticação:** `Authorization: Bearer` ou `x-api-key` — `scripts/analytics/server.mjs` (inclui o POST de export).
+- **Product Score (UI):** coluna **Space** com botão **Exportar** por linha (`productId` TikTok) → mesmo host/proxy que os GET; credenciais **Spaces** só no processo da API.
 - Comportamento de ordenação **no cliente** (primeiro clique em métricas “desc” onde aplicável) está em **`frontend/src/App.jsx`** (`toggleSort`) e **`frontend/src/sortUtils.js`**; não altera valores servidos pela API.
 
 **Manutenção**
