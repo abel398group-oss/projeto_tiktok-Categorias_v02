@@ -1,10 +1,9 @@
 import { useState, useCallback, useMemo } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
-import { apiPost } from "./api.js";
-import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
-import AppShell from "./AppShell.jsx";
 import { useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
+import AppShell from "./AppShell.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
+import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
 import {
   INITIAL_FILTER_STATE,
   PRODUCT_SCORE_PRESETS,
@@ -21,6 +20,7 @@ import {
   sortScoreRowsByColumn,
   sortTopItemsByColumn
 } from "./sortUtils.js";
+import { SpacesExportActionCell, SpacesExportFeedback, useSpacesExport } from "./spacesExport.jsx";
 
 /** @typedef {'asc' | 'desc'} SortDir */
 
@@ -207,27 +207,13 @@ const SORT_MAP_SUB_DESC = ["score", "totalSales", "avgRating", "avgPrice", "tota
 const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
-const CW_TOP = [52, 185, 125, 76, 82, 90, 100, 72];
-const CW_OPP = [52, 200, 150, 80, 90, 100, 148, 76];
+const CW_TOP = [52, 178, 120, 74, 80, 86, 100, 70];
+const CW_OPP = [52, 175, 115, 74, 80, 86, 110, 100, 66];
 const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 108, 76];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
-const CW_MAP_TOP = [52, 120, 200, 200, 64, 90, 80, 80, 76, 76];
-const CW_SCALE = [52, 220, 64, 90, 100, 76];
+const CW_MAP_TOP = [52, 108, 175, 170, 56, 76, 68, 68, 56, 98, 64];
+const CW_SCALE = [52, 195, 60, 76, 86, 100, 60];
 
-/** Estilo do botão Exportar (Product Score e Top Products). */
-const scoreExportBtn = {
-  padding: "0.22rem 0.45rem",
-  fontSize: "0.68rem",
-  cursor: "pointer",
-  borderRadius: 5,
-  border: "1px solid #4a7a9e",
-  background: "#1a3a52",
-  color: "#e8f4ff",
-  fontWeight: 600,
-  whiteSpace: "nowrap"
-};
-
-/** Aceita só arrays; evita crash se a API devolver object ou outro tipo onde esperamos lista. */
 function asArray(x) {
   return Array.isArray(x) ? x : [];
 }
@@ -235,8 +221,7 @@ function asArray(x) {
 function TableTop({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
-  const [exportingProductId, setExportingProductId] = useState(/** @type {string | null} */ (null));
-  const [exportFeedback, setExportFeedback] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
+  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const topIntro = (
     <IntroCard title="Top Products">
@@ -274,27 +259,6 @@ function TableTop({ data }) {
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
-  }, []);
-
-  const onExportToSpace = useCallback(async (tiktokProductId) => {
-    setExportingProductId(tiktokProductId);
-    setExportFeedback(null);
-    try {
-      const res = await apiPost("/analytics/export-product-to-spaces", { productId: tiktokProductId });
-      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
-      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
-      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
-      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
-      setExportFeedback({
-        kind: "ok",
-        text: `Enviado: ${prefix || "ok"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}.`
-      });
-    } catch (err) {
-      const text = err instanceof Error ? err.message : String(err);
-      setExportFeedback({ kind: "err", text });
-    } finally {
-      setExportingProductId(null);
-    }
   }, []);
 
   if (data == null) {
@@ -335,21 +299,7 @@ function TableTop({ data }) {
         <strong>página de trabalho</strong> (<code>/produto/…</code>) quando o produto tem <code>productId</code>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      {exportFeedback ? (
-        <p
-          role="status"
-          style={{
-            fontSize: "0.72rem",
-            marginBottom: "0.45rem",
-            padding: "0.35rem 0.5rem",
-            borderRadius: 6,
-            background: exportFeedback.kind === "ok" ? "rgba(40, 120, 80, 0.2)" : "rgba(180, 60, 60, 0.18)",
-            color: exportFeedback.kind === "ok" ? "#b8e6c8" : "#ffb3b3"
-          }}
-        >
-          {exportFeedback.text}
-        </p>
-      ) : null}
+      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
@@ -444,24 +394,11 @@ function TableTop({ data }) {
                       })
                     : "—"}
                 </td>
-                <td>
-                  {hasProductId ? (
-                    <button
-                      type="button"
-                      style={{
-                        ...scoreExportBtn,
-                        opacity: exportingProductId === String(pid).trim() ? 0.55 : 1,
-                        cursor: exportingProductId === String(pid).trim() ? "wait" : "pointer"
-                      }}
-                      disabled={exportingProductId != null}
-                      onClick={() => onExportToSpace(String(pid).trim())}
-                    >
-                      {exportingProductId === String(pid).trim() ? "…" : "Exportar"}
-                    </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
+                <SpacesExportActionCell
+                  productId={pid}
+                  exportingProductId={exportingProductId}
+                  exportToSpace={exportToSpace}
+                />
                 <td>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -483,6 +420,7 @@ function TableTop({ data }) {
 function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
+  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const oppIntro = (
     <IntroCard title="Opportunities">
@@ -506,6 +444,10 @@ function TableOpp({ data }) {
           </li>
           <li>
             ordenação principal: melhor média de avaliação (com desempate por vendas); <strong>máx. 20</strong> linhas.
+          </li>
+          <li>
+            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces (credenciais só no servidor — como
+            nos outros relatórios com produtos).
           </li>
         </ul>
       </div>
@@ -531,7 +473,7 @@ function TableOpp({ data }) {
         {oppIntro}
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> quando houver dados.
-          Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong>.
+          Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -559,9 +501,10 @@ function TableOpp({ data }) {
       {oppIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> (critério principal aqui).
-        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong>.{" "}
+        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
@@ -621,7 +564,13 @@ function TableOpp({ data }) {
               resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={7} onGrip={colW.onGripMouseDown} />
+            <PlainTh
+              label="Ações"
+              title="Exportar ao DigitalOcean Spaces"
+              resizeColIdx={7}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -636,6 +585,11 @@ function TableOpp({ data }) {
                 {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
               </td>
               <td>{row.motivo ?? "—"}</td>
+              <SpacesExportActionCell
+                productId={row.productId}
+                exportingProductId={exportingProductId}
+                exportToSpace={exportToSpace}
+              />
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -796,8 +750,7 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
 function TableScore({ data }) {
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
-  const [exportingProductId, setExportingProductId] = useState(/** @type {string | null} */ (null));
-  const [exportFeedback, setExportFeedback] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
+  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const scoreIntro = (
     <IntroCard title="Product Score">
@@ -858,27 +811,6 @@ function TableScore({ data }) {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
   }, []);
 
-  const onExportToSpace = useCallback(async (tiktokProductId) => {
-    setExportingProductId(tiktokProductId);
-    setExportFeedback(null);
-    try {
-      const res = await apiPost("/analytics/export-product-to-spaces", { productId: tiktokProductId });
-      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
-      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
-      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
-      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
-      setExportFeedback({
-        kind: "ok",
-        text: `Enviado: ${prefix || "ok"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}.`
-      });
-    } catch (err) {
-      const text = err instanceof Error ? err.message : String(err);
-      setExportFeedback({ kind: "err", text });
-    } finally {
-      setExportingProductId(null);
-    }
-  }, []);
-
   if (data == null) {
     return (
       <>
@@ -922,24 +854,11 @@ function TableScore({ data }) {
       />
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
-        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z.{" "}
+        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z; <strong>link</strong> e{" "}
+        <strong>Ações</strong> não se ordenam.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      {exportFeedback ? (
-        <p
-          role="status"
-          style={{
-            fontSize: "0.72rem",
-            marginBottom: "0.45rem",
-            padding: "0.35rem 0.5rem",
-            borderRadius: 6,
-            background: exportFeedback.kind === "ok" ? "rgba(40, 120, 80, 0.2)" : "rgba(180, 60, 60, 0.18)",
-            color: exportFeedback.kind === "ok" ? "#b8e6c8" : "#ffb3b3"
-          }}
-        >
-          {exportFeedback.text}
-        </p>
-      ) : null}
+      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       {filteredRows.length === 0 ? (
         <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros actuais — ajuste os limites ou clique em Limpar.</p>
       ) : (
@@ -1049,20 +968,11 @@ function TableScore({ data }) {
               <td>{row.vendas ?? "—"}</td>
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
-              <td>
-                <button
-                  type="button"
-                  style={{
-                    ...scoreExportBtn,
-                    opacity: exportingProductId === row.productId ? 0.55 : 1,
-                    cursor: exportingProductId === row.productId ? "wait" : "pointer"
-                  }}
-                  disabled={exportingProductId != null}
-                  onClick={() => onExportToSpace(row.productId)}
-                >
-                  {exportingProductId === row.productId ? "…" : "Exportar"}
-                </button>
-              </td>
+              <SpacesExportActionCell
+                productId={row.productId}
+                exportingProductId={exportingProductId}
+                exportToSpace={exportToSpace}
+              />
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -1085,6 +995,7 @@ function TableCategoryMap({ data }) {
   const masters = asArray(data?.masterCategories);
   const colWSub = useColumnWidths(CW_MAP_SUB);
   const colWTop = useColumnWidths(CW_MAP_TOP);
+  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const mapIntro = (
     <IntroCard title='Mapa de categorias'>
@@ -1112,7 +1023,8 @@ function TableCategoryMap({ data }) {
             por pasta calcula contagens, somas de vendas, médias de preço e rating; o <strong>score da pasta</strong> é a média simples das pontuações 0–100 dos produtos;
           </li>
           <li>
-            em cada subcategoria lista até <strong>cinco</strong> produtos exemplo, pela ordem de score descendente.
+            em cada subcategoria lista até <strong>cinco</strong> produtos exemplo, pela ordem de score descendente; na segunda
+            tabela, <strong>Exportar</strong> usa o mesmo fluxo Spaces que nos outros relatórios.
           </li>
         </ul>
       </div>
@@ -1231,7 +1143,7 @@ function TableCategoryMap({ data }) {
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor na listagem combinada. Métricas
           numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e <strong>nome</strong> em A→Z.
-          O link não é ordenável.
+          O link não é ordenável; a coluna <strong>Ações</strong> (export) também não.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher as tabelas.</p>
       </>
@@ -1388,11 +1300,12 @@ function TableCategoryMap({ data }) {
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor nesta listagem combinada.
         Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
-        <strong>nome</strong> em A→Z. O link não é ordenável.
+        <strong>nome</strong> em A→Z. O link e <strong>Ações</strong> (export) não são ordenáveis.
         <span style={{ opacity: 0.85, display: "block", marginTop: "0.25rem" }}>
           Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
         </span>
       </p>
+      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colWTop.colElements}</colgroup>
         <thead>
@@ -1470,7 +1383,13 @@ function TableCategoryMap({ data }) {
               resizeColIdx={8}
               onGrip={colWTop.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={9} onGrip={colWTop.onGripMouseDown} />
+            <PlainTh
+              label="Ações"
+              title="Exportar ao DigitalOcean Spaces"
+              resizeColIdx={9}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={10} onGrip={colWTop.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -1487,6 +1406,12 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
                 <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
                 <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
+                <SpacesExportActionCell
+                  productId={row.productId}
+                  exportingProductId={exportingProductId}
+                  exportToSpace={exportToSpace}
+                  tdStyle={tdStyle}
+                />
                 <td style={tdStyle}>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -1509,6 +1434,7 @@ function TableScalableSections({ data }) {
   const rawV = asArray(data?.validatedToScale);
   const rawP = asArray(data?.potentialBets);
   const colW = useColumnWidths(CW_SCALE);
+  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
 
@@ -1568,6 +1494,10 @@ function TableScalableSections({ data }) {
           <li>
             depois divide o que sobrou em <strong>Validados</strong> (critérios de volume + avaliações + score) e <strong>Apostas com potencial</strong> (vendas mais baixas mas com bons sinais de avaliações e score).
           </li>
+          <li>
+            Em cada lista, <strong>Exportar</strong> na coluna <strong>Ações</strong> envia o produto ao DigitalOcean Spaces
+            (credenciais só no servidor), como nos outros relatórios.
+          </li>
         </ul>
       </div>
       <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55 }}>
@@ -1583,7 +1513,7 @@ function TableScalableSections({ data }) {
   const escalarOrdemP = (
     <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.65rem" }}>
       Clique num separador para ver só uma lista. Cada lista ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
-      <strong>link</strong>).{" "}
+      <strong>link</strong> e <strong>Ações</strong>).{" "}
       <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor — para <strong>vendas</strong> e{" "}
       <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z. Arraste a borda entre
       colunas nos cabeçalhos para ajustar a largura.
@@ -1644,6 +1574,11 @@ function TableScalableSections({ data }) {
         <td>{row.score}</td>
         <td>{row.vendas ?? "—"}</td>
         <td>{row.rating ?? "—"}</td>
+        <SpacesExportActionCell
+          productId={row.productId}
+          exportingProductId={exportingProductId}
+          exportToSpace={exportToSpace}
+        />
         <td>
           {row.link ? (
             <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -1660,6 +1595,7 @@ function TableScalableSections({ data }) {
     <>
       {escalarIntro}
       {escalarOrdemP}
+      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
         <button type="button" style={pill(scaleView === "validated")} onClick={() => setScaleView("validated")}>
@@ -1726,7 +1662,13 @@ function TableScalableSections({ data }) {
                     resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={5} onGrip={colW.onGripMouseDown} />
+                  <PlainTh
+                    label="Ações"
+                    title="Exportar ao DigitalOcean Spaces"
+                    resizeColIdx={5}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(v)}</tbody>
@@ -1791,7 +1733,13 @@ function TableScalableSections({ data }) {
                     resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={5} onGrip={colW.onGripMouseDown} />
+                  <PlainTh
+                    label="Ações"
+                    title="Exportar ao DigitalOcean Spaces"
+                    resizeColIdx={5}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(p)}</tbody>
