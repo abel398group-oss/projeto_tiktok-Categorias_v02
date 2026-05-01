@@ -1833,87 +1833,126 @@ async function collectPdpProductPricesFromPage(page, productId, categoriaUrl, pr
 /**
  * Abre `product_url` (PDP), preenche `images_pdp` e, quando possível, **preço de vitrine + "de"** no DOM
  * (`price` = hero 28px–48px + cêntimos, ou `__MODERN_ROUTER_DATA__`; `original` = riscado se existir).
- * Opcional: env `PDP_GALLERY=1`.
- * @param {import("puppeteer").Page} page
+ * Opcional: env `PDP_GALLERY=1`. Até 2 PDP em paralelo (`PDP_GALLERY_CONCURRENCY`, default 2).
+ * @param {import("puppeteer").Browser} browser
+ * @param {import("puppeteer").Page} page — primeira tab (worker 0); segunda tab é criada só se concorrência > 1
  * @param {Map<string, object>} byProductId
  * @param {{ max: number, debugLines?: string[], categoriaUrl?: string }} opts
  * @returns {Promise<{ visited: number, max: number, eligible: number }>}
  */
-async function enrichByProductIdWithPdpGallery(page, byProductId, opts) {
+async function enrichByProductIdWithPdpGallery(browser, page, byProductId, opts) {
   const max = Math.max(0, Math.min(500, opts.max));
   const categoriaUrl = opts.categoriaUrl != null ? String(opts.categoriaUrl) : "";
   const debugLines = opts.debugLines;
   const withPdp = [...byProductId.values()].filter(
     (n) => n?.product_url && String(n.product_url).includes("/pdp/")
   );
-  let visited = 0;
-  for (const n of withPdp) {
-    if (visited >= max) {
-      break;
+  const conc = Math.min(
+    2,
+    Math.max(1, Number.parseInt(String(process.env.PDP_GALLERY_CONCURRENCY || "2"), 10) || 1)
+  );
+
+  /** @type {import("puppeteer").Page | null} */
+  let secondary = null;
+  try {
+    const workers = [page];
+    if (conc > 1) {
+      secondary = await browser.newPage();
+      await secondary.setExtraHTTPHeaders({
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+      });
+      workers.push(secondary);
     }
-    try {
-      await page.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
-      await humanPause(page, 1800, 3600);
-      await page
-        .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
-        .catch(() => undefined);
-      await page.waitForSelector("#__MODERN_ROUTER_DATA__", { timeout: 22_000 }).catch(() => undefined);
-      await page
-        .waitForFunction(
-          () => {
-            const el = document.getElementById("__MODERN_ROUTER_DATA__");
-            const t = el?.textContent != null ? String(el.textContent).trim() : "";
-            return t.length > 80 && t.includes("{") && t.includes("}");
-          },
-          { timeout: 14_000 }
-        )
-        .catch(() => undefined);
-      await humanPause(page, 350, 800);
-      const rawDom = await collectPdpGalleryUrlsFromPage(page);
-      let routerRoot = await getModernRouterDataFromPage(page);
-      if (
-        routerRoot == null ||
-        (typeof routerRoot === "object" && Object.keys(routerRoot).length === 0)
-      ) {
-        await humanPause(page, 750, 1500);
-        routerRoot = await getModernRouterDataFromPage(page);
+
+    /**
+     * @param {import("puppeteer").Page} workerPage
+     * @param {object} n
+     * @returns {Promise<boolean>}
+     */
+    const visitOnePdp = async (workerPage, n) => {
+      try {
+        await workerPage.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
+        await humanPause(workerPage, 900, 1800);
+        await workerPage
+          .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
+          .catch(() => undefined);
+        await workerPage.waitForSelector("#__MODERN_ROUTER_DATA__", { timeout: 22_000 }).catch(() => undefined);
+        await workerPage
+          .waitForFunction(
+            () => {
+              const el = document.getElementById("__MODERN_ROUTER_DATA__");
+              const t = el?.textContent != null ? String(el.textContent).trim() : "";
+              return t.length > 80 && t.includes("{") && t.includes("}");
+            },
+            { timeout: 14_000 }
+          )
+          .catch(() => undefined);
+        await humanPause(workerPage, 175, 400);
+        const rawDom = await collectPdpGalleryUrlsFromPage(workerPage);
+        let routerRoot = await getModernRouterDataFromPage(workerPage);
+        if (
+          routerRoot == null ||
+          (typeof routerRoot === "object" && Object.keys(routerRoot).length === 0)
+        ) {
+          await humanPause(workerPage, 375, 750);
+          routerRoot = await getModernRouterDataFromPage(workerPage);
+        }
+        const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
+        const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
+        const pdpDom = await collectPdpProductPricesFromPage(
+          workerPage,
+          String(n.product_id),
+          categoriaUrl,
+          routerRoot
+        );
+        n.images_pdp = merged.length > 0 ? merged : null;
+        applyPdpDomPrices(n, pdpDom);
+        if (debugLines && merged.length) {
+          const rN = fromRouter.length;
+          const dN = rawDom.length;
+          debugLines.push(
+            `[pdp_gallery] ${n.product_id} → ${merged.length} url(s) (router:${rN} dom:${dN})`
+          );
+        }
+        if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
+          const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
+          debugLines.push(`[pdp_gallery] ${n.product_id} preço: ${pdpDom.sale}${o}`);
+        }
+        return true;
+      } catch (e) {
+        n.images_pdp = null;
+        if (debugLines) {
+          debugLines.push(`[pdp_gallery] ${n.product_id} falhou: ${(e && e.message) || String(e)}`);
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn(`[pdp_gallery] ${n.product_id}: ${(e && e.message) || e}`);
+        }
+        return false;
       }
-      const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
-      const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
-      const pdpDom = await collectPdpProductPricesFromPage(
-        page,
-        String(n.product_id),
-        categoriaUrl,
-        routerRoot
+    };
+
+    let visited = 0;
+    let i = 0;
+    while (i < withPdp.length && visited < max) {
+      const room = max - visited;
+      const batchSize = Math.min(conc, withPdp.length - i, room);
+      if (batchSize <= 0) {
+        break;
+      }
+      const batch = withPdp.slice(i, i + batchSize);
+      i += batchSize;
+      const outcomes = await Promise.all(
+        batch.map((n, bi) => visitOnePdp(workers[bi % workers.length], n))
       );
-      n.images_pdp = merged.length > 0 ? merged : null;
-      applyPdpDomPrices(n, pdpDom);
-      visited += 1;
-      if (debugLines && merged.length) {
-        const rN = fromRouter.length;
-        const dN = rawDom.length;
-        debugLines.push(
-          `[pdp_gallery] ${n.product_id} → ${merged.length} url(s) (router:${rN} dom:${dN})`
-        );
-      }
-      if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
-        const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
-        debugLines.push(`[pdp_gallery] ${n.product_id} preço: ${pdpDom.sale}${o}`);
-      }
-    } catch (e) {
-      n.images_pdp = null;
-      if (debugLines) {
-        debugLines.push(
-          `[pdp_gallery] ${n.product_id} falhou: ${(e && e.message) || String(e)}`
-        );
-      } else {
-        // eslint-disable-next-line no-console
-        console.warn(`[pdp_gallery] ${n.product_id}: ${(e && e.message) || e}`);
-      }
+      visited += outcomes.filter(Boolean).length;
+      await humanPause(page, 250, 700);
     }
-    await humanPause(page, 500, 1400);
+    return { visited, max, eligible: withPdp.length };
+  } finally {
+    if (secondary) {
+      await secondary.close().catch(() => {});
+    }
   }
-  return { visited, max, eligible: withPdp.length };
 }
 
 function mergeProductLayers(rawIn) {
@@ -2429,9 +2468,38 @@ function shouldInspectUrl(url) {
   }
 }
 
-async function humanPause(page, min = 400, max = 1200) {
+async function humanPause(page, min = 200, max = 600) {
   const ms = min + Math.random() * (max - min);
   await new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Após scroll da grelha: substitui espera fixa longa quando o número de produtos deixa de crescer
+ * durante `stableNeedMs` (xhr assíncronos), com teto compatível com a antiga espera fixa.
+ * Env: FEED_DRAIN_POLL_MS (default 200), FEED_STABLE_MS (default 1200), FEED_DRAIN_MAX_MS (default 5000).
+ *
+ * @param {() => number} getProductCount tipicamente () => map.size
+ */
+async function waitForStableProductFeed(getProductCount) {
+  const pollMs = Math.max(50, Number(process.env.FEED_DRAIN_POLL_MS) || 200);
+  const stableNeedMs = Math.max(200, Number(process.env.FEED_STABLE_MS) || 1200);
+  const maxMs = Math.max(500, Number(process.env.FEED_DRAIN_MAX_MS) || 5000);
+  const start = Date.now();
+  let lastCount = getProductCount();
+  let lastChangeAt = Date.now();
+
+  while (Date.now() - start < maxMs) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    const n = getProductCount();
+    if (n !== lastCount) {
+      lastCount = n;
+      lastChangeAt = Date.now();
+      continue;
+    }
+    if (Date.now() - lastChangeAt >= stableNeedMs) {
+      break;
+    }
+  }
 }
 
 async function gentleMouseJiggle(page) {
@@ -2440,7 +2508,7 @@ async function gentleMouseJiggle(page) {
     const x = 80 + Math.random() * (vp.width - 160);
     const y = 120 + Math.random() * (vp.height - 200);
     await page.mouse.move(x, y, { steps: 12 + Math.floor(Math.random() * 8) });
-    await humanPause(page, 200, 500);
+    await humanPause(page, 100, 250);
   }
 }
 
@@ -2601,7 +2669,7 @@ async function scrollToLoadGrid(page) {
   let stable = 0;
   for (let i = 0; i < 12; i++) {
     await page.evaluate(() => window.scrollBy(0, 700));
-    await humanPause(page, 500, 1100);
+    await humanPause(page, 250, 550);
     const h = await page.evaluate(() => document.body?.scrollHeight ?? 0);
     if (h === lastHeight) stable += 1;
     else stable = 0;
@@ -2609,7 +2677,7 @@ async function scrollToLoadGrid(page) {
     if (stable >= 2) break;
   }
   await page.evaluate(() => window.scrollTo(0, 0));
-  await humanPause(page, 300, 600);
+  await humanPause(page, 150, 300);
 }
 
 const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
@@ -2638,14 +2706,7 @@ function buildLojasMapBySeller(byProductId) {
   return m;
 }
 
-async function main() {
-  initOutputPaths();
-  const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
-  const pdpGalleryEnv =
-    process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
-  await ensureOutAuxDir();
-  const outFile = path.join(OUT_AUX, "teste_categoria.json");
-  const debugFile = path.join(OUT_AUX, "debug_responses.log");
+async function launchTikTokBrowser() {
   const fresh = process.env.FRESH_SESSION === "1";
   let userDataDir = process.env.CHROME_USER_DATA?.trim() || null;
   if (!userDataDir && !fresh) {
@@ -2657,16 +2718,8 @@ async function main() {
     console.log(`[Perfil] ${path.resolve(userDataDir)} (login fica salvo. Sessão limpa: FRESH_SESSION=1)`);
   }
   const isHeaded = process.env.HEADED === "1";
-  const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
   const headless = isHeaded ? false : "new";
-
-  /** chave = product_id; dedupe: mantém a linha mais "rica" (preço, imagens) */
-  const byProductId = new Map();
-  recordSellerDebug = true;
-  sellerDebugSamples.length = 0;
-  const debugLines = [];
-
   const launchOpts = {
     headless,
     args: [
@@ -2680,12 +2733,15 @@ async function main() {
   if (userDataDir) {
     launchOpts.userDataDir = userDataDir;
   }
+  return puppeteer.launch(launchOpts);
+}
 
-  const browser = await puppeteer.launch(launchOpts);
-
-  const page = await browser.newPage();
-  // Perfil (userDataDir) restaura abas anteriores; a loja abre alvos com _blank. Ficar só com esta aba
-  // para a coleta; não mexe na lógica de rede nem no goto.
+/**
+ * Fecha abas extra do perfil e impede popups — chamar após `browser.newPage()` da coleta.
+ * @param {import("puppeteer").Browser} browser
+ * @param {import("puppeteer").Page} page
+ */
+async function installAntiPopupGuards(browser, page) {
   for (const p of await browser.pages()) {
     if (p !== page) {
       await p.close().catch(() => {});
@@ -2694,17 +2750,28 @@ async function main() {
   page.on("popup", (popup) => {
     void popup.close().catch(() => {});
   });
-  browser.on("targetcreated", (target) => {
-    if (target.type() !== "page") {
-      return;
-    }
-    void (async () => {
-      const p = await target.page();
-      if (p && p !== page) {
-        await p.close().catch(() => {});
-      }
-    })();
-  });
+}
+
+/**
+ * Uma categoria: rede + scroll + escrita em `OUTPUT_DIR` (definir `initOutputPaths` antes).
+ * @param {import("puppeteer").Browser} browser
+ * @param {import("puppeteer").Page} page
+ * @param {string} startUrl
+ */
+async function runCategoryHarvest(browser, page, startUrl) {
+  const pdpGalleryEnv =
+    process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
+  await ensureOutAuxDir();
+  const outFile = path.join(OUT_AUX, "teste_categoria.json");
+  const debugFile = path.join(OUT_AUX, "debug_responses.log");
+  const isHeaded = process.env.HEADED === "1";
+  const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
+
+  /** chave = product_id; dedupe: mantém a linha mais "rica" (preço, imagens) */
+  const byProductId = new Map();
+  recordSellerDebug = true;
+  sellerDebugSamples.length = 0;
+  const debugLines = [];
 
   const netLogFile = path.join(OUT_AUX, "rede_ultima_execucao.log");
   if (netLog) {
@@ -3140,9 +3207,8 @@ async function main() {
 
   let reloadedCategoryAfterLogin = false;
 
-  try {
-    await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    await humanPause(page, 2500, 4500);
+  await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await humanPause(page, 1250, 2250);
     finalUrl = page.url();
 
     if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
@@ -3151,7 +3217,7 @@ async function main() {
       if (w.ok) {
         reloadedCategoryAfterLogin = true;
         await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-        await humanPause(page, 2000, 4000);
+        await humanPause(page, 1000, 2000);
         finalUrl = page.url();
       }
     }
@@ -3174,15 +3240,15 @@ async function main() {
     } else {
       if (reloadedCategoryAfterLogin) {
         // já recarregou a categoria acima; só ajusta ritmo
-        await humanPause(page, 1000, 2000);
+        await humanPause(page, 500, 1000);
       } else {
-        await humanPause(page, 1500, 3000);
+        await humanPause(page, 750, 1500);
       }
       await gentleMouseJiggle(page);
       await scrollToLoadGrid(page);
-      await humanPause(page, 2000, 4000);
-      // Handlers de `response` são assíncronos; aguarda XHR/JSON atrasados antes de fechar o browser
-      await new Promise((r) => setTimeout(r, 5000));
+      await humanPause(page, 1000, 2000);
+      // Handlers `response` são assíncronos: drena até o mapa estabilizar (teto ~5s como antes)
+      await waitForStableProductFeed(() => byProductId.size);
 
       let modernRouter = null;
       try {
@@ -3242,7 +3308,7 @@ async function main() {
         console.log(
           `[pdp_gallery] A abrir PDPs (máx ${pdpMax} produtos) para fotos + preço hero (DOM) — desligar: omitir PDP_GALLERY`
         );
-        const pr = await enrichByProductIdWithPdpGallery(page, byProductId, {
+        const pr = await enrichByProductIdWithPdpGallery(browser, page, byProductId, {
           max: pdpMax,
           categoriaUrl: startUrl,
           debugLines: debug ? debugLines : undefined
@@ -3253,9 +3319,6 @@ async function main() {
         );
       }
     }
-  } finally {
-    await browser.close();
-  }
 
   if (byProductId.size === 0 && status === "ok") {
     status = "no_products";
@@ -3359,6 +3422,50 @@ async function main() {
       2
     )
   );
+}
+
+/**
+ * Duas+ categorias no mesmo processo Chrome (sem fechar o browser entre elas). Nova `Page` por categoria
+ * para evitar listeners duplicados. `runs[]`: `{ OUTPUT_DIR, CATEGORY_URL, label? }`.
+ * @param {Array<{ OUTPUT_DIR: string, CATEGORY_URL: string, label?: string }>} runs
+ */
+export async function scrapeCategoriesSequentialSharedBrowser(runs) {
+  if (!Array.isArray(runs) || runs.length === 0) {
+    throw new Error("scrapeCategoriesSequentialSharedBrowser: runs[] vazio");
+  }
+  const browser = await launchTikTokBrowser();
+  try {
+    for (let i = 0; i < runs.length; i++) {
+      const r = runs[i];
+      const label = r.label || r.CATEGORY_URL;
+      process.env.OUTPUT_DIR = r.OUTPUT_DIR;
+      initOutputPaths();
+      // eslint-disable-next-line no-console
+      console.log(`\n--- ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
+      const page = await browser.newPage();
+      await installAntiPopupGuards(browser, page);
+      await runCategoryHarvest(browser, page, r.CATEGORY_URL);
+      await page.close().catch(() => {});
+      if (i < runs.length - 1) {
+        await new Promise((res) => setTimeout(res, 450 + Math.random() * 550));
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+async function main() {
+  initOutputPaths();
+  const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
+  const browser = await launchTikTokBrowser();
+  const page = await browser.newPage();
+  await installAntiPopupGuards(browser, page);
+  try {
+    await runCategoryHarvest(browser, page, startUrl);
+  } finally {
+    await browser.close();
+  }
 }
 
 function isRunAsCli() {
