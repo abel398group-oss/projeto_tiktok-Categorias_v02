@@ -1,8 +1,26 @@
 # Fluxo do projeto
 
-Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser.
+## Comandos
+
+1. `npm install` (deps, raiz uma vez)
+2. `npm run coleta:completa:db` (coleta completa → Postgres)
+3. `npm run prisma:studio` (ver BD no browser)
+4. `npm run dev:all` (API + painel mesmo terminal)
+5. `npm run db:import:output` (só importar JSON já gerado)
+6. `npm run coleta:db` (grelha rápida → Postgres)
+7. `npm run coleta:completa` (JSON com PDP, sem import)
+8. `npm run coleta:completa:login:db` (completa com browser/login)
+9. `npm run analytics:product-score` (relatório score no terminal)
+10. `npm run analytics:api` (só servidor API)
+11. `cd frontend && npm run dev` (só Vite — API noutro terminal)
+12. `npm test` (testes scrape)
+13. `npm run validate:schemas` (validar JSON vs schema)
+14. `npm run validate:db-vs-json` (comparar BD vs JSON)
+15. `npm start` (completa + score no fim)
 
 ---
+
+Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser.
 
 ## Guia rápido — comandos `npm run`
 
@@ -161,11 +179,3 @@ Branches usuais: **`main`** (principal) e **`backup`**. **`git branch`** mostra 
 ### 8. Portas customizadas
 
 Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), documenta nos teus README locais ou actualiza esta nota aqui para a equipa.
-
----
-
-## Resumo em três linhas
-
-1. **`npm install`**
-2. Dados em ficheiro: **`npm run coleta`** ou **`npm run coleta:completa`** (e **`:db`** se quiseres Postgres logo).
-3. Painel no browser: **`npm run dev:all`** ou **`npm run analytics:api`** + **`cd frontend && npm run dev`**.
