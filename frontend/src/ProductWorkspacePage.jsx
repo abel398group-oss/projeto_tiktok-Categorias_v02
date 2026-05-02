@@ -340,9 +340,10 @@ export default function ProductWorkspacePage() {
   );
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1rem 1.25rem", color: "#e7e9ea" }}>
+    <main className="tk-page-body">
+      <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
       <p style={{ marginBottom: "0.65rem", fontSize: "0.8rem" }}>
-        <Link to="/" style={{ color: "#6ec4ff", textDecoration: "none" }}>
+        <Link to="/" style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}>
           ← Voltar ao painel
         </Link>
       </p>
@@ -1023,6 +1024,7 @@ export default function ProductWorkspacePage() {
 
         </>
       ) : null}
-    </div>
+      </div>
+    </main>
   );
 }

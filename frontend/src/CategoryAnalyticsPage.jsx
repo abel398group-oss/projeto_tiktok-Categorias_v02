@@ -50,6 +50,7 @@ function titleFromDecodedSegment(decoded) {
   return humanizeHyphenSlug(s);
 }
 
+/** @param {string} seg */
 function humanizeHyphenSlug(seg) {
   return String(seg)
     .replace(/[-_]+/g, " ")
@@ -60,21 +61,32 @@ function humanizeHyphenSlug(seg) {
     .join(" ");
 }
 
+function shell(children) {
+  return (
+    <main className="tk-page-body">
+      <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
+        {children}
+      </div>
+    </main>
+  );
+}
+
 /**
- * Analytics por categoria — mesmo painel global com `categoryUrl` na API.
+ * Mesma API de relatórios que `/analytics`, mas com `categoryUrl` no provider (snapshot por categoria).
  */
 export default function CategoryAnalyticsPage() {
   const { categorySlug } = useParams();
   const location = useLocation();
-  const [status, setStatus] = useState(/** @type {'idle' | 'loading' | 'ready' | 'missing' | 'error'} */ ("idle"));
+  const [status, setStatus] = useState(/** @type {'idle' | 'loading' | 'missing' | 'ready' | 'error'} */ ("idle"));
+  const [errMsg, setErrMsg] = useState("");
   const [resolvedUrl, setResolvedUrl] = useState("");
   const [resolvedTitle, setResolvedTitle] = useState("");
-  /** @type {string | null} */
-  const [errMsg, setErrMsg] = useState(null);
 
   useEffect(() => {
-    const st = /** @type {{ categoryUrl?: string, categoryTitle?: string } | undefined} */ (location.state);
-    const fromStateUrl = typeof st?.categoryUrl === "string" ? st.categoryUrl.trim() : "";
+    let cancelled = false;
+    const st = /** @type {Record<string, unknown> | undefined} */ (location.state);
+    const fromStateUrl = st?.categoryUrl != null ? String(st.categoryUrl).trim() : "";
+    const fromStateTitle = st?.categoryTitle != null ? String(st.categoryTitle).trim() : "";
 
     if (fromStateUrl !== "") {
       let dec = "";
@@ -83,21 +95,16 @@ export default function CategoryAnalyticsPage() {
       } catch {
         dec = categorySlug ?? "";
       }
-      const t =
-        typeof st?.categoryTitle === "string" && st.categoryTitle.trim() !== ""
-          ? st.categoryTitle.trim()
-          : titleFromDecodedSegment(dec);
       setResolvedUrl(fromStateUrl);
-      setResolvedTitle(t);
+      setResolvedTitle(fromStateTitle !== "" ? fromStateTitle : titleFromDecodedSegment(dec));
       setStatus("ready");
-      setErrMsg(null);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
-    let cancelled = false;
     setStatus("loading");
-    setErrMsg(null);
-
+    setErrMsg("");
     apiFetch("/analytics/categories")
       .then((body) => {
         if (cancelled) return;
@@ -105,18 +112,16 @@ export default function CategoryAnalyticsPage() {
         const row = findCategoryForSlug(list, categorySlug ?? "");
         if (!row) {
           setStatus("missing");
-          setResolvedUrl("");
-          setResolvedTitle("");
           return;
         }
         const key = String(row.categoryKey ?? row.categoryUrl ?? "");
-        const url = String(row.categoryUrl ?? row.categoryKey ?? "").trim();
-        const title = categoryDisplayLabel({
-          categorySlug: row.categorySlug,
-          categoryKey: key || url
-        });
-        setResolvedUrl(url || key);
-        setResolvedTitle(title);
+        setResolvedUrl(String(row.categoryUrl ?? row.categoryKey ?? key));
+        setResolvedTitle(
+          categoryDisplayLabel({
+            categorySlug: row.categorySlug,
+            categoryKey: key
+          })
+        );
         setStatus("ready");
       })
       .catch((e) => {
@@ -131,8 +136,8 @@ export default function CategoryAnalyticsPage() {
   }, [categorySlug, location.state]);
 
   if (status === "loading" || status === "idle") {
-    return (
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
+    return shell(
+      <>
         <p style={{ marginBottom: "0.75rem" }}>
           <Link
             to="/"
@@ -142,13 +147,13 @@ export default function CategoryAnalyticsPage() {
           </Link>
         </p>
         <p style={{ opacity: 0.85 }}>A resolver categoria…</p>
-      </div>
+      </>
     );
   }
 
   if (status === "error") {
-    return (
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
+    return shell(
+      <>
         <p style={{ marginBottom: "0.75rem" }}>
           <Link
             to="/"
@@ -160,13 +165,13 @@ export default function CategoryAnalyticsPage() {
         <p style={{ color: "var(--tk-danger)" }} role="alert">
           Erro ao carregar categorias: {errMsg}
         </p>
-      </div>
+      </>
     );
   }
 
   if (status === "missing") {
-    return (
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
+    return shell(
+      <>
         <p style={{ marginBottom: "0.75rem" }}>
           <Link
             to="/"
@@ -176,11 +181,11 @@ export default function CategoryAnalyticsPage() {
           </Link>
         </p>
         <h1 style={{ fontSize: "1.15rem", fontWeight: 600 }}>Categoria não encontrada</h1>
-        <p style={{ fontSize: "0.85rem", opacity: 0.82, lineHeight: 1.5 }}>
+        <p style={{ fontSize: "0.85rem", opacity: 0.82, lineHeight: 1.5, maxWidth: "42rem" }}>
           Não encontrámos esta pasta na lista importada. Abra primeiro a <Link to="/">lista de categorias</Link> ou use o
           atalho <strong>Abrir análise</strong>.
         </p>
-      </div>
+      </>
     );
   }
 

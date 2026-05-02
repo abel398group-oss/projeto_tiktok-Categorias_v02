@@ -79,7 +79,7 @@ export default function CategoriesPage() {
 
   return (
     <main className="tk-page-body">
-      <div style={{ maxWidth: 1320, margin: "0 auto", padding: "1.35rem clamp(1rem, 3vw, 1.65rem)" }}>
+      <div className="tk-content-wrap">
         <header className="tk-dash-header">
           <p className="tk-dash-header__eyebrow">Painel inicial</p>
           <h1>Categorias</h1>

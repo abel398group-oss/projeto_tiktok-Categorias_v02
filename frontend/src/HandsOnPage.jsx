@@ -208,7 +208,8 @@ export default function HandsOnPage() {
   const rowsSorted = useMemo(() => recentPages, [recentPages]);
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem" }}>
+    <main className="tk-page-body">
+      <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
       <h1 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "0 0 0.35rem" }}>Produtos em análise</h1>
       <p style={{ fontSize: "0.82rem", opacity: 0.82, margin: "0 0 1rem", maxWidth: "42rem", lineHeight: 1.5 }}>
         Lista dos produtos que abriu para análise (ordenados do mais recente). Os valores de preço, vendas e rating vêm da API ao abrir esta página ou ao{" "}
@@ -457,6 +458,7 @@ export default function HandsOnPage() {
           </p>
         )}
       </section>
-    </div>
+      </div>
+    </main>
   );
 }

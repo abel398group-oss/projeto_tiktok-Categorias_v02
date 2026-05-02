@@ -1938,17 +1938,8 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
     categoryBread.subcategory !== "—";
 
   return (
-    <main
-      className="tk-page-body"
-      style={{
-        maxWidth: 1200,
-        margin: "0 auto",
-        padding: "1.25rem clamp(1rem, 3vw, 1.65rem)",
-        color: "var(--tk-text)",
-        width: "100%",
-        boxSizing: "border-box"
-      }}
-    >
+    <main className="tk-page-body">
+      <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
       {variant === "category" ? (
         <p style={{ marginBottom: "0.65rem" }}>
           <Link
@@ -2094,6 +2085,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
       {!loading && tab === "score" && <TableScore data={data} />}
       {!loading && tab === "scale" && <TableScalableSections data={data} />}
       {!loading && tab === "map" && <TableCategoryMap data={data} />}
+      </div>
     </main>
   );
 }
@@ -2118,9 +2110,11 @@ export default function App() {
           element={
             <Suspense
               fallback={
-                <div style={{ color: "var(--tk-text)", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)" }}>
-                  <p style={{ opacity: 0.85 }}>Carregando…</p>
-                </div>
+                <main className="tk-page-body">
+                  <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
+                    <p style={{ opacity: 0.85 }}>Carregando…</p>
+                  </div>
+                </main>
               }
             >
               <CategoryAnalyticsPage />
