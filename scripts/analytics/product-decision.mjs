@@ -2,7 +2,7 @@
  * Interpretação comercial sobre itens já calculados por getProductScoreReport (camada só leitura; não altera score).
  */
 
-/** @typedef {{ score: number, classific: string, nome: string, loja: string, preco?: number|string, vendas?: number|string, rating?: string, deltaVendas?: string, motivos?: string, link?: string, productId?: string }} ProductScoreItemLike */
+/** @typedef {{ score: number, classific: string, nome: string, categoriaPrincipal?: string, subcategoria?: string, loja: string, preco?: number|string, vendas?: number|string, rating?: string, deltaVendas?: string, motivos?: string, link?: string, productId?: string }} ProductScoreItemLike */
 
 /** @param {string|undefined|null} rating */
 function parseRatingParts(rating) {

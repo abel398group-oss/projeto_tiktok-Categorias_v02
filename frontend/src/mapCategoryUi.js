@@ -68,6 +68,79 @@ function tiktokShopUrlFromChunk(messy) {
   }
 }
 
+/** @param {string} t */
+function coerceShopCategoryUrlLocal(t) {
+  if (!t) return t;
+  if (!/tiktok|shop\.tiktok/i.test(t)) return t;
+  let out = t.replace(/\s*\/\s*/g, "/");
+  out = out.replace(/^https:\/(?!\/)/i, "https://").replace(/^http:\/(?!\/)/i, "http://");
+  out = out.replace(/^https:\/\/\/+/, "https://");
+  out = out.replace(/^http:\/\/\/+/, "http://");
+  if (!/^https?:\/\//i.test(out) && /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(out)) out = `https://${out}`;
+  return out.trim();
+}
+
+/** @param {string} s */
+function stripQueryIfUrlLooksLikePath(s) {
+  if (s == null || !s.includes("?")) return s;
+  if (/tiktok\.com|shop\.tiktok|^https?:\/\//i.test(s)) return s.split("?")[0].trimEnd();
+  return s;
+}
+
+/**
+ * Extrai mestre + sub para o cabeçalho de analytics por categoria (alinhado ao Mapa /
+ * heuristicas de Product.categoryUrl: TikTok `/c/slug/id`, breadcrumbs "A / B", outros HTTPS).
+ *
+ * @param {string | null | undefined} categoryUrlStored URL normalizada da API ou texto guardado na BD.
+ * @returns {{ masterCategory: string, subcategory: string }}
+ */
+export function parseCategoryBreadForHeader(categoryUrlStored) {
+  if (categoryUrlStored == null || typeof categoryUrlStored !== "string") {
+    return { masterCategory: "—", subcategory: "—" };
+  }
+  let raw = categoryUrlStored.trim();
+  if (!raw) return { masterCategory: "—", subcategory: "—" };
+
+  raw = coerceShopCategoryUrlLocal(raw);
+
+  /** @type {URL | null} */
+  let u = null;
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    u = tiktokShopUrlFromChunk(raw);
+  }
+
+  if (u && /(^|\.)tiktok\.com$/i.test(u.hostname)) {
+    const p = fromTiktokShopCategoryUrl(u);
+    if (p) return { masterCategory: p.mestre, subcategory: p.categoria };
+  }
+
+  const hasHumanSep = /\s\/\s/.test(raw);
+  const looksLikeBareUrlHost = /\btiktok\.com\b|\bshop\.tiktok\b/i.test(raw);
+  const hasScheme = /^https?:\/\//i.test(raw);
+
+  if (hasHumanSep && !looksLikeBareUrlHost && !hasScheme) {
+    const segs = raw
+      .split(/\s*\/\s*/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (segs.length >= 2 && !/^(?:https?|ftp):$/i.test(segs[0])) {
+      return { masterCategory: segs[0], subcategory: segs.slice(1).join(" / ") };
+    }
+  }
+
+  if (hasScheme && u) {
+    const pathSegs = u.pathname.split("/").filter(Boolean);
+    const leaf = humanizeSlug(pathSegs[pathSegs.length - 1] ?? "") || pathSegs.join(" › ") || "—";
+    const host = u.hostname.replace(/^www\./, "");
+    return { masterCategory: host || "—", subcategory: leaf || "—" };
+  }
+
+  const stripped = stripQueryIfUrlLooksLikePath(raw);
+  return { masterCategory: stripped, subcategory: stripped };
+}
+
 /**
  * Labels finais para células **mestre** | **categoria · ID** no Mapa.
  *

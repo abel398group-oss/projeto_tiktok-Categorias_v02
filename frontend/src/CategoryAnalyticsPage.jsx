@@ -4,6 +4,7 @@ import { apiFetch } from "./api.js";
 import { AnalyticsDashboardCacheProvider } from "./analyticsDashboardCache.jsx";
 import { AnalyticsDashboard } from "./App.jsx";
 import { categoryDisplayLabel, categoryToPathSegment } from "./CategoriesPage.jsx";
+import { parseCategoryBreadForHeader } from "./mapCategoryUi.js";
 
 /**
  * Resolve `categorySlug` da URL contra a lista da API ou estado vindo da lista de categorias.
@@ -131,10 +132,13 @@ export default function CategoryAnalyticsPage() {
 
   if (status === "loading" || status === "idle") {
     return (
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem", color: "#e7e9ea" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
         <p style={{ marginBottom: "0.75rem" }}>
-          <Link to="/categorias" style={{ color: "#6ec4ff", textDecoration: "none", fontSize: "0.88rem" }}>
-            ← Voltar para categorias
+          <Link
+            to="/"
+            style={{ color: "var(--tk-accent)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 500 }}
+          >
+            ← Voltar ao início
           </Link>
         </p>
         <p style={{ opacity: 0.85 }}>A resolver categoria…</p>
@@ -144,13 +148,16 @@ export default function CategoryAnalyticsPage() {
 
   if (status === "error") {
     return (
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem", color: "#e7e9ea" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
         <p style={{ marginBottom: "0.75rem" }}>
-          <Link to="/categorias" style={{ color: "#6ec4ff", textDecoration: "none", fontSize: "0.88rem" }}>
-            ← Voltar para categorias
+          <Link
+            to="/"
+            style={{ color: "var(--tk-accent)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 500 }}
+          >
+            ← Voltar ao início
           </Link>
         </p>
-        <p style={{ color: "#f97373" }} role="alert">
+        <p style={{ color: "var(--tk-danger)" }} role="alert">
           Erro ao carregar categorias: {errMsg}
         </p>
       </div>
@@ -159,26 +166,31 @@ export default function CategoryAnalyticsPage() {
 
   if (status === "missing") {
     return (
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "1rem 1.25rem", color: "#e7e9ea" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)", color: "var(--tk-text)" }}>
         <p style={{ marginBottom: "0.75rem" }}>
-          <Link to="/categorias" style={{ color: "#6ec4ff", textDecoration: "none", fontSize: "0.88rem" }}>
-            ← Voltar para categorias
+          <Link
+            to="/"
+            style={{ color: "var(--tk-accent)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 500 }}
+          >
+            ← Voltar ao início
           </Link>
         </p>
         <h1 style={{ fontSize: "1.15rem", fontWeight: 600 }}>Categoria não encontrada</h1>
         <p style={{ fontSize: "0.85rem", opacity: 0.82, lineHeight: 1.5 }}>
-          Não encontrámos esta pasta na lista importada. Abra primeiro <Link to="/categorias">Categorias</Link> ou use o
+          Não encontrámos esta pasta na lista importada. Abra primeiro a <Link to="/">lista de categorias</Link> ou use o
           atalho <strong>Abrir análise</strong>.
         </p>
       </div>
     );
   }
 
+  const bread = parseCategoryBreadForHeader(resolvedUrl);
+
   const pageTitle = `Analytics — ${resolvedTitle}`;
 
   return (
     <AnalyticsDashboardCacheProvider categoryUrl={resolvedUrl}>
-      <AnalyticsDashboard variant="category" pageTitle={pageTitle} />
+      <AnalyticsDashboard variant="category" pageTitle={pageTitle} categoryBread={bread} />
     </AnalyticsDashboardCacheProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "./api.js";
 
@@ -40,41 +40,9 @@ function formatDateTime(iso) {
   }
 }
 
-const card = {
-  borderRadius: 10,
-  border: "1px solid #38444d",
-  background: "#15202b",
-  overflow: "hidden"
-};
-const th = {
-  padding: "0.5rem 0.65rem",
-  textAlign: "left",
-  fontSize: "0.76rem",
-  fontWeight: 600,
-  color: "#cfd9e3",
-  borderBottom: "1px solid #2f3f4a",
-  whiteSpace: "nowrap"
-};
-const td = {
-  padding: "0.5rem 0.65rem",
-  fontSize: "0.82rem",
-  borderBottom: "1px solid #243241",
-  verticalAlign: "top"
-};
-const btnLink = {
-  display: "inline-block",
-  padding: "0.35rem 0.75rem",
-  borderRadius: 6,
-  border: "1px solid #2978b8",
-  background: "#1d6fa5",
-  color: "#fff",
-  fontWeight: 600,
-  fontSize: "0.78rem",
-  textDecoration: "none"
-};
-
 /**
- * Lista de categorias importadas (GET `/analytics/categories`).
+ * Página inicial — categorias em grelha de cartões (layout inspirado em dashboards tipo HiperTMS).
+ * Dados: GET `/analytics/categories`.
  */
 export default function CategoriesPage() {
   const [status, setStatus] = useState(/** @type {'idle' | 'loading' | 'ok' | 'error'} */ ("idle"));
@@ -103,98 +71,117 @@ export default function CategoriesPage() {
     };
   }, []);
 
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort(
+      (a, b) => Number(b.totalProducts ?? 0) - Number(a.totalProducts ?? 0)
+    );
+  }, [categories]);
+
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "1rem 1.25rem", color: "#e7e9ea" }}>
-      <h1 style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: "0.35rem" }}>Categorias</h1>
-      <p style={{ fontSize: "0.82rem", opacity: 0.78, marginBottom: "1rem", lineHeight: 1.5 }}>
-        Categorias já presentes na base (agrupamento da API por URL normalizada). Em <strong>Abrir análise</strong> usa-se o
-        mesmo painel de relatórios filtrado por categoria.
-      </p>
+    <main className="tk-page-body">
+      <div style={{ maxWidth: 1320, margin: "0 auto", padding: "1.35rem clamp(1rem, 3vw, 1.65rem)" }}>
+        <header className="tk-dash-header">
+          <p className="tk-dash-header__eyebrow">Painel inicial</p>
+          <h1>Categorias</h1>
+          <p>
+            Pasta por URL normalizada na base. Escolha uma categoria para abrir os mesmos relatórios de{" "}
+            <strong>Analytics</strong>, já filtrados por <code>categoryUrl</code>.
+          </p>
+        </header>
 
-      {status === "loading" && <p style={{ opacity: 0.88 }}>Carregando categorias…</p>}
-
-      {status === "error" && (
-        <p style={{ color: "#f97373", marginTop: "0.5rem" }} role="alert">
-          Erro ao carregar: {error}
-        </p>
-      )}
-
-      {status === "ok" && categories.length === 0 && (
-        <p style={{ opacity: 0.88, lineHeight: 1.55, maxWidth: "40rem" }}>{EMPTY_LIST_MSG}</p>
-      )}
-
-      {status === "ok" && categories.length > 0 && (
-        <div style={{ ...card }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
-              <thead>
-                <tr>
-                  <th style={th}>Categoria (slug / chave)</th>
-                  <th style={th}>Produtos</th>
-                  <th style={th}>Última coleta</th>
-                  <th style={th}>Última actualização (produto)</th>
-                  <th style={th}>Run (criado)</th>
-                  <th style={th} aria-label="Acção" />
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((row) => {
-                  const key = String(row.categoryKey ?? row.categoryUrl ?? "");
-                  const segment = categoryToPathSegment({
-                    categorySlug: row.categorySlug,
-                    categoryKey: key
-                  });
-                  const to = `/categoria/${encodeURIComponent(segment)}`;
-                  const label = categoryDisplayLabel({
-                    categorySlug: row.categorySlug,
-                    categoryKey: key
-                  });
-                  return (
-                    <tr key={key}>
-                      <td style={td}>
-                        <div style={{ fontWeight: 600 }}>{label}</div>
-                        {row.categorySlug == null || String(row.categorySlug).trim() === "" ? (
-                          <div
-                            style={{ fontSize: "0.7rem", opacity: 0.65, marginTop: "0.2rem", wordBreak: "break-all" }}
-                            title={key}
-                          >
-                            {key}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>
-                        {row.totalProducts != null ? Number(row.totalProducts).toLocaleString("pt-BR") : "—"}
-                      </td>
-                      <td style={td}>{formatDateTime(row.lastCollectedAt)}</td>
-                      <td style={td}>{formatDateTime(row.lastImportedAt)}</td>
-                      <td style={{ ...td, fontSize: "0.76rem", opacity: 0.92 }}>
-                        <div>{formatDateTime(row.lastScrapeRunCreatedAt)}</div>
-                        {row.lastScrapeRunId != null ? (
-                          <div style={{ opacity: 0.65, marginTop: "0.15rem", wordBreak: "break-all" }}>
-                            {String(row.lastScrapeRunId)}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td style={td}>
-                        <Link
-                          to={to}
-                          state={{
-                            categoryUrl: String(row.categoryUrl ?? row.categoryKey ?? key),
-                            categoryTitle: label
-                          }}
-                          style={btnLink}
-                        >
-                          Abrir análise
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="tk-dash-toolbar">
+          <span style={{ fontSize: "0.82rem", color: "var(--tk-text-muted)" }}>
+            <strong>{status === "ok" ? sortedCategories.length : "—"}</strong> categorias nesta vista
+          </span>
+          <Link to="/analytics" style={{ color: "var(--tk-accent)" }}>
+            Analytics global →
+          </Link>
         </div>
-      )}
-    </div>
+
+        {status === "loading" && <p style={{ color: "var(--tk-text-muted)" }}>Carregando categorias…</p>}
+
+        {status === "error" && (
+          <p style={{ color: "var(--tk-danger)", marginTop: "0.5rem" }} role="alert">
+            Erro ao carregar: {error}
+          </p>
+        )}
+
+        {status === "ok" && sortedCategories.length === 0 && (
+          <p style={{ color: "var(--tk-text-muted)", lineHeight: 1.55, maxWidth: "40rem" }}>{EMPTY_LIST_MSG}</p>
+        )}
+
+        {status === "ok" && sortedCategories.length > 0 && (
+          <section className="tk-category-grid" aria-label="Categorias importadas">
+            {sortedCategories.map((row) => {
+              const key = String(row.categoryKey ?? row.categoryUrl ?? "");
+              const segment = categoryToPathSegment({
+                categorySlug: row.categorySlug,
+                categoryKey: key
+              });
+              const to = `/categoria/${encodeURIComponent(segment)}`;
+              const label = categoryDisplayLabel({
+                categorySlug: row.categorySlug,
+                categoryKey: key
+              });
+              const n =
+                row.totalProducts != null
+                  ? Number(row.totalProducts).toLocaleString("pt-BR")
+                  : "—";
+              const showKey =
+                row.categorySlug == null || String(row.categorySlug).trim() === "";
+
+              const statePayload = {
+                categoryUrl: String(row.categoryUrl ?? row.categoryKey ?? key),
+                categoryTitle: label
+              };
+
+              return (
+                <article key={key} className="tk-category-card">
+                  <div className="tk-category-card__body">
+                    <p className="tk-category-card__eyebrow">Categoria</p>
+                    <h2 className="tk-category-card__title">{label}</h2>
+                    {showKey ? (
+                      <p className="tk-category-card__key" title={key}>
+                        {key.length > 120 ? `${key.slice(0, 117)}…` : key}
+                      </p>
+                    ) : null}
+                    <div className="tk-category-card__kpi">
+                      <span className="tk-category-card__kpi-val">{n}</span>
+                      <span className="tk-category-card__kpi-label">produtos</span>
+                    </div>
+                    <dl className="tk-category-card__meta">
+                      <div>
+                        <dt>Última coleta</dt>
+                        <dd>{formatDateTime(row.lastCollectedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>Actualização</dt>
+                        <dd>{formatDateTime(row.lastImportedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>Run</dt>
+                        <dd>
+                          {formatDateTime(row.lastScrapeRunCreatedAt)}
+                          {row.lastScrapeRunId != null ? (
+                            <div className="tk-category-card__run" title={String(row.lastScrapeRunId)}>
+                              {String(row.lastScrapeRunId)}
+                            </div>
+                          ) : null}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <footer className="tk-category-card__footer">
+                    <Link to={to} state={statePayload} className="tk-category-card__cta">
+                      Abrir análise →
+                    </Link>
+                  </footer>
+                </article>
+              );
+            })}
+          </section>
+        )}
+      </div>
+    </main>
   );
 }

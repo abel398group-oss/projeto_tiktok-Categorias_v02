@@ -1,54 +1,51 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-const navLinkStyle = /** @param {{ isActive: boolean }} p */ ({ isActive }) => ({
-  padding: "0.38rem 0.9rem",
-  borderRadius: 6,
-  textDecoration: "none",
-  color: "#e7e9ea",
-  border: isActive ? "2px solid #6ec4ff" : "1px solid #38444d",
-  background: isActive ? "#22303c" : "#192734",
-  fontSize: "0.82rem",
-  fontWeight: isActive ? 600 : 500
-});
-
 /**
- * Envolve relatórios Analytics e «Produtos em análise» (/a-mao) — sempre acessível por cima sem carregar a API.
+ * Envolve Categorias (início), Analytics, «Produtos em análise» e rotas de produto.
  */
 export default function AppShell() {
   const { pathname } = useLocation();
 
   return (
-    <div style={{ minHeight: "100%", color: "#e7e9ea", background: "#081018" }}>
-        <nav
-          style={{
-            borderBottom: "1px solid #2a3844",
-            background: "#121a22",
-            padding: "0.55rem 1.25rem",
-            display: "flex",
-            gap: "0.45rem",
-            alignItems: "center",
-            flexWrap: "wrap"
-          }}
-          aria-label="Navegação principal"
-        >
-          <NavLink to="/" end style={navLinkStyle}>
-            Analytics
-          </NavLink>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--tk-bg-page)",
+        color: "var(--tk-text)"
+      }}
+    >
+      <nav className="tk-app-nav" aria-label="Navegação principal">
+        <div className="tk-app-nav__brand">
+          <strong>TikTok Shop</strong>
+          <span>Análises e relatórios</span>
+        </div>
+        <div className="tk-app-nav__links">
           <NavLink
-            to="/categorias"
-            style={({ isActive }) =>
-              navLinkStyle({ isActive: isActive || pathname.startsWith("/categoria/") })
+            to="/"
+            end
+            className={() =>
+              `tk-nav-link${
+                pathname === "/" || pathname.startsWith("/categoria/") ? " tk-nav-link--active" : ""
+              }`
             }
           >
             Categorias
           </NavLink>
-          <NavLink to="/a-mao" style={navLinkStyle}>
+          <NavLink
+            to="/analytics"
+            className={({ isActive }) => `tk-nav-link${isActive ? " tk-nav-link--active" : ""}`}
+          >
+            Analytics
+          </NavLink>
+          <NavLink to="/a-mao" className={({ isActive }) => `tk-nav-link${isActive ? " tk-nav-link--active" : ""}`}>
             Produtos em análise
           </NavLink>
-          <span style={{ flex: "1 1 auto" }} />
-          <span style={{ fontSize: "0.68rem", opacity: 0.55 }}>Painel TikTok Shop · relatórios e atalhos</span>
-        </nav>
-        <Outlet />
-      </div>
+        </div>
+        <span className="tk-app-nav__trail">Painel · dados importados</span>
+      </nav>
+      <Outlet />
+    </div>
   );
 }

@@ -10,6 +10,7 @@
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
+import { parseCategory } from "./parse-category.mjs";
 
 const MAX_ROWS = 20;
 
@@ -64,9 +65,12 @@ function pickLatestSnapshotPerProductRef(snaps) {
  * @param {*} s — snapshot com product + seller
  */
 function snapshotToOpportunityRow(s) {
+  const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
   return {
     productId: s.product.productId,
     nome: (s.product.name ?? "").slice(0, 40),
+    categoriaPrincipal,
+    subcategoria,
     loja: (s.product.seller?.name ?? "—").slice(0, 28),
     preco: s.price,
     vendas: s.salesCount,

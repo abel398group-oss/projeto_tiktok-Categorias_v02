@@ -7,6 +7,7 @@
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
+import { parseCategory } from "./parse-category.mjs";
 
 const TOP_LIMIT = 30;
 
@@ -16,6 +17,8 @@ function toReportShape(line) {
     score: line.score,
     classific: line.classific,
     nome: line.nome,
+    categoriaPrincipal: line.categoriaPrincipal ?? "—",
+    subcategoria: line.subcategoria ?? "—",
     loja: line.loja,
     preco: line.preco,
     vendas: line.vendas,
@@ -472,10 +475,14 @@ export function computeProductScoreLine(s, ctx) {
   const ratingStr =
     avg != null ? `${avg}${typeof tot === "number" ? ` (${tot} aval)` : ""}` : "";
 
+  const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
+
   return {
     score: totalPts,
     classific: rotuloScore(totalPts),
     nome: (s.product.name ?? "—").slice(0, 40),
+    categoriaPrincipal,
+    subcategoria,
     loja: (s.product.seller?.name ?? "—").slice(0, 24),
     preco: s.price ?? "",
     vendas: sc ?? "",

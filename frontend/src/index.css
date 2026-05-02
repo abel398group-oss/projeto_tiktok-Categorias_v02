@@ -1,26 +1,400 @@
+/* Tokens alinhados a um painel tipo Hipervias: tipografia Inter, hierarquia de superfícies, bordas suaves */
+
+:root {
+  --tk-bg-page: #0b1017;
+  --tk-bg-nav: #121a24;
+  --tk-surface: #151e2c;
+  --tk-surface-raised: #1a2433;
+  --tk-surface-inset: #111820;
+  --tk-border: rgb(148 163 184 / 0.14);
+  --tk-border-soft: rgb(148 163 184 / 0.08);
+  --tk-text: #e8edf4;
+  --tk-text-muted: rgb(232 237 244 / 0.7);
+  --tk-text-subtle: rgb(232 237 244 / 0.48);
+  --tk-accent: #38bdf8;
+  --tk-accent-soft: rgb(56 189 248 / 0.18);
+  --tk-accent-ring: rgb(56 189 248 / 0.45);
+  --tk-btn-primary: #0284c7;
+  --tk-btn-primary-hover: #0369a1;
+  --tk-danger: #f87171;
+  --tk-warning-bg: rgb(234 179 8 / 0.12);
+  --tk-warning-edge: rgb(234 179 8 / 0.55);
+  --tk-radius-lg: 12px;
+  --tk-radius-md: 8px;
+  --tk-radius-sm: 6px;
+  --tk-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --tk-shadow-nav: 0 1px 0 rgb(0 0 0 / 0.22);
+  --tk-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #0f1419;
-  color: #e7e9ea;
+  font-family: var(--tk-font-sans);
+  background: var(--tk-bg-page);
+  color: var(--tk-text);
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+#root {
+  min-height: 100vh;
+}
+
 a {
-  color: #6ec4ff;
+  color: var(--tk-accent);
 }
+a:hover {
+  color: #7dd3fc;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 2px;
+}
+
+code {
+  font-size: 0.88em;
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+  background: var(--tk-surface-inset);
+  border: 1px solid var(--tk-border-soft);
+}
+
+/* Navegação principal — estados tipo painel TMS (ativo / hover claros) */
+nav.tk-app-nav {
+  border-bottom: 1px solid var(--tk-border);
+  background: var(--tk-bg-nav);
+  box-shadow: var(--tk-shadow-nav);
+  padding: 0.65rem clamp(1rem, 3vw, 1.65rem);
+  display: flex;
+  gap: clamp(0.65rem, 2vw, 1.35rem);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tk-app-nav__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  line-height: 1.25;
+  padding-right: 0.5rem;
+  border-right: 1px solid var(--tk-border-soft);
+  margin-right: 0.15rem;
+}
+
+.tk-app-nav__brand strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--tk-text);
+}
+
+.tk-app-nav__brand span {
+  font-size: 0.69rem;
+  color: var(--tk-text-muted);
+}
+
+.tk-app-nav__links {
+  display: flex;
+  gap: 0.38rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tk-nav-link {
+  padding: 0.45rem 1rem;
+  border-radius: var(--tk-radius-md);
+  text-decoration: none !important;
+  font-size: 0.815rem;
+  font-weight: 500;
+  color: var(--tk-text-muted);
+  border: 1px solid transparent;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.tk-nav-link:hover {
+  background: rgb(255 255 255 / 0.05);
+  color: var(--tk-text);
+  border-color: var(--tk-border-soft);
+}
+
+.tk-nav-link--active {
+  background: var(--tk-accent-soft);
+  color: var(--tk-text) !important;
+  border-color: var(--tk-accent-ring);
+  font-weight: 600;
+}
+
+.tk-app-nav__trail {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--tk-text-subtle);
+}
+
+@media (max-width: 540px) {
+  .tk-app-nav__brand {
+    border-right: none;
+    margin-right: 0;
+    padding-right: 0;
+    border-bottom: 1px solid var(--tk-border-soft);
+    padding-bottom: 0.5rem;
+    width: 100%;
+  }
+
+  .tk-app-nav__trail {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* Cartões reutilizáveis (lista de categorias, etc.) */
+.tk-card {
+  border-radius: var(--tk-radius-lg);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface);
+  box-shadow: var(--tk-shadow-sm);
+  overflow: hidden;
+}
+
+/* Tabelas globais — leitura menos “dura” */
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
+
+thead th:first-child {
+  border-top-left-radius: var(--tk-radius-sm);
+}
+
+thead th:last-child {
+  border-top-right-radius: var(--tk-radius-sm);
+}
+
+tbody tr:last-child td:first-child {
+  border-bottom-left-radius: var(--tk-radius-sm);
+}
+
+tbody tr:last-child td:last-child {
+  border-bottom-right-radius: var(--tk-radius-sm);
+}
+
 th,
 td {
-  border: 1px solid #38444d;
-  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--tk-border);
+  padding: 0.42rem 0.55rem;
   text-align: left;
 }
+
 th {
-  background: #1e2732;
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
 }
+
+tbody td {
+  background: var(--tk-surface);
+}
+
+/* Zona principal tipo dashboard (contraste suave com o fundo da página) */
+.tk-page-body {
+  flex: 1;
+  background: rgb(255 255 255 / 0.03);
+  padding-bottom: 2rem;
+}
+
+/* Grelha de cartões — referência HiperTMS: blocos com CTA no rodapé */
+.tk-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(278px, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.tk-category-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--tk-radius-lg);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface);
+  box-shadow: var(--tk-shadow-sm);
+  min-height: 220px;
+  overflow: hidden;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.tk-category-card:hover {
+  border-color: var(--tk-accent-ring);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.35);
+  transform: translateY(-1px);
+}
+
+.tk-category-card__body {
+  padding: 1rem 1.05rem 0.75rem;
+  flex: 1 1 auto;
+}
+
+.tk-category-card__eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tk-text-subtle);
+}
+
+.tk-category-card__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  word-break: break-word;
+  color: var(--tk-text);
+}
+
+.tk-category-card__key {
+  margin: 0 0 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--tk-text-muted);
+  word-break: break-all;
+}
+
+.tk-category-card__kpi {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin: 0.5rem 0 0.85rem;
+}
+
+.tk-category-card__kpi-val {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--tk-text);
+}
+
+.tk-category-card__kpi-label {
+  font-size: 0.8rem;
+  color: var(--tk-text-muted);
+  font-weight: 500;
+}
+
+.tk-category-card__meta {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.tk-category-card__meta > div {
+  display: grid;
+  grid-template-columns: 7.2rem 1fr;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+}
+
+.tk-category-card__meta dt {
+  margin: 0;
+  color: var(--tk-text-subtle);
+  font-weight: 500;
+}
+
+.tk-category-card__meta dd {
+  margin: 0;
+  color: var(--tk-text-muted);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.tk-category-card__run {
+  font-size: 0.68rem;
+  opacity: 0.75;
+  margin-top: 0.18rem;
+}
+
+.tk-category-card__footer {
+  margin-top: auto;
+  padding: 0.72rem 1.05rem;
+  border-top: 1px solid var(--tk-border);
+  background: rgb(0 0 0 / 0.18);
+  text-align: center;
+}
+
+.tk-category-card__cta {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--tk-accent);
+  text-decoration: none;
+}
+
+.tk-category-card__cta:hover {
+  color: #7dd3fc;
+}
+
+.tk-dash-header {
+  margin-bottom: 1.35rem;
+}
+
+.tk-dash-header__eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--tk-text-subtle);
+}
+
+.tk-dash-header h1 {
+  margin: 0 0 0.45rem;
+  font-size: 1.42rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--tk-text);
+}
+
+.tk-dash-header p {
+  margin: 0;
+  max-width: 44rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--tk-text-muted);
+}
+
+.tk-dash-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.15rem;
+}
+
+.tk-dash-toolbar a {
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tk-dash-toolbar a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+

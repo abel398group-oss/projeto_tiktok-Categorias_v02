@@ -43,6 +43,16 @@ function cmpTopAsc(a, b, key) {
   switch (key) {
     case "nome":
       return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "categoriaPrincipal":
+      return cmpStrAZ(
+        /** @type {string} */ (a.categoriaPrincipal),
+        /** @type {string} */ (b.categoriaPrincipal)
+      );
+    case "subcategoria":
+      return cmpStrAZ(
+        /** @type {string} */ (a.subcategoria),
+        /** @type {string} */ (b.subcategoria)
+      );
     case "loja":
       return cmpStrAZ(/** @type {string} */ (a.loja), /** @type {string} */ (b.loja));
     case "preco": {
@@ -86,6 +96,16 @@ function cmpOppAsc(a, b, key) {
   switch (key) {
     case "nome":
       return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "categoriaPrincipal":
+      return cmpStrAZ(
+        /** @type {string} */ (a.categoriaPrincipal),
+        /** @type {string} */ (b.categoriaPrincipal)
+      );
+    case "subcategoria":
+      return cmpStrAZ(
+        /** @type {string} */ (a.subcategoria),
+        /** @type {string} */ (b.subcategoria)
+      );
     case "loja":
       return cmpStrAZ(/** @type {string} */ (a.loja), /** @type {string} */ (b.loja));
     case "preco": {
@@ -142,6 +162,16 @@ function cmpScoreAsc(a, b, key) {
       return cmpStrAZ(/** @type {string} */ (a.classific), /** @type {string} */ (b.classific));
     case "nome":
       return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "categoriaPrincipal":
+      return cmpStrAZ(
+        /** @type {string} */ (a.categoriaPrincipal),
+        /** @type {string} */ (b.categoriaPrincipal)
+      );
+    case "subcategoria":
+      return cmpStrAZ(
+        /** @type {string} */ (a.subcategoria),
+        /** @type {string} */ (b.subcategoria)
+      );
     case "loja":
       return cmpStrAZ(/** @type {string} */ (a.loja), /** @type {string} */ (b.loja));
     case "preco": {
@@ -195,6 +225,16 @@ function cmpScaleAsc(a, b, key) {
   switch (key) {
     case "nome":
       return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "categoriaPrincipal":
+      return cmpStrAZ(
+        /** @type {string} */ (a.categoriaPrincipal),
+        /** @type {string} */ (b.categoriaPrincipal)
+      );
+    case "subcategoria":
+      return cmpStrAZ(
+        /** @type {string} */ (a.subcategoria),
+        /** @type {string} */ (b.subcategoria)
+      );
     case "score": {
       const sa = num(a.score);
       const sb = num(b.score);
@@ -275,6 +315,16 @@ function cmpMapTopAsc(a, b, key) {
       return cmpStrAZ(/** @type {string} */ (a.subName), /** @type {string} */ (b.subName));
     case "nome":
       return cmpStrAZ(/** @type {string} */ (a.nome), /** @type {string} */ (b.nome));
+    case "categoriaPrincipal":
+      return cmpStrAZ(
+        /** @type {string} */ (a.categoriaPrincipal),
+        /** @type {string} */ (b.categoriaPrincipal)
+      );
+    case "subcategoria":
+      return cmpStrAZ(
+        /** @type {string} */ (a.subcategoria),
+        /** @type {string} */ (b.subcategoria)
+      );
     case "score":
     case "vendas":
     case "rating": {

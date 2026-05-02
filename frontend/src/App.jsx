@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useCallback, useMemo } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { AnalyticsDashboardCacheProvider, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
 import CategoriesPage from "./CategoriesPage.jsx";
@@ -44,7 +44,7 @@ function SortTh({ label, colKey, sortKey, sortDir, onSort, resizeColIdx, onGrip 
       style={{
         cursor: "pointer",
         userSelect: "none",
-        borderBottom: active ? "2px solid #6ec4ff" : undefined,
+        borderBottom: active ? "2px solid var(--tk-accent)" : undefined,
         verticalAlign: "middle",
         padding: "0.4rem 0.5rem",
         paddingRight: resize ? "0.65rem" : "0.5rem",
@@ -135,14 +135,25 @@ function IntroCard({ title, children }) {
     <section
       style={{
         marginBottom: "1rem",
-        padding: "0.85rem 1rem",
-        borderRadius: 10,
-        border: "1px solid #38444d",
-        background: "#15202b"
+        padding: "1rem 1.15rem",
+        borderRadius: "var(--tk-radius-lg)",
+        border: "1px solid var(--tk-border)",
+        background: "var(--tk-surface)",
+        boxShadow: "var(--tk-shadow-sm)"
       }}
     >
-      <h2 style={{ fontSize: "0.98rem", fontWeight: 600, margin: "0 0 0.5rem 0" }}>{title}</h2>
-      <div style={{ fontSize: "0.8rem", opacity: 0.92, lineHeight: 1.55 }}>{children}</div>
+      <h2
+        style={{
+          fontSize: "1rem",
+          fontWeight: 600,
+          margin: "0 0 0.55rem 0",
+          letterSpacing: "-0.02em",
+          color: "var(--tk-text)"
+        }}
+      >
+        {title}
+      </h2>
+      <div style={{ fontSize: "0.8rem", color: "var(--tk-text-muted)", lineHeight: 1.58 }}>{children}</div>
     </section>
   );
 }
@@ -153,9 +164,10 @@ const introWarn = {
   padding: "0.5rem 0.65rem",
   fontSize: "0.78rem",
   lineHeight: 1.45,
-  borderRadius: 6,
-  borderLeft: "3px solid #eab308",
-  background: "#161c18",
+  borderRadius: "var(--tk-radius-sm)",
+  borderLeft: "3px solid var(--tk-warning-edge)",
+  background: "var(--tk-warning-bg)",
+  color: "var(--tk-text)",
   opacity: 0.93
 };
 const introBullet = {
@@ -176,10 +188,11 @@ const introLogicBox = {
   padding: "0.5rem 0.65rem",
   fontSize: "0.76rem",
   lineHeight: 1.52,
-  borderRadius: 6,
-  border: "1px solid #2f3f4d",
-  background: "#111820",
-  opacity: 0.94
+  borderRadius: "var(--tk-radius-sm)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface-inset)",
+  color: "var(--tk-text-muted)",
+  opacity: 0.96
 };
 const introLogicUl = { margin: "0.35rem 0 0", paddingLeft: "1.05rem", lineHeight: 1.5 };
 const introLogicLabel = {
@@ -211,12 +224,12 @@ const SORT_MAP_SUB_DESC = ["score", "totalSales", "avgRating", "avgPrice", "tota
 const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
-const CW_TOP = [52, 178, 120, 74, 80, 86, 100, 70];
-const CW_OPP = [52, 175, 115, 74, 80, 86, 110, 100, 66];
-const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 100, 108, 76];
+const CW_TOP = [52, 175, 88, 88, 105, 68, 74, 78, 82, 76];
+const CW_OPP = [52, 155, 80, 80, 95, 64, 70, 74, 84, 74, 62];
+const CW_SCORE = [52, 58, 100, 140, 76, 76, 112, 72, 78, 74, 72, 88, 94, 66];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
-const CW_MAP_TOP = [52, 108, 175, 170, 56, 76, 68, 68, 56, 98, 64];
-const CW_SCALE = [52, 195, 60, 76, 86, 100, 60];
+const CW_MAP_TOP = [48, 92, 138, 138, 76, 76, 52, 68, 62, 62, 52, 82, 56];
+const CW_SCALE = [48, 132, 74, 74, 52, 68, 76, 74, 54];
 
 function asArray(x) {
   return Array.isArray(x) ? x : [];
@@ -246,7 +259,7 @@ function TableTop({ data }) {
           </li>
         </ul>
       </div>
-      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "#6b7280", background: "#1a2128" }}>
+      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
         Até <strong>20</strong> linhas, ordenação inicial por vendas (maior → menor); dados do snapshot na base —
         não são tempo real do TikTok.
       </div>
@@ -319,12 +332,30 @@ function TableTop({ data }) {
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
+              label="categoria"
+              colKey="categoriaPrincipal"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="sub"
+              colKey="subcategoria"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
               label="loja"
               colKey="loja"
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={2}
+              resizeColIdx={4}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -333,7 +364,7 @@ function TableTop({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={3}
+              resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -342,7 +373,7 @@ function TableTop({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={4}
+              resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -351,16 +382,16 @@ function TableTop({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={5}
+              resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={6}
+              resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={7} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -377,13 +408,19 @@ function TableTop({ data }) {
                     <Link
                       to={`/produto/${encodeURIComponent(String(pid).trim())}`}
                       title={nomeTitle ?? "Abrir página de trabalho deste produto"}
-                      style={{ color: "#6ec4ff", textDecoration: "none" }}
+                      style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                     >
                       {row.nome ?? "—"}
                     </Link>
                   ) : (
                     <span title={nomeTitle}>{row.nome ?? "—"}</span>
                   )}
+                </td>
+                <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                  {row.categoriaPrincipal ?? "—"}
+                </td>
+                <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                  {row.subcategoria ?? "—"}
                 </td>
                 <td style={tdEllipsis} title={typeof row.loja === "string" ? row.loja : undefined}>
                   {row.loja ?? "—"}
@@ -524,12 +561,30 @@ function TableOpp({ data }) {
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
+              label="categoria"
+              colKey="categoriaPrincipal"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="sub"
+              colKey="subcategoria"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
               label="loja"
               colKey="loja"
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={2}
+              resizeColIdx={4}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -538,7 +593,7 @@ function TableOpp({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={3}
+              resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -547,7 +602,7 @@ function TableOpp({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={4}
+              resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -556,7 +611,7 @@ function TableOpp({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={5}
+              resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -565,16 +620,16 @@ function TableOpp({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={6}
+              resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={7}
+              resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -582,6 +637,12 @@ function TableOpp({ data }) {
             <tr key={`${row.productId}-${i}`}>
               <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.nome}</td>
+              <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                {row.categoriaPrincipal ?? "—"}
+              </td>
+              <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                {row.subcategoria ?? "—"}
+              </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
               <td>{row.vendas ?? "—"}</td>
@@ -615,20 +676,20 @@ const scoreFilterInput = {
   width: "4rem",
   padding: "0.28rem 0.35rem",
   fontSize: "0.78rem",
-  borderRadius: 4,
-  border: "1px solid #38444d",
-  background: "#121a22",
-  color: "#e7e9ea",
+  borderRadius: "var(--tk-radius-sm)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface-inset)",
+  color: "var(--tk-text)",
   boxSizing: "border-box"
 };
 const scorePresetBtn = {
   padding: "0.32rem 0.6rem",
   fontSize: "0.76rem",
   cursor: "pointer",
-  borderRadius: 7,
-  border: "1px solid #38444d",
-  background: "#16212b",
-  color: "#e7e9ea",
+  borderRadius: "var(--tk-radius-md)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface)",
+  color: "var(--tk-text)",
   lineHeight: 1.35
 };
 
@@ -656,10 +717,10 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
     <section
       style={{
         marginBottom: "0.85rem",
-        padding: "0.65rem 0.75rem",
-        borderRadius: 8,
-        border: "1px solid #32404c",
-        background: "#141d26"
+        padding: "0.65rem 0.85rem",
+        borderRadius: "var(--tk-radius-md)",
+        border: "1px solid var(--tk-border)",
+        background: "var(--tk-surface-raised)"
       }}
       aria-label="Filtros da tabela Product Score"
     >
@@ -715,9 +776,9 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
             padding: "0.35rem 0.85rem",
             fontSize: "0.78rem",
             cursor: "pointer",
-            borderRadius: 6,
-            border: "1px solid #2978b8",
-            background: "#1d6fa5",
+            borderRadius: "var(--tk-radius-md)",
+            border: "1px solid var(--tk-btn-primary-hover)",
+            background: "var(--tk-btn-primary)",
             color: "#fff",
             fontWeight: 600
           }}
@@ -731,10 +792,10 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
             padding: "0.35rem 0.75rem",
             fontSize: "0.78rem",
             cursor: "pointer",
-            borderRadius: 6,
-            border: "1px solid #38444d",
-            background: "#192833",
-            color: "#e7e9ea"
+            borderRadius: "var(--tk-radius-md)",
+            border: "1px solid var(--tk-border)",
+            background: "var(--tk-surface)",
+            color: "var(--tk-text)"
           }}
         >
           Limpar
@@ -744,7 +805,7 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
           {rawCount <= 30 ? "até 30" : String(rawCount)} · filtros só no cliente).
         </span>
         {!appliedInactive ? (
-          <span style={{ fontSize: "0.7rem", opacity: 0.75, color: "#7ec8ff" }}>Filtros activos</span>
+          <span style={{ fontSize: "0.7rem", opacity: 0.85, color: "var(--tk-accent)", fontWeight: 500 }}>Filtros activos</span>
         ) : null}
       </div>
     </section>
@@ -823,7 +884,7 @@ function TableScore({ data }) {
         {scoreIntro}
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong>. Métricas numéricas fazem primeiro
-          clique maior→menor; nome e loja A→Z — aplicável assim que os dados aparecerem.
+          clique maior→menor; nome, categoria, sub e loja A→Z — aplicável assim que os dados aparecerem.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -860,7 +921,7 @@ function TableScore({ data }) {
       />
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
-        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
+        Métricas numéricas fazem primeiro clique maior→menor; nome, categoria, sub e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
         <strong>Ações</strong> não se ordenam.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
@@ -901,12 +962,30 @@ function TableScore({ data }) {
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
+              label="categoria"
+              colKey="categoriaPrincipal"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={4}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
+              label="sub"
+              colKey="subcategoria"
+              sortKey={sort.key}
+              sortDir={sort.dir}
+              onSort={onSort}
+              resizeColIdx={5}
+              onGrip={colW.onGripMouseDown}
+            />
+            <SortTh
               label="loja"
               colKey="loja"
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={4}
+              resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -915,7 +994,7 @@ function TableScore({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={5}
+              resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -924,7 +1003,7 @@ function TableScore({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={6}
+              resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -933,7 +1012,7 @@ function TableScore({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={7}
+              resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
             <SortTh
@@ -942,22 +1021,22 @@ function TableScore({ data }) {
               sortKey={sort.key}
               sortDir={sort.dir}
               onSort={onSort}
-              resizeColIdx={8}
+              resizeColIdx={10}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="PDP"
               title="Enriquecer PDP no servidor (npm run pdp:enrich)"
-              resizeColIdx={9}
+              resizeColIdx={11}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={10}
+              resizeColIdx={12}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={11} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={13} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -970,10 +1049,16 @@ function TableScore({ data }) {
                 <Link
                   to={`/produto/${encodeURIComponent(row.productId)}`}
                   title="Abrir página de trabalho deste produto"
-                  style={{ color: "#6ec4ff", textDecoration: "none" }}
+                  style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                 >
                   {row.nome}
                 </Link>
+              </td>
+              <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                {row.categoriaPrincipal ?? "—"}
+              </td>
+              <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                {row.subcategoria ?? "—"}
               </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
@@ -1084,11 +1169,12 @@ function TableCategoryMap({ data }) {
     return rows;
   }, [masters]);
 
-  /** Linhas Topo por sub (combinado para uma tabela, estilo relatórios). */
   /** @type {{
    * masterName: string,
    * subName: string,
    * nome: string,
+   * categoriaPrincipal: string,
+   * subcategoria: string,
    * score: number,
    * vendas: number,
    * rating: number | null | undefined,
@@ -1106,6 +1192,8 @@ function TableCategoryMap({ data }) {
             masterName: m.name ?? "—",
             subName: sub.name ?? "—",
             nome: p.nome ?? "—",
+            categoriaPrincipal: p.categoriaPrincipal ?? "—",
+            subcategoria: p.subcategoria ?? "—",
             productId: p.productId ?? "",
             score: p.score ?? 0,
             vendas: typeof p.vendas === "number" ? p.vendas : Number(p.vendas) || 0,
@@ -1152,12 +1240,13 @@ function TableCategoryMap({ data }) {
           <strong>classificação</strong> em A→Z. Depois de carregar, a resposta pode incluir uma nota técnica do servidor
           sobre o método de score.
         </p>
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "var(--tk-text)" }}>
           SKU em destaque (top por score em cada subcategoria)
         </h3>
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor na listagem combinada. Métricas
-          numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e <strong>nome</strong> em A→Z.
+          numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong>,{" "}
+          <strong>nome</strong>, <strong>cat. SKU</strong> e <strong>sub SKU</strong> em A→Z.
           O link não é ordenável; a coluna <strong>Ações</strong> (export) também não.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher as tabelas.</p>
@@ -1309,13 +1398,14 @@ function TableCategoryMap({ data }) {
         </tbody>
       </table>
 
-      <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+      <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "var(--tk-text)" }}>
         SKU em destaque (top por score em cada subcategoria)
       </h3>
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor nesta listagem combinada.
-        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong> e{" "}
-        <strong>nome</strong> em A→Z. O link e <strong>Ações</strong> (export) não são ordenáveis.
+        Métricas numéricas: primeiro clique maior→menor; <strong>mestre</strong>, <strong>categoria</strong>,{" "}
+        <strong>nome</strong>, <strong>cat. SKU</strong> e <strong>sub SKU</strong> em A→Z. O link e <strong>Ações</strong> (export)
+        não são ordenáveis.
         <span style={{ opacity: 0.85, display: "block", marginTop: "0.25rem" }}>
           Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
         </span>
@@ -1354,12 +1444,30 @@ function TableCategoryMap({ data }) {
               onGrip={colWTop.onGripMouseDown}
             />
             <SortTh
+              label="cat. SKU"
+              colKey="categoriaPrincipal"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={4}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
+              label="sub SKU"
+              colKey="subcategoria"
+              sortKey={sortTop.key}
+              sortDir={sortTop.dir}
+              onSort={onSortTop}
+              resizeColIdx={5}
+              onGrip={colWTop.onGripMouseDown}
+            />
+            <SortTh
               label="score"
               colKey="score"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
               onSort={onSortTop}
-              resizeColIdx={4}
+              resizeColIdx={6}
               onGrip={colWTop.onGripMouseDown}
             />
             <SortTh
@@ -1368,7 +1476,7 @@ function TableCategoryMap({ data }) {
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
               onSort={onSortTop}
-              resizeColIdx={5}
+              resizeColIdx={7}
               onGrip={colWTop.onGripMouseDown}
             />
             <SortTh
@@ -1377,7 +1485,7 @@ function TableCategoryMap({ data }) {
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
               onSort={onSortTop}
-              resizeColIdx={6}
+              resizeColIdx={8}
               onGrip={colWTop.onGripMouseDown}
             />
             <SortTh
@@ -1386,7 +1494,7 @@ function TableCategoryMap({ data }) {
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
               onSort={onSortTop}
-              resizeColIdx={7}
+              resizeColIdx={9}
               onGrip={colWTop.onGripMouseDown}
             />
             <SortTh
@@ -1395,16 +1503,16 @@ function TableCategoryMap({ data }) {
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
               onSort={onSortTop}
-              resizeColIdx={8}
+              resizeColIdx={10}
               onGrip={colWTop.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={9}
+              resizeColIdx={11}
               onGrip={colWTop.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={10} onGrip={colWTop.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={12} onGrip={colWTop.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -1416,6 +1524,12 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{mestre}</td>
                 <td style={tdStyle}>{categoria}</td>
                 <td style={tdStyle}>{row.nome}</td>
+                <td style={{ ...tdStyle, ...tdEllipsis }} title={String(row.categoriaPrincipal ?? "")}>
+                  {row.categoriaPrincipal ?? "—"}
+                </td>
+                <td style={{ ...tdStyle, ...tdEllipsis }} title={String(row.subcategoria ?? "")}>
+                  {row.subcategoria ?? "—"}
+                </td>
                 <td style={tdStyle}>{row.score}</td>
                 <td style={tdStyle}>{row.vendas ?? "—"}</td>
                 <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
@@ -1530,20 +1644,21 @@ function TableScalableSections({ data }) {
       Clique num separador para ver só uma lista. Cada lista ordena de forma independente (cabeçalhos clicáveis, excepto{" "}
       <strong>link</strong> e <strong>Ações</strong>).{" "}
       <strong>Ordem inicial:</strong> <strong>score</strong> do maior para o menor — para <strong>vendas</strong> e{" "}
-      <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong> fica A→Z. Arraste a borda entre
+      <strong>rating</strong>, o primeiro clique também é maior→menor; <strong>nome</strong>, <strong>categoria</strong> e <strong>sub</strong> em A→Z. Arraste a borda entre
       colunas nos cabeçalhos para ajustar a largura.
     </p>
   );
 
   const pill = (active) => ({
-    padding: "0.4rem 0.95rem",
+    padding: "0.42rem 1rem",
     cursor: "pointer",
-    borderRadius: 8,
-    border: active ? "2px solid #6ec4ff" : "1px solid #38444d",
-    background: active ? "#22303c" : "#16212b",
-    color: "#e7e9ea",
+    borderRadius: "var(--tk-radius-md)",
+    border: active ? "1px solid var(--tk-accent-ring)" : "1px solid var(--tk-border)",
+    background: active ? "var(--tk-accent-soft)" : "var(--tk-surface)",
+    color: "var(--tk-text)",
     fontWeight: active ? 600 : 400,
-    fontSize: "0.85rem"
+    fontSize: "0.85rem",
+    boxShadow: active ? "var(--tk-shadow-sm)" : "none"
   });
 
   if (data == null) {
@@ -1586,6 +1701,12 @@ function TableScalableSections({ data }) {
       <tr key={`${row.productId}-${i}`}>
         <td style={tdPosStyle}>{i + 1}</td>
         <td>{row.nome}</td>
+        <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+          {row.categoriaPrincipal ?? "—"}
+        </td>
+        <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+          {row.subcategoria ?? "—"}
+        </td>
         <td>{row.score}</td>
         <td>{row.vendas ?? "—"}</td>
         <td>{row.rating ?? "—"}</td>
@@ -1623,7 +1744,7 @@ function TableScalableSections({ data }) {
 
       {scaleView === "validated" && (
         <section style={{ padding: "0 0 1rem 0" }}>
-          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "var(--tk-text)" }}>
             Validados para escalar — escalar quê?
           </h3>
           <p style={{ fontSize: "0.8rem", opacity: 0.88, margin: "0 0 1rem 0", lineHeight: 1.55, maxWidth: "58rem" }}>
@@ -1651,12 +1772,30 @@ function TableScalableSections({ data }) {
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
+                    label="categoria"
+                    colKey="categoriaPrincipal"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={2}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="sub"
+                    colKey="subcategoria"
+                    sortKey={sortVal.key}
+                    sortDir={sortVal.dir}
+                    onSort={onSortV}
+                    resizeColIdx={3}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
                     label="score"
                     colKey="score"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
                     onSort={onSortV}
-                    resizeColIdx={2}
+                    resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
@@ -1665,7 +1804,7 @@ function TableScalableSections({ data }) {
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
                     onSort={onSortV}
-                    resizeColIdx={3}
+                    resizeColIdx={5}
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
@@ -1674,16 +1813,16 @@ function TableScalableSections({ data }) {
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
                     onSort={onSortV}
-                    resizeColIdx={4}
+                    resizeColIdx={6}
                     onGrip={colW.onGripMouseDown}
                   />
                   <PlainTh
                     label="Ações"
                     title="Exportar ao DigitalOcean Spaces"
-                    resizeColIdx={5}
+                    resizeColIdx={7}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
+                  <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(v)}</tbody>
@@ -1694,7 +1833,7 @@ function TableScalableSections({ data }) {
 
       {scaleView === "potential" && (
         <section style={{ padding: "0 0 1rem 0" }}>
-          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "#eaf2f9" }}>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.45rem", color: "var(--tk-text)" }}>
             Apostas com potencial — apostar em quê?
           </h3>
           <p style={{ fontSize: "0.8rem", opacity: 0.88, margin: "0 0 1rem 0", lineHeight: 1.55, maxWidth: "58rem" }}>
@@ -1722,12 +1861,30 @@ function TableScalableSections({ data }) {
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
+                    label="categoria"
+                    colKey="categoriaPrincipal"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={2}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
+                    label="sub"
+                    colKey="subcategoria"
+                    sortKey={sortPot.key}
+                    sortDir={sortPot.dir}
+                    onSort={onSortP}
+                    resizeColIdx={3}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <SortTh
                     label="score"
                     colKey="score"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
                     onSort={onSortP}
-                    resizeColIdx={2}
+                    resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
@@ -1736,7 +1893,7 @@ function TableScalableSections({ data }) {
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
                     onSort={onSortP}
-                    resizeColIdx={3}
+                    resizeColIdx={5}
                     onGrip={colW.onGripMouseDown}
                   />
                   <SortTh
@@ -1745,16 +1902,16 @@ function TableScalableSections({ data }) {
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
                     onSort={onSortP}
-                    resizeColIdx={4}
+                    resizeColIdx={6}
                     onGrip={colW.onGripMouseDown}
                   />
                   <PlainTh
                     label="Ações"
                     title="Exportar ao DigitalOcean Spaces"
-                    resizeColIdx={5}
+                    resizeColIdx={7}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={6} onGrip={colW.onGripMouseDown} />
+                  <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>{renderRows(p)}</tbody>
@@ -1766,7 +1923,7 @@ function TableScalableSections({ data }) {
   );
 }
 
-export function AnalyticsDashboard({ variant = "global", pageTitle }) {
+export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBread }) {
   const { tab, setTab, cache, loading, error, load, tabs, setError } = useAnalyticsDashboardCache();
 
   const current = tabs.find((t) => t.id === tab);
@@ -1775,16 +1932,71 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
 
   const heading = pageTitle ?? "Analytics (API)";
 
+  const showSubLine =
+    categoryBread &&
+    categoryBread.subcategory !== categoryBread.masterCategory &&
+    categoryBread.subcategory !== "—";
+
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem" }}>
+    <main
+      className="tk-page-body"
+      style={{
+        maxWidth: 1200,
+        margin: "0 auto",
+        padding: "1.25rem clamp(1rem, 3vw, 1.65rem)",
+        color: "var(--tk-text)",
+        width: "100%",
+        boxSizing: "border-box"
+      }}
+    >
       {variant === "category" ? (
         <p style={{ marginBottom: "0.65rem" }}>
-          <Link to="/categorias" style={{ color: "#6ec4ff", textDecoration: "none", fontSize: "0.88rem" }}>
-            ← Voltar para categorias
+          <Link
+            to="/"
+            style={{ color: "var(--tk-accent)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 500 }}
+          >
+            ← Voltar ao início
           </Link>
         </p>
       ) : null}
-      <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>{heading}</h1>
+      <h1
+        style={{
+          fontSize: "1.35rem",
+          fontWeight: 700,
+          letterSpacing: "-0.03em",
+          marginTop: 0,
+          marginBottom: "0.5rem",
+          color: "var(--tk-text)"
+        }}
+      >
+        {heading}
+      </h1>
+      {variant === "category" && categoryBread ? (
+        <div
+          style={{
+            fontSize: "0.86rem",
+            lineHeight: 1.48,
+            marginBottom: "0.55rem",
+            padding: "0.6rem 0.85rem",
+            borderRadius: "var(--tk-radius-md)",
+            border: "1px solid var(--tk-border)",
+            background: "var(--tk-surface-raised)",
+            color: "var(--tk-text-muted)"
+          }}
+          aria-label="Pasta TikTok derivada da URL da categoria"
+        >
+          <p style={{ margin: "0 0 0.25rem", opacity: 0.92 }}>
+            <span style={{ opacity: 0.7 }}>Categoria principal:</span>{" "}
+            <strong>{categoryBread.masterCategory}</strong>
+          </p>
+          {showSubLine ? (
+            <p style={{ margin: 0, opacity: 0.92 }}>
+              <span style={{ opacity: 0.7 }}>Subcategoria:</span>{" "}
+              <strong>{categoryBread.subcategory}</strong>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {variant === "category" ? (
         <>
           <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
@@ -1793,7 +2005,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
           </p>
           <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
             Para ver <strong>todos</strong> os produtos da última importação, use{" "}
-            <Link to="/" style={{ color: "#6ec4ff" }}>
+            <Link to="/analytics" style={{ color: "var(--tk-accent)", fontWeight: 500 }}>
               Analytics
             </Link>{" "}
             global.
@@ -1830,12 +2042,17 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
               setError(null);
             }}
             style={{
-              padding: "0.35rem 0.75rem",
+              padding: "0.48rem 0.92rem",
               cursor: "pointer",
-              borderRadius: 6,
-              border: tab === t.id ? "2px solid #6ec4ff" : "1px solid #38444d",
-              background: tab === t.id ? "#22303c" : "#192734",
-              color: "#e7e9ea"
+              borderRadius: "var(--tk-radius-md)",
+              border:
+                tab === t.id ? "1px solid var(--tk-accent-ring)" : "1px solid var(--tk-border)",
+              background: tab === t.id ? "var(--tk-accent-soft)" : "var(--tk-surface)",
+              color: "var(--tk-text)",
+              fontWeight: tab === t.id ? 600 : 500,
+              fontSize: "0.82rem",
+              boxShadow: tab === t.id ? "var(--tk-shadow-sm)" : "none",
+              transition: "background 0.12s ease, border-color 0.12s ease"
             }}
           >
             {t.label}
@@ -1849,13 +2066,15 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
           onClick={() => load()}
           disabled={loading}
           style={{
-            padding: "0.4rem 1rem",
+            padding: "0.45rem 1.1rem",
             cursor: loading ? "wait" : "pointer",
-            borderRadius: 6,
-            border: "1px solid #38444d",
-            background: "#1d9bf0",
+            borderRadius: "var(--tk-radius-md)",
+            border: "1px solid var(--tk-btn-primary-hover)",
+            background: loading ? "var(--tk-btn-primary-hover)" : "var(--tk-btn-primary)",
             color: "#fff",
-            fontWeight: 600
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            boxShadow: "var(--tk-shadow-sm)"
           }}
         >
           {loading ? "Carregando..." : "Carregar dados"}
@@ -1863,7 +2082,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
       </div>
 
       {error && (
-        <p style={{ color: "#f97373", marginTop: "0.5rem" }}>
+        <p style={{ color: "var(--tk-danger)", marginTop: "0.5rem" }}>
           Erro: {error}
         </p>
       )}
@@ -1875,7 +2094,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle }) {
       {!loading && tab === "score" && <TableScore data={data} />}
       {!loading && tab === "scale" && <TableScalableSections data={data} />}
       {!loading && tab === "map" && <TableCategoryMap data={data} />}
-    </div>
+    </main>
   );
 }
 
@@ -1884,21 +2103,22 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<AppShell />}>
-        <Route
-          index
-          element={
-            <AnalyticsDashboardCacheProvider>
-              <AnalyticsDashboard />
-            </AnalyticsDashboardCacheProvider>
-          }
-        />
-        <Route path="categorias" element={<CategoriesPage />} />
+          <Route index element={<CategoriesPage />} />
+          <Route path="categorias" element={<Navigate to="/" replace />} />
+          <Route
+            path="analytics"
+            element={
+              <AnalyticsDashboardCacheProvider>
+                <AnalyticsDashboard />
+              </AnalyticsDashboardCacheProvider>
+            }
+          />
         <Route
           path="categoria/:categorySlug"
           element={
             <Suspense
               fallback={
-                <div style={{ color: "#e7e9ea", padding: "1rem 1.25rem" }}>
+                <div style={{ color: "var(--tk-text)", padding: "1.25rem clamp(1rem, 3vw, 1.65rem)" }}>
                   <p style={{ opacity: 0.85 }}>Carregando…</p>
                 </div>
               }

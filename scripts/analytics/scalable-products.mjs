@@ -73,6 +73,8 @@ function toRow(item, ratingStr) {
   return {
     productId: item.productId ?? "",
     nome: item.nome ?? "",
+    categoriaPrincipal: item.categoriaPrincipal ?? "—",
+    subcategoria: item.subcategoria ?? "—",
     loja: item.loja ?? "",
     score: typeof item.score === "number" ? item.score : 0,
     vendas: item.vendas ?? "",

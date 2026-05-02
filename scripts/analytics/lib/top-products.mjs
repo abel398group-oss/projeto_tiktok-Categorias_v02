@@ -10,6 +10,7 @@
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
+import { parseCategory } from "./parse-category.mjs";
 
 const MAX_ROWS = 20;
 
@@ -17,9 +18,12 @@ const MAX_ROWS = 20;
  * @param {*} s — ProductSnapshot com product.seller
  */
 function snapshotToItemRow(s) {
+  const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
   return {
     productId: s.product.productId,
     nome: (s.product.name ?? "").trim() || "—",
+    categoriaPrincipal,
+    subcategoria,
     loja: (s.product.seller?.name ?? "").trim() || "—",
     preco: s.price,
     vendas: s.salesCount,

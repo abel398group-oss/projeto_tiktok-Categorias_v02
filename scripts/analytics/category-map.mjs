@@ -9,204 +9,12 @@ import {
   fetchSnapshotsWithScoreCtxForNormalizedCategory,
   rotuloScore
 } from "./lib/product-score.mjs";
+import { parseCategory } from "./lib/parse-category.mjs";
 
 const TOP_PRODUCTS_PER_SUB = 5;
 
-const TIKTOK_SHOP_MASTER = "TikTok Shop";
-
-/**
- * Aceita último segmento numérico (ID da categoria) e remove-o da lista de slugs.
- * @param {string[]} segments
- */
-function dropTrailingNumericCategoryId(segments) {
-  const out = [...segments];
-  while (out.length > 0) {
-    const last = String(out[out.length - 1]).split("?")[0];
-    if (/^\d+$/.test(last)) out.pop();
-    else break;
-  }
-  return out;
-}
-
-/** Último segmento só numérico no path TikTok (= ID da pasta), sem query. */
-function extractTrailingCategoryIdNumeric(segmentsAfterC) {
-  if (!segmentsAfterC.length) return null;
-  const last = String(segmentsAfterC[segmentsAfterC.length - 1]).split("?")[0];
-  return /^\d+$/.test(last) ? last : null;
-}
-
-/** @param {string} segment */
-function humanizeSlugSegment(segment) {
-  const base = String(segment).split("?")[0];
-  if (!base || base.toLowerCase() === "c") return "";
-  if (/^\d+$/.test(base)) return "";
-  try {
-    const decoded = decodeURIComponent(base);
-    return decoded
-      .replace(/[+]/g, " ")
-      .split(/[-_\s]+/)
-      .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(" ");
-  } catch {
-    return base.replace(/-/g, " ");
-  }
-}
-
-/**
- * Algumas fontes repetem barras como `https: / … / shop.tiktok.com / br / …` ou `shop … / br /`.
- * Junta em path válido antes de `parseCategoryFromTikTokUrl` ou `URL()`.
- *
- * @param {string} t
- */
-function normalizeSpacedSlashUrlCandidate(t) {
-  if (!/\s\/\s/.test(t)) return t;
-  const collapsed = t.replace(/\s/g, "");
-  const seemsUrlish =
-    /^https?\s*:|\b(?:https?):/i.test(t) ||
-    /tiktok\.com|shop\.tiktok/i.test(collapsed) ||
-    (/\.(?:com|shop)(?:\/|$|[?#])/i.test(collapsed) && /\/(?:br|c|shop|category|pdp)\b/i.test(collapsed));
-
-  if (!seemsUrlish) return t;
-
-  let out = t.replace(/\s*\/\s*/g, "/");
-  /** `https: / foo` ou `https:/foo` → `https://foo` */
-  out = out.replace(/^https:\/(?!\/)/i, "https://").replace(/^http:\/(?!\/)/i, "http://");
-
-  /** Ex.: `https:///host` após junção de espaços */
-  out = out.replace(/^https:\/\/\/+/, "https://");
-  out = out.replace(/^http:\/\/\/+/, "http://");
-
-  return out.trim();
-}
-
-/**
- * Paths típicos: `…/br/c/womenswear-underwear/601152`, possivelmente vários slugs antes do ID.
- *
- * @param {string} raw
- */
-function parseCategoryFromTikTokUrl(raw) {
-  let normalized = raw.trim();
-  if (!normalized) return null;
-  if (!/^https?:\/\//i.test(normalized)) {
-    // `shop.tiktok.com/...`
-    if (/^[a-z0-9.-]+\.[a-z]{2,}\//i.test(normalized)) {
-      normalized = `https://${normalized}`;
-    } else return null;
-  }
-
-  /** @type {URL} */
-  let u;
-  try {
-    u = new URL(normalized);
-  } catch {
-    return null;
-  }
-  if (!/(^|\.)tiktok\.com$/i.test(u.hostname)) return null;
-
-  const segments = u.pathname.split("/").filter(Boolean);
-  const cIdx = segments.findIndex((s) => String(s).toLowerCase() === "c");
-  if (cIdx === -1) return null;
-
-  const afterC = segments.slice(cIdx + 1);
-  const numericId = extractTrailingCategoryIdNumeric(afterC);
-  const slugSegs = dropTrailingNumericCategoryId(afterC);
-  const labels = slugSegs.map((s) => humanizeSlugSegment(s)).filter((x) => x.length > 0);
-
-  const idSuffix = numericId ? ` · ${numericId}` : "";
-
-  if (labels.length === 0) {
-    return {
-      masterCategory: TIKTOK_SHOP_MASTER,
-      subcategory: numericId ? `ID ${numericId}` : "Categoria (slug vazio)"
-    };
-  }
-  if (labels.length === 1) {
-    return { masterCategory: TIKTOK_SHOP_MASTER, subcategory: `${labels[0]}${idSuffix}` };
-  }
-  return {
-    masterCategory: labels.slice(0, -1).join(" · "),
-    subcategory: `${labels[labels.length - 1]}${idSuffix}`
-  };
-}
-
-/**
- * Extrai mestre e subcategoria a partir de `Product.categoryUrl` (texto breadcrumb ou URL).
- * URLs TikTok tipo `shop.tiktok.com/.../c/<slug>/<id>` são mostradas com nomes legíveis derivados dos slugs (hífen → espaços, capitalização).
- *
- * Ex. texto: "Womenswear & Underwear / Women's Dresses" → master primeiro segmento antes de " / ".
- *
- * @param {string | null | undefined} categoryUrl
- * @returns {{ masterCategory: string, subcategory: string }}
- */
-export function parseCategory(categoryUrl) {
-  if (categoryUrl == null || typeof categoryUrl !== "string") {
-    return { masterCategory: "Sem categoria", subcategory: "—" };
-  }
-  const t = categoryUrl.trim();
-  if (!t) return { masterCategory: "Sem categoria", subcategory: "—" };
-
-  const tNormalized = normalizeSpacedSlashUrlCandidate(coerceShopCategoryUrl(t));
-
-  const tikTok = parseCategoryFromTikTokUrl(tNormalized);
-  if (tikTok) return tikTok;
-
-  /** Após tentar TikTok Shop: breadcrumbs humanos (espaços em torno de "/") só se não parecer URL. */
-  const tBread = tNormalized;
-
-  const hasHumanSep = /\s\/\s/.test(tBread);
-  const looksLikeBareUrlHost = /\btiktok\.com\b|\bshop\.tiktok\b/i.test(tBread);
-  const hasScheme = /^https?:\/\//i.test(tBread);
-
-  if (hasHumanSep && !looksLikeBareUrlHost && !hasScheme) {
-    const segs = tBread
-      .split(/\s*\/\s*/)
-      .map((x) => x.trim())
-      .filter(Boolean);
-    /** `https://…` partido por `/` dá `https:` como primeiro segmento — não é breadcrumb humano. */
-    if (segs.length >= 2 && !/^(?:https?|ftp):$/i.test(segs[0])) {
-      return { masterCategory: segs[0], subcategory: segs.slice(1).join(" / ") };
-    }
-  }
-
-  /** Outras URLs HTTPS (não TikTok já tratado): hostname + último segmento nomeável */
-  if (hasScheme) {
-    try {
-      const u = new URL(tBread);
-      const pathSegs = u.pathname.split("/").filter(Boolean);
-      const leaf =
-        humanizeSlugSegment(pathSegs[pathSegs.length - 1] ?? "") || pathSegs.join(" › ") || "—";
-      return {
-        masterCategory: u.hostname.replace(/^www\./, ""),
-        subcategory: leaf
-      };
-    } catch {
-      /* noop */
-    }
-  }
-
-  const stripped = stripQueryIfUrlLooksLikePath(tBread);
-  return { masterCategory: stripped, subcategory: stripped };
-}
-
-/** Corta `?…` apenas quando o texto parece URL (útil para não exibir trackers longos). */
-function stripQueryIfUrlLooksLikePath(s) {
-  if (s == null || !s.includes("?")) return s;
-  if (/tiktok\.com|shop\.tiktok|^https?:\/\//i.test(s)) return s.split("?")[0].trimEnd();
-  return s;
-}
-
-/** TikTok Shop: junta barras mesmo com espaços; corrige schemes frágeis sem depender só de `\s/\s`. */
-function coerceShopCategoryUrl(t) {
-  if (!t) return t;
-  if (!/tiktok|shop\.tiktok/i.test(t)) return t;
-  let out = t.replace(/\s*\/\s*/g, "/");
-  out = out.replace(/^https:\/(?!\/)/i, "https://").replace(/^http:\/(?!\/)/i, "http://");
-  out = out.replace(/^https:\/\/\/+/, "https://");
-  out = out.replace(/^http:\/\/\/+/, "http://");
-  if (!/^https?:\/\//i.test(out) && /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(out)) out = `https://${out}`;
-  return out.trim();
-}
+/** Reexport mantém imports existentes tipo `category-map.mjs#getCategory…` consumidores de `parseCategory`. */
+export { parseCategory };
 
 /**
  * @param {number | null | undefined[]} xs
@@ -277,6 +85,8 @@ function aggregateCategoryMapFromSnapshots(snaps, ctx) {
     const topProducts = sorted.map((r) => ({
       productId: r.productId,
       nome: r.nome,
+      categoriaPrincipal: r.categoriaPrincipal ?? "—",
+      subcategoria: r.subcategoria ?? "—",
       score: r.score,
       vendas: vendasNum(r.vendas),
       rating: r.ratingAverage,
