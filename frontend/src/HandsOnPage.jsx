@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
+import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import {
   getProductStatuses,
   labelForProductStatus,
@@ -422,6 +423,7 @@ export default function HandsOnPage() {
                     <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
                       Abrir produto
                     </Link>
+                    <PdpEnrichButton productId={r.productId} />
                     <button
                       type="button"
                       style={{

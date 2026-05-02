@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch, apiPost, apiPostBlob } from "./api.js";
+import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { buildProductBriefingFromWorkspace } from "./productBriefing.js";
 import { pushRecentWorkspace } from "./recentWorkspace.js";
 
@@ -138,6 +139,9 @@ export default function ProductWorkspacePage() {
   const [notes, setNotes] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
 
+  const [importFlash, setImportFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
+  const [importBusy, setImportBusy] = useState(false);
+
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
@@ -153,39 +157,57 @@ export default function ProductWorkspacePage() {
     [workspace]
   );
 
-  useEffect(() => {
+  const reloadWorkspace = useCallback(async () => {
     if (!decodedId) {
       setWorkspace(null);
       setLoadError("ID do produto em falta no URL.");
       setLoading(false);
-      return undefined;
+      return;
     }
-    let cancel = false;
-    (async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const path = `/analytics/product-workspace/${encodeURIComponent(decodedId)}`;
-        const json = await apiFetch(path);
-        if (!cancel) {
-          setWorkspace(json);
-          if ("message" in json && json.message && typeof json.productId !== "string") {
-            setLoadError(json.message);
-          }
-        }
-      } catch (e) {
-        if (!cancel) {
-          setWorkspace(null);
-          setLoadError(e instanceof Error ? e.message : String(e));
-        }
-      } finally {
-        if (!cancel) setLoading(false);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const path = `/analytics/product-workspace/${encodeURIComponent(decodedId)}`;
+      const json = await apiFetch(path);
+      setWorkspace(json);
+      if ("message" in json && json.message && typeof json.productId !== "string") {
+        setLoadError(String(json.message));
+      } else {
+        setLoadError(null);
       }
-    })();
-    return () => {
-      cancel = true;
-    };
+    } catch (e) {
+      setWorkspace(null);
+      setLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
   }, [decodedId]);
+
+  useEffect(() => {
+    void reloadWorkspace();
+  }, [reloadWorkspace]);
+
+  const onImportJsonToDb = useCallback(async () => {
+    setImportFlash(null);
+    setImportBusy(true);
+    try {
+      await apiPost("/analytics/import-output", {});
+      setImportFlash({
+        kind: "ok",
+        text: "JSON importado para a BD. A lista de imagens foi actualizada conforme o snapshot mais recente."
+      });
+      setSelectedUrls(new Set());
+      setZipMsg(null);
+      await reloadWorkspace();
+    } catch (e) {
+      setImportFlash({
+        kind: "err",
+        text: e instanceof Error ? e.message : String(e)
+      });
+    } finally {
+      setImportBusy(false);
+    }
+  }, [reloadWorkspace]);
 
   useEffect(() => {
     if (loading || !isWorkspace(workspace)) return;
@@ -701,13 +723,63 @@ export default function ProductWorkspacePage() {
 
           <section style={{ ...box }}>
             <div style={{ ...labelMuted, marginBottom: "0.55rem" }}>Ligações</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+            <p style={{ margin: "0 0 0.55rem", fontSize: "0.69rem", lineHeight: 1.45, opacity: 0.78, maxWidth: "52rem" }}>
+              As fotos mais abaixo vêm da <strong>última importação na BD</strong> (<code>pdpImages</code> no snapshot).
+              «Enriquecer PDP» grava em <code>dados_produtos.json</code>; quando o processo PDP terminar no servidor (~1 min.), use{' '}
+              <strong>Actualizar dados</strong> para importar esse JSON ao Postgres e ver todas as fotos aqui.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-start" }}>
+              <PdpEnrichButton productId={decodedId} />
+              <button
+                type="button"
+                disabled={importBusy || loading || !decodedId}
+                onClick={() => void onImportJsonToDb()}
+                title="Corre no servidor npm run db:import:output e recarrega este painel"
+                style={{
+                  padding: "0.28rem 0.55rem",
+                  fontSize: "0.68rem",
+                  cursor: importBusy ? "wait" : "pointer",
+                  borderRadius: 5,
+                  border: "1px solid #2d6aa3",
+                  background: "#1a4a73",
+                  color: "#e8f3ff",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  alignSelf: "center"
+                }}
+              >
+                {importBusy ? "A importar…" : "Actualizar dados — import JSON→BD"}
+              </button>
+              <button
+                type="button"
+                disabled={loading || !decodedId}
+                onClick={() => void reloadWorkspace()}
+                style={{
+                  padding: "0.28rem 0.55rem",
+                  fontSize: "0.68rem",
+                  cursor: loading ? "wait" : "pointer",
+                  borderRadius: 5,
+                  border: "1px solid #45515c",
+                  background: "#22303c",
+                  color: "#e7e9ea",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  alignSelf: "center"
+                }}
+              >
+                Recarregar
+              </button>
               {workspace.link ? (
-                <a href={workspace.link} target="_blank" rel="noopener noreferrer" style={{ color: "#6ec4ff" }}>
+                <a
+                  href={workspace.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#6ec4ff", alignSelf: "center", fontSize: "0.78rem" }}
+                >
                   Abrir no TikTok
                 </a>
               ) : (
-                <span style={{ opacity: 0.65 }}>Sem URL do produto.</span>
+                <span style={{ opacity: 0.65, alignSelf: "center" }}>Sem URL do produto.</span>
               )}
               <button
                 type="button"
@@ -722,12 +794,27 @@ export default function ProductWorkspacePage() {
                   background: "#1d6fa5",
                   color: "#fff",
                   fontWeight: 600,
-                  opacity: exporting ? 0.7 : 1
+                  opacity: exporting ? 0.7 : 1,
+                  alignSelf: "center"
                 }}
               >
                 {exporting ? "Exportar…" : "Exportar ao Space"}
               </button>
             </div>
+            {importFlash ? (
+              <p
+                role="status"
+                style={{
+                  marginTop: "0.55rem",
+                  marginBottom: 0,
+                  fontSize: "0.71rem",
+                  color: importFlash.kind === "ok" ? "#9ed9b0" : "#f97373",
+                  lineHeight: 1.45
+                }}
+              >
+                {importFlash.text}
+              </p>
+            ) : null}
             {exportMsg ? (
               <p
                 role="status"
@@ -896,7 +983,10 @@ export default function ProductWorkspacePage() {
               </div>
             </section>
           ) : (
-            <p style={{ fontSize: "0.75rem", opacity: 0.65 }}>Sem imagens no snapshot (ou URLs vazias).</p>
+            <p style={{ fontSize: "0.75rem", opacity: 0.65, lineHeight: 1.5 }}>
+              Sem imagens neste snapshot. Se já enriqueceu o PDP no JSON mas ainda só vê uma foto, rode «Actualizar dados — import
+              JSON→BD» em Ligações (ou espere ~1 min. após Enriquecer PDP e depois importe).
+            </p>
           )}
 
           <section style={{ ...box, marginTop: "1rem" }}>

@@ -1,5 +1,7 @@
 /**
- * Produtos para escalar — todas as linhas pontuadas do último run (getProductScoreFull), mesmo critérios de filtro.
+ * Produtos para escalar — linhas pontuadas via `getProductScoreFull`
+ * (último run global, ou mesmo universo/snapshots por categoria que Product Score com `categoryUrl`);
+ * mesmo critérios de Validados / Apostas e filtros globais que `npm run analytics:scalable`.
  */
 import { analyzeProduct } from "./product-decision.mjs";
 import { getProductScoreFull } from "./lib/product-score.mjs";
@@ -84,9 +86,10 @@ function toRow(item, ratingStr) {
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {{ categoryUrl?: string }} [opts]
  */
-export async function getScalableProductsReport(prisma) {
-  const scored = await getProductScoreFull(prisma);
+export async function getScalableProductsReport(prisma, opts = {}) {
+  const scored = await getProductScoreFull(prisma, opts);
 
   if (!scored.scrapeRun) {
     return {
@@ -134,10 +137,11 @@ export async function getScalableProductsReport(prisma) {
     hasGrowthComparableRuns: scored.hasGrowthComparableRuns ?? false,
     validatedToScale,
     potentialBets,
-    /** Linhas pontuadas analisadas (= snapshots no último run; antes o Escalar só via o subset “top” do relatório geral — máx. 30). */
+    /** Linhas pontuadas analisadas (último run global ou subset por categoria, conforme entrada). */
     scoredProductsAnalyzed: pool.length,
-    /** Total de snapshots no último ScrapeRun (igual ao agregador de score quando há dados). */
+    /** Produtos pontuados (global: snapshots no último run; por categoria: um snapshot por produto). */
     totalSnapshotsInLatestRun: scored.totalSnapshotsInLatestRun ?? pool.length,
-    ...(scored.message && pool.length === 0 ? { message: scored.message } : {})
+    ...(scored.message && pool.length === 0 ? { message: scored.message } : {}),
+    ...(scored.categoryUrlFilter != null ? { categoryUrlFilter: scored.categoryUrlFilter } : {})
   };
 }

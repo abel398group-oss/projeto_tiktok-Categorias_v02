@@ -20,6 +20,9 @@ import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
+import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
+import { registerImportOutputRoute } from "./import-output-route.mjs";
+import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
 
@@ -66,19 +69,70 @@ fastify.get("/health", async () => ({
   service: "analytics-api"
 }));
 
-fastify.get("/analytics/top-products", async () => getTopProductsReport(prisma));
+fastify.get("/analytics/top-products", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getTopProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
 
-fastify.get("/analytics/opportunities", async () => getOpportunitiesReport(prisma));
+fastify.get("/analytics/opportunities", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getOpportunitiesReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
 
-fastify.get("/analytics/product-score", async () => getProductScoreReport(prisma));
+
+fastify.get("/analytics/product-score", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getProductScoreReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
 
 fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma));
 
 fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
 
-fastify.get("/analytics/scalable-products", async () => getScalableProductsReport(prisma));
+async function scalableProductsFromQuery(req) {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getScalableProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+}
 
-fastify.get("/analytics/category-map", async () => getCategoryMapReport(prisma));
+fastify.get("/analytics/scalable-products", scalableProductsFromQuery);
+fastify.get("/analytics/scalable", scalableProductsFromQuery);
+
+fastify.get("/analytics/category-map", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getCategoryMapReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
+
+fastify.get("/analytics/categories", async () => listImportedCategories(prisma));
 
 fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {
   const raw = req.params.productId != null ? String(req.params.productId).trim() : "";
@@ -191,6 +245,9 @@ fastify.post("/analytics/export-product-to-spaces", async (req, reply) => {
     return reply.code(500).send({ error: "export_failed", message: msg });
   }
 });
+
+registerPdpEnrichRoute(fastify);
+registerImportOutputRoute(fastify);
 
 const graceful = async () => {
   await fastify.close();

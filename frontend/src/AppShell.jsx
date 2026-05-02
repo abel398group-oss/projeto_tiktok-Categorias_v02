@@ -1,5 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { AnalyticsDashboardCacheProvider } from "./analyticsDashboardCache.jsx";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 const navLinkStyle = /** @param {{ isActive: boolean }} p */ ({ isActive }) => ({
   padding: "0.38rem 0.9rem",
@@ -16,9 +15,10 @@ const navLinkStyle = /** @param {{ isActive: boolean }} p */ ({ isActive }) => (
  * Envolve relatórios Analytics e «Produtos em análise» (/a-mao) — sempre acessível por cima sem carregar a API.
  */
 export default function AppShell() {
+  const { pathname } = useLocation();
+
   return (
-    <AnalyticsDashboardCacheProvider>
-      <div style={{ minHeight: "100%", color: "#e7e9ea", background: "#081018" }}>
+    <div style={{ minHeight: "100%", color: "#e7e9ea", background: "#081018" }}>
         <nav
           style={{
             borderBottom: "1px solid #2a3844",
@@ -34,6 +34,14 @@ export default function AppShell() {
           <NavLink to="/" end style={navLinkStyle}>
             Analytics
           </NavLink>
+          <NavLink
+            to="/categorias"
+            style={({ isActive }) =>
+              navLinkStyle({ isActive: isActive || pathname.startsWith("/categoria/") })
+            }
+          >
+            Categorias
+          </NavLink>
           <NavLink to="/a-mao" style={navLinkStyle}>
             Produtos em análise
           </NavLink>
@@ -42,6 +50,5 @@ export default function AppShell() {
         </nav>
         <Outlet />
       </div>
-    </AnalyticsDashboardCacheProvider>
   );
 }

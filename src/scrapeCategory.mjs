@@ -1838,9 +1838,9 @@ async function collectPdpProductPricesFromPage(page, productId, categoriaUrl, pr
  * @param {import("puppeteer").Page} page — primeira tab (worker 0); segunda tab é criada só se concorrência > 1
  * @param {Map<string, object>} byProductId
  * @param {{ max: number, debugLines?: string[], categoriaUrl?: string }} opts
- * @returns {Promise<{ visited: number, max: number, eligible: number }>}
+ * @returns {Promise<object>}
  */
-async function enrichByProductIdWithPdpGallery(browser, page, byProductId, opts) {
+export async function enrichByProductIdWithPdpGallery(browser, page, byProductId, opts) {
   const max = Math.max(0, Math.min(500, opts.max));
   const categoriaUrl = opts.categoriaUrl != null ? String(opts.categoriaUrl) : "";
   const debugLines = opts.debugLines;
@@ -3506,5 +3506,8 @@ export {
   isReviewOnlyProductNode,
   productRowRichness,
   combinePdpHeroPriceParts,
-  applyPdpDomPrices
+  applyPdpDomPrices,
+  toDadosProdutoClean,
+  launchTikTokBrowser,
+  installAntiPopupGuards
 };

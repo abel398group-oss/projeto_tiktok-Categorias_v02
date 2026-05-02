@@ -1,7 +1,8 @@
-import { useState, useCallback, useMemo } from "react";
+import { Suspense, lazy, useState, useCallback, useMemo } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
-import { useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
+import { AnalyticsDashboardCacheProvider, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
+import CategoriesPage from "./CategoriesPage.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
 import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
 import {
@@ -20,7 +21,10 @@ import {
   sortScoreRowsByColumn,
   sortTopItemsByColumn
 } from "./sortUtils.js";
+import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { SpacesExportActionCell, SpacesExportFeedback, useSpacesExport } from "./spacesExport.jsx";
+
+const CategoryAnalyticsPage = lazy(() => import("./CategoryAnalyticsPage.jsx"));
 
 /** @typedef {'asc' | 'desc'} SortDir */
 
@@ -209,7 +213,7 @@ const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
 const CW_TOP = [52, 178, 120, 74, 80, 86, 100, 70];
 const CW_OPP = [52, 175, 115, 74, 80, 86, 110, 100, 66];
-const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 108, 76];
+const CW_SCORE = [52, 64, 120, 200, 150, 80, 90, 100, 80, 100, 108, 76];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
 const CW_MAP_TOP = [52, 108, 175, 170, 56, 76, 68, 68, 56, 98, 64];
 const CW_SCALE = [52, 195, 60, 76, 86, 100, 60];
@@ -774,7 +778,9 @@ function TableScore({ data }) {
             ordena todos por score; este ecrã mostra só o <strong>top 30</strong> (o restante entra no cálculo geral quando aplicável).
           </li>
           <li>
-            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao Spaces (credenciais <code>SPACES_*</code> só no servidor). O <strong>nome</strong> da linha é o atalho para a página de trabalho.
+            Colunas <strong>PDP</strong> (enriquecer <code>output/dados_produtos.json</code> no servidor via CLI) e <strong>Ações</strong>{" "}
+            (<strong>Exportar</strong> ao Spaces; credenciais <code>SPACES_*</code> só no servidor). O <strong>nome</strong> da linha é o
+            atalho para a página de trabalho.
           </li>
           <li>
             O <strong>nome</strong> abre a <strong>página de trabalho</strong> (<code>/produto/…</code>); o histórico de aberturas fica em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
@@ -854,7 +860,7 @@ function TableScore({ data }) {
       />
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
-        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z; <strong>link</strong> e{" "}
+        Métricas numéricas fazem primeiro clique maior→menor; nome e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
         <strong>Ações</strong> não se ordenam.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
@@ -940,12 +946,18 @@ function TableScore({ data }) {
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
-              label="Ações"
-              title="Exportar ao DigitalOcean Spaces"
+              label="PDP"
+              title="Enriquecer PDP no servidor (npm run pdp:enrich)"
               resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
+            <PlainTh
+              label="Ações"
+              title="Exportar ao DigitalOcean Spaces"
+              resizeColIdx={10}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh label="link" resizeColIdx={11} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -968,6 +980,9 @@ function TableScore({ data }) {
               <td>{row.vendas ?? "—"}</td>
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
+              <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
+                <PdpEnrichButton productId={row.productId} />
+              </td>
               <SpacesExportActionCell
                 productId={row.productId}
                 exportingProductId={exportingProductId}
@@ -1751,28 +1766,59 @@ function TableScalableSections({ data }) {
   );
 }
 
-function AnalyticsDashboard() {
+export function AnalyticsDashboard({ variant = "global", pageTitle }) {
   const { tab, setTab, cache, loading, error, load, tabs, setError } = useAnalyticsDashboardCache();
 
   const current = tabs.find((t) => t.id === tab);
 
   const data = current ? cache[current.key] : null;
 
+  const heading = pageTitle ?? "Analytics (API)";
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "1rem 1.25rem" }}>
-      <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Analytics (API)</h1>
-      <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
-        Métricas em GET pelo Fastify · export Space e página por produto (ver doc). Proxy do Vite em dev para evitar CORS.
-      </p>
-      <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
-        <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
-        ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
-        dados importados.
-      </p>
-      <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
-        Ao voltar do <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, os dados já carregados
-        mantêm-se nesta sessão — use <strong>Carregar dados</strong> só quando quiser actualizar da API.
-      </p>
+      {variant === "category" ? (
+        <p style={{ marginBottom: "0.65rem" }}>
+          <Link to="/categorias" style={{ color: "#6ec4ff", textDecoration: "none", fontSize: "0.88rem" }}>
+            ← Voltar para categorias
+          </Link>
+        </p>
+      ) : null}
+      <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>{heading}</h1>
+      {variant === "category" ? (
+        <>
+          <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
+            Relatórios filtrados com <code>categoryUrl</code> na API (mesmos separadores que o painel global). O separador
+            activo só recebe dados após <strong>Carregar dados</strong>.
+          </p>
+          <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
+            Para ver <strong>todos</strong> os produtos da última importação, use{" "}
+            <Link to="/" style={{ color: "#6ec4ff" }}>
+              Analytics
+            </Link>{" "}
+            global.
+          </p>
+          <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
+            Ao voltar do <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, os dados já
+            carregados nesta vista mantêm-se na sessão — recarregue só quando quiser actualizar da API.
+          </p>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
+            Métricas em GET pelo Fastify · export Space e página por produto (ver doc). Proxy do Vite em dev para evitar CORS.
+          </p>
+          <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
+            <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
+            ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
+            dados importados.
+          </p>
+          <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
+            Ao voltar do <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, os dados já carregados
+            mantêm-se nesta sessão — use <strong>Carregar dados</strong> só quando quiser actualizar da API.
+          </p>
+        </>
+      )}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
         {tabs.map((t) => (
@@ -1838,7 +1884,29 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<AppShell />}>
-          <Route index element={<AnalyticsDashboard />} />
+        <Route
+          index
+          element={
+            <AnalyticsDashboardCacheProvider>
+              <AnalyticsDashboard />
+            </AnalyticsDashboardCacheProvider>
+          }
+        />
+        <Route path="categorias" element={<CategoriesPage />} />
+        <Route
+          path="categoria/:categorySlug"
+          element={
+            <Suspense
+              fallback={
+                <div style={{ color: "#e7e9ea", padding: "1rem 1.25rem" }}>
+                  <p style={{ opacity: 0.85 }}>Carregando…</p>
+                </div>
+              }
+            >
+              <CategoryAnalyticsPage />
+            </Suspense>
+          }
+        />
           <Route path="a-mao" element={<HandsOnPage />} />
           <Route path="produto/:productId" element={<ProductWorkspacePage />} />
         </Route>

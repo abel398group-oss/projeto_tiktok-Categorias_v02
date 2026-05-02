@@ -1,7 +1,12 @@
 /**
  * Score de produto v1 — lógica partilhada CLI / API (não gravada na BD).
+ *
+ * Com `categoryUrl`: por produto na categoria, usa-se o snapshot cujo run tem o maior
+ * `ScrapeRun.collected_at` (empate em `run.id`), como em Top Products / Opportunities;
+ * o crescimento comparado ao run anterior global e `computeProductScoreLine` mantêm‑se iguais.
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
+import { normalizeCategoryKey } from "./categories-catalog.mjs";
 
 const TOP_LIMIT = 30;
 
@@ -85,12 +90,202 @@ async function buildLatestRunScoreRows(prisma) {
 }
 
 /**
- * Todas as linhas pontuadas do último ScrapeRun (score v1; sem limite 30 — ex.: relatório Escalar).
+ * @param {Array<import("@prisma/client").ProductSnapshot & { scrapeRun?: { id: string, collectedAt: Date } | null }>} snaps
+ * @returns {Map<string, (typeof snaps)[number]>}
+ */
+function pickLatestSnapshotPerProductRef(snaps) {
+  /** @type {Map<string, (typeof snaps)[number]>} */
+  const bestByProductRef = new Map();
+  for (const s of snaps) {
+    const ct = s.scrapeRun?.collectedAt ? new Date(s.scrapeRun.collectedAt).getTime() : 0;
+    const rid = s.scrapeRun?.id ?? "";
+    const prev = bestByProductRef.get(s.productRefId);
+    if (!prev) {
+      bestByProductRef.set(s.productRefId, s);
+      continue;
+    }
+    const pCt = prev.scrapeRun?.collectedAt ? new Date(prev.scrapeRun.collectedAt).getTime() : 0;
+    const pRid = prev.scrapeRun?.id ?? "";
+    if (ct > pCt || (ct === pCt && rid && pRid && rid.localeCompare(pRid) < 0)) {
+      bestByProductRef.set(s.productRefId, s);
+    }
+  }
+  return bestByProductRef;
+}
+
+/**
+ * Snapshots mais recentes por produto (`ScrapeRun.collected_at`; empate em `run.id`) numa categoria já normalizada —
+ * mesmo critério que Product Score/Escalar por `categoryUrl`. Consumidores chamam `computeProductScoreLine(s, ctx)`.
  *
  * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {string} filterKey — `normalizeCategoryKey` já aplicado
  */
-export async function getProductScoreFull(prisma) {
-  const b = await buildLatestRunScoreRows(prisma);
+export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, filterKey) {
+  const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
+
+  if (!latest) {
+    return {
+      ok: false,
+      type: "no-run",
+      message: "Sem dados: nenhum ScrapeRun. Importe primeiro (npm run db:import:output)."
+    };
+  }
+
+  const scrapeRun = {
+    id: latest.id,
+    collectedAt: latest.collectedAt.toISOString()
+  };
+  const previousRun = previous ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() } : null;
+  const hasGrowthComparableRuns = !!(count >= 2 && previous);
+
+  const prevPorRef = new Map();
+  if (count >= 2 && previous) {
+    const prevSnaps = await prisma.productSnapshot.findMany({
+      where: { scrapeRunId: previous.id, salesCount: { not: null } },
+      select: { productRefId: true, salesCount: true }
+    });
+    for (const ps of prevSnaps) prevPorRef.set(ps.productRefId, ps.salesCount);
+  }
+
+  const products = await prisma.product.findMany({
+    where: { categoryUrl: { not: null } },
+    select: { id: true, categoryUrl: true }
+  });
+  const inCategoryIds = products
+    .filter((p) => p.categoryUrl != null && normalizeCategoryKey(p.categoryUrl) === filterKey)
+    .map((p) => p.id);
+
+  if (inCategoryIds.length === 0) {
+    return {
+      ok: false,
+      type: "empty-category",
+      scrapeRun,
+      previousRun,
+      hasGrowthComparableRuns,
+      categoryUrlFilter: filterKey,
+      message: `Nenhum produto encontrado para categoria (${filterKey}).`
+    };
+  }
+
+  const snaps = await prisma.productSnapshot.findMany({
+    where: { productRefId: { in: inCategoryIds } },
+    include: {
+      product: { include: { seller: true } },
+      scrapeRun: { select: { id: true, collectedAt: true } }
+    }
+  });
+
+  if (snaps.length === 0) {
+    return {
+      ok: false,
+      type: "empty-snaps-category",
+      scrapeRun,
+      previousRun,
+      hasGrowthComparableRuns,
+      categoryUrlFilter: filterKey,
+      message: `Nenhum snapshot para produtos desta categoria (${filterKey}).`
+    };
+  }
+
+  const bestByProductRef = pickLatestSnapshotPerProductRef(snaps);
+  const snapshots = [...bestByProductRef.values()];
+  const ctx = { prevPorRef, count, previous };
+
+  return {
+    ok: true,
+    snapshots,
+    ctx,
+    scrapeRun,
+    previousRun,
+    hasGrowthComparableRuns,
+    categoryUrlFilter: filterKey
+  };
+}
+
+/**
+ * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {string} filterKey — `normalizeCategoryKey` já aplicado
+ */
+async function buildCategoryScoreRows(prisma, filterKey) {
+  const r = await fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, filterKey);
+  if (!r.ok) {
+    if (r.type === "no-run") {
+      return { type: "no-run", message: r.message };
+    }
+    if (r.type === "empty-category") {
+      return {
+        type: "empty-category",
+        scrapeRun: r.scrapeRun,
+        previousRun: r.previousRun,
+        hasGrowthComparableRuns: r.hasGrowthComparableRuns,
+        categoryUrlFilter: r.categoryUrlFilter,
+        message: r.message
+      };
+    }
+    return {
+      type: "empty-snaps-category",
+      scrapeRun: r.scrapeRun,
+      previousRun: r.previousRun,
+      hasGrowthComparableRuns: r.hasGrowthComparableRuns,
+      categoryUrlFilter: r.categoryUrlFilter,
+      message: r.message
+    };
+  }
+
+  const linhas = [];
+  for (const s of r.snapshots) {
+    linhas.push(toReportShape(computeProductScoreLine(s, r.ctx)));
+  }
+  linhas.sort((a, b) => b.score - a.score);
+
+  return {
+    type: "ok",
+    scrapeRun: r.scrapeRun,
+    previousRun: r.previousRun,
+    hasGrowthComparableRuns: r.hasGrowthComparableRuns,
+    lines: linhas,
+    totalSnapshotsInLatestRun: linhas.length,
+    categoryUrlFilter: r.categoryUrlFilter
+  };
+}
+
+/**
+ * Todas as linhas pontuadas (score v1; sem limite 30 — ex.: relatório Escalar).
+ * Sem opts: último ScrapeRun global. Com `{ categoryUrl }`: mesmo universo e snapshot mais recente
+ * por produto que Product Score por categoria (`buildCategoryScoreRows`).
+ *
+ * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {{ categoryUrl?: string }} [opts]
+ */
+export async function getProductScoreFull(prisma, opts = {}) {
+  const rawCat =
+    opts.categoryUrl != null && typeof opts.categoryUrl === "string" ? opts.categoryUrl.trim() : "";
+
+  let b;
+
+  if (!rawCat) {
+    b = await buildLatestRunScoreRows(prisma);
+  } else {
+    const filterKey = normalizeCategoryKey(rawCat);
+    const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
+    if (!filterKey) {
+      return {
+        scrapeRun: latest
+          ? { id: latest.id, collectedAt: latest.collectedAt.toISOString() }
+          : null,
+        previousRun: previous
+          ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() }
+          : null,
+        hasGrowthComparableRuns: !!(count >= 2 && previous),
+        lines: [],
+        totalSnapshotsInLatestRun: 0,
+        categoryUrlFilter: filterKey,
+        message: "categoryUrl normalizado ficou vazio — confirme a URL da categoria."
+      };
+    }
+    b = await buildCategoryScoreRows(prisma, filterKey);
+  }
+
   if (b.type === "no-run") {
     return {
       scrapeRun: null,
@@ -111,7 +306,29 @@ export async function getProductScoreFull(prisma) {
       message: b.message
     };
   }
-  return {
+  if (b.type === "empty-category") {
+    return {
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
+      hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+      lines: [],
+      totalSnapshotsInLatestRun: 0,
+      categoryUrlFilter: b.categoryUrlFilter,
+      message: b.message
+    };
+  }
+  if (b.type === "empty-snaps-category") {
+    return {
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
+      hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+      lines: [],
+      totalSnapshotsInLatestRun: 0,
+      categoryUrlFilter: b.categoryUrlFilter,
+      message: b.message
+    };
+  }
+  const base = {
     scrapeRun: b.scrapeRun,
     previousRun: b.previousRun,
     hasGrowthComparableRuns: b.hasGrowthComparableRuns,
@@ -119,6 +336,10 @@ export async function getProductScoreFull(prisma) {
     totalSnapshotsInLatestRun: b.totalSnapshotsInLatestRun,
     scoredCount: b.lines.length
   };
+  if (b.categoryUrlFilter != null) {
+    base.categoryUrlFilter = b.categoryUrlFilter;
+  }
+  return base;
 }
 
 function pontosVendas(sc) {
@@ -276,9 +497,36 @@ export function computeProductScoreLine(s, ctx) {
  * Internamente reutiliza o mesmo conjunto de linhas que `getProductScoreFull` (todas antes do slice).
  *
  * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {{ categoryUrl?: string }} [opts]
  */
-export async function getProductScoreReport(prisma) {
-  const b = await buildLatestRunScoreRows(prisma);
+export async function getProductScoreReport(prisma, opts = {}) {
+  const rawCat =
+    opts.categoryUrl != null && typeof opts.categoryUrl === "string" ? opts.categoryUrl.trim() : "";
+
+  let b;
+
+  if (!rawCat) {
+    b = await buildLatestRunScoreRows(prisma);
+  } else {
+    const filterKey = normalizeCategoryKey(rawCat);
+    const { latest, previous } = await getLatestAndPreviousRun(prisma);
+    if (!filterKey) {
+      return {
+        scrapeRun: latest
+          ? { id: latest.id, collectedAt: latest.collectedAt.toISOString() }
+          : null,
+        previousRun: previous
+          ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() }
+          : null,
+        top: [],
+        totalSnapshotsInLatestRun: 0,
+        categoryUrlFilter: filterKey,
+        message: "categoryUrl normalizado ficou vazio — confirme a URL da categoria."
+      };
+    }
+    b = await buildCategoryScoreRows(prisma, filterKey);
+  }
+
   if (b.type === "no-run") {
     return {
       scrapeRun: null,
@@ -297,8 +545,28 @@ export async function getProductScoreReport(prisma) {
       message: b.message
     };
   }
+  if (b.type === "empty-category") {
+    return {
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
+      top: [],
+      totalSnapshotsInLatestRun: 0,
+      categoryUrlFilter: b.categoryUrlFilter,
+      message: b.message
+    };
+  }
+  if (b.type === "empty-snaps-category") {
+    return {
+      scrapeRun: b.scrapeRun,
+      previousRun: b.previousRun,
+      top: [],
+      totalSnapshotsInLatestRun: 0,
+      categoryUrlFilter: b.categoryUrlFilter,
+      message: b.message
+    };
+  }
   const top = b.lines.slice(0, TOP_LIMIT);
-  return {
+  const base = {
     scrapeRun: b.scrapeRun,
     previousRun: b.previousRun,
     hasGrowthComparableRuns: b.hasGrowthComparableRuns,
@@ -308,4 +576,8 @@ export async function getProductScoreReport(prisma) {
     maxListed: TOP_LIMIT,
     noteFaixas: "excelente ≥80 · bom ≥60 · observar ≥40 · fraco <40 (docs/ANALYTICS.md)."
   };
+  if (b.categoryUrlFilter != null) {
+    base.categoryUrlFilter = b.categoryUrlFilter;
+  }
+  return base;
 }

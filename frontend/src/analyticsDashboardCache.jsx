@@ -1,7 +1,7 @@
 /**
- * Estado dos relatório Analytics sob AppShell — persiste ao abrir workspace (/produto/...) ou /a-mao.
+ * Estado dos relatórios Analytics — um provider por vista (global ou por categoria).
  */
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "./api.js";
 
 export const ANALYTICS_REPORT_TABS = [
@@ -15,7 +15,10 @@ export const ANALYTICS_REPORT_TABS = [
 /** @type {React.Context<any>} */
 const AnalyticsDashboardCacheContext = createContext(null);
 
-export function AnalyticsDashboardCacheProvider({ children }) {
+/**
+ * @param {{ children: React.ReactNode, categoryUrl?: string | null }} props
+ */
+export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }) {
   const [tab, setTab] = useState("top");
   const [cache, setCache] = useState({
     top: null,
@@ -27,6 +30,20 @@ export function AnalyticsDashboardCacheProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
 
+  const filterKey = categoryUrl != null ? String(categoryUrl).trim() : "";
+
+  useEffect(() => {
+    setCache({
+      top: null,
+      opp: null,
+      score: null,
+      scale: null,
+      map: null
+    });
+    setError(null);
+    setLoading(false);
+  }, [filterKey]);
+
   const current = ANALYTICS_REPORT_TABS.find((t) => t.id === tab);
 
   const load = useCallback(async () => {
@@ -34,14 +51,15 @@ export function AnalyticsDashboardCacheProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const json = await apiFetch(current.path);
+      const q = filterKey !== "" ? `?categoryUrl=${encodeURIComponent(filterKey)}` : "";
+      const json = await apiFetch(`${current.path}${q}`);
       setCache((c) => ({ ...c, [current.key]: json }));
     } catch (e) {
       setError(e?.message ?? String(e));
     } finally {
       setLoading(false);
     }
-  }, [current, setError]);
+  }, [current, filterKey]);
 
   const value = useMemo(
     () => ({
@@ -66,7 +84,7 @@ export function AnalyticsDashboardCacheProvider({ children }) {
 export function useAnalyticsDashboardCache() {
   const ctx = useContext(AnalyticsDashboardCacheContext);
   if (!ctx) {
-    throw new Error("useAnalyticsDashboardCache requer AnalyticsDashboardCacheProvider (AppShell).");
+    throw new Error("useAnalyticsDashboardCache requer AnalyticsDashboardCacheProvider.");
   }
   return ctx;
 }
