@@ -437,6 +437,7 @@ function TableTop({ data }) {
                 </td>
                 <SpacesExportActionCell
                   productId={pid}
+                  nome={row.nome}
                   exportingProductId={exportingProductId}
                   exportToSpace={exportToSpace}
                 />
@@ -652,6 +653,7 @@ function TableOpp({ data }) {
               <td>{row.motivo ?? "—"}</td>
               <SpacesExportActionCell
                 productId={row.productId}
+                nome={row.nome}
                 exportingProductId={exportingProductId}
                 exportToSpace={exportToSpace}
               />
@@ -1070,6 +1072,7 @@ function TableScore({ data }) {
               </td>
               <SpacesExportActionCell
                 productId={row.productId}
+                nome={row.nome}
                 exportingProductId={exportingProductId}
                 exportToSpace={exportToSpace}
               />
@@ -1537,6 +1540,7 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
                 <SpacesExportActionCell
                   productId={row.productId}
+                  nome={row.nome}
                   exportingProductId={exportingProductId}
                   exportToSpace={exportToSpace}
                   tdStyle={tdStyle}
@@ -1712,6 +1716,7 @@ function TableScalableSections({ data }) {
         <td>{row.rating ?? "—"}</td>
         <SpacesExportActionCell
           productId={row.productId}
+          nome={row.nome}
           exportingProductId={exportingProductId}
           exportToSpace={exportToSpace}
         />

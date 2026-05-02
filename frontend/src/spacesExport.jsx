@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiPost } from "./api.js";
+import { pushRecentWorkspace } from "./recentWorkspace.js";
 
 /** Igual ao botão «Exportar» nas tabelas Analytics (Spaces). */
 export const spacesExportButtonStyle = {
@@ -70,27 +72,38 @@ export function SpacesExportFeedback({ feedback }) {
 }
 
 /**
- * Coluna não ordenável: export quando há `productId` TikTok.
- * @param {{ productId?: unknown, exportingProductId: string | null, exportToSpace: (id: string) => void, tdStyle?: import("react").CSSProperties }} p
+ * Coluna não ordenável: export quando há `productId` TikTok; no fim abre **Produtos em análise** (`/a-mao`).
+ * @param {{ productId?: unknown, nome?: unknown, exportingProductId: string | null, exportToSpace: (id: string) => Promise<void>, tdStyle?: import("react").CSSProperties }} p
  */
-export function SpacesExportActionCell({ productId, exportingProductId, exportToSpace, tdStyle }) {
+export function SpacesExportActionCell({ productId, nome, exportingProductId, exportToSpace, tdStyle }) {
+  const navigate = useNavigate();
   const id = productId != null && String(productId).trim() !== "" ? String(productId).trim() : null;
   if (!id) {
     return <td style={tdStyle}>—</td>;
   }
   const busy = exportingProductId === id;
+  const nomeStr = nome != null && String(nome).trim() !== "" ? String(nome).trim() : undefined;
   return (
     <td style={tdStyle}>
       <button
         type="button"
-        title="Exportar ao DigitalOcean Spaces"
+        title="Exportar ao DigitalOcean Spaces e abrir Produtos em análise"
         style={{
           ...spacesExportButtonStyle,
           opacity: busy ? 0.55 : 1,
           cursor: busy ? "wait" : exportingProductId != null ? "default" : "pointer"
         }}
         disabled={exportingProductId != null}
-        onClick={() => exportToSpace(id)}
+        onClick={() => {
+          pushRecentWorkspace({ productId: id, nome: nomeStr });
+          void (async () => {
+            try {
+              await exportToSpace(id);
+            } finally {
+              navigate("/a-mao");
+            }
+          })();
+        }}
       >
         {busy ? "…" : "Exportar"}
       </button>
