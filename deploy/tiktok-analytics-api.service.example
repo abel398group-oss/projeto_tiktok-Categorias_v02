@@ -1,0 +1,27 @@
+# Exemplo systemd — copiar para /etc/systemd/system/tiktok-analytics-api.service
+#
+# sudo nano este ficheiro: ajustar WorkingDirectory + EnvironmentFile
+# sudo systemctl daemon-reload && sudo systemctl enable --now tiktok-analytics-api
+
+[Unit]
+Description=TikTok Shop Analytics API (Fastify)
+After=network.target
+
+[Service]
+Type=simple
+# Utilizador dono da pasta /opt/... do clone (evita ler .env só como root)
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/projeto_tiktok-Categorias_v02
+EnvironmentFile=/opt/projeto_tiktok-Categorias_v02/.env
+ExecStart=/usr/bin/node /opt/projeto_tiktok-Categorias_v02/scripts/analytics/server.mjs
+Restart=on-failure
+RestartSec=5
+Nice=10
+
+# Segurança mínima
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

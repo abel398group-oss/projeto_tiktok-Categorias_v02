@@ -4,6 +4,8 @@ dist/
 
 # env/local
 .env
+.env.*.local
+frontend/.env.production.local
 .chrome-tiktok-profile/
 
 # outputs de coleta
