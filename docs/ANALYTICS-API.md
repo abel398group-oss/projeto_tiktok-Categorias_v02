@@ -46,15 +46,17 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/growth` | Equiv. `npm run analytics:growth` |
 | GET | `/analytics/scalable-products` | Equiv. `npm run analytics:scalable` |
 | GET | `/analytics/category-map` | Equiv. `npm run analytics:category-map` |
-| GET | `/analytics/product-workspace/:productId` | Detalhe de um produto no **último** ScrapeRun (score alinhado a `product-score`, URLs de imagens do snapshot, etc.). `productId` = ID TikTok (URL-encoded se necessário). |
+| GET | `/analytics/product-workspace/:productId` | Detalhe do produto: **preferência** por snapshot no **último** `ScrapeRun` global (alinhado a `product-score`); se não existir aí, **fallback** ao snapshot mais recente desse produto na BD (mesma ideia que o export Spaces). Ver secção GET abaixo. |
 | POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
-| POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (último snapshot). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
+| POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (snapshot mais recente do produto no core de export). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
+| POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser/playwright uso do projeto. |
 
 ### GET product-workspace
 
-- **200** com corpo completo: campos de métricas/resumo do score; **`nome`** (nome na base) e **`nomeLista`** (truncado como na tabela); **`categorySlug`**, **`exportPrefix`** (pastas do export Space, com `SPACES_EXPORT_*` do servidor); preços extra (**`originalPrice`**, **`estimatedShowcasePrice`**, gaps), **`salesText`**, **`currency`**, **`sellerId`**, **`snapshotCapturedAt`**, **`firstSeenAt`** / **`lastSeenAt`**, **`votesByStar`** e **`dataQuality`** (JSON quando existir), **`deltaHint`** quando Δ não se aplica, **`imageUrls`**. Ver `scripts/analytics/lib/product-workspace.mjs`.
-- **404** se o produto não existir ou não tiver snapshot no último run.
-- **200** com `{ "error": "no_run", "message": "…" }` se não houver ScrapeRun (sem base importada).
+- **200** com corpo completo: métricas alinhadas ao score; **`scrapeRun`** corresponde à **coleta do snapshot efectivamente usado**; **`globalLatestScrapeRun`** é o último run global na BD (útil quando o fallback não é o mesmíssimo run); **`snapshotFromLatestGlobalRun`** (boolean): `false` quando os dados vêm de um snapshot **mais recente do produto** mas **fora** do último import global (Δ vendas entre runs não comparado nesse modo); **`nome`**, **`nomeLista`**, **`categorySlug`**, **`exportPrefix`**, preços extra, **`imageUrls`**, **`deltaHint`**, etc. Ver `scripts/analytics/lib/product-workspace.mjs`.
+- **404** `not_found` — produto inexistente.
+- **404** `no_snapshot` — produto sem **nenhum** `ProductSnapshot` na base.
+- **200** com `{ "error": "no_run", "message": "…" }` se não houver `ScrapeRun`.
 - **400** se o segmento do path estiver vazio após trim.
 
 ### POST product-workspace … / images-zip

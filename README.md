@@ -107,7 +107,7 @@ npm run dev:all
 - `.env` na **raiz** com **`DATABASE_URL`** e **`ANALYTICS_API_KEY`**.
 - **`frontend/.env`** com **`VITE_ANALYTICS_API_KEY`** igual ao valor da API (mesmo Bearer).
 
-Detalhes de endpoints e proxy: [`docs/ANALYTICS-API.md`](docs/ANALYTICS-API.md) · fluxo alternativo em dois terminais: [`FLUXO.md`](FLUXO.md) secções **9–10**.
+Detalhes de endpoints e proxy: [`docs/ANALYTICS-API.md`](docs/ANALYTICS-API.md) · rotas e painel (categorias, analytics global/filtrado, carregamento automático das abas): [`FLUXO.md`](FLUXO.md) §9 e [`frontend/README.md`](frontend/README.md) · dois terminais (API + Vite): [`FLUXO.md`](FLUXO.md) §5.
 
 Script individual útil para debug: **`npm run api:dev`** só API · **`npm run frontend:dev`** só frontend.
 

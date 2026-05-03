@@ -19,6 +19,12 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 **Testes:** `test/scrape-regression.test.mjs` — `npm test` (parser, merge, loja, avaliações).
 
+**Persistência e analytics:** Import `npm run db:import:output` → Prisma (`Product`, `ProductSnapshot`, `ScrapeRun`, …). Queries read-only em `scripts/analytics/lib/` consumidas por CLI e por **Fastify** (`scripts/analytics/server.mjs`) com **`ANALYTICS_API_KEY`**.
+
+**Painel web (`frontend/`):** Vite + React + React Router (`AppShell`). Rotas típicas: **`/`** listagem de **categorias** (GET `/analytics/categories`); **`/analytics`** relatórios globais; **`/categoria/:slug`** mesmos relatórios com `categoryUrl`; **`/produto/:id`** workspace; **`/a-mao`** Produtos em análise (histórico `localStorage` + métricas via API). O proxy Vite envia `/analytics/*` para a API. Carregamento dos separadores de relatórios é **automático** ao abrir ou mudar de aba (cache em `analyticsDashboardCache.jsx`); **Carregar dados** força refresh do separador actual. **Exportar** (Spaces) dispara POST no servidor e leva o utilizador a **`/a-mao`** após o pedido, com produto no histórico recente.
+
+**Documentação viva:** `FLUXO.md` (comandos + painel), `docs/ANALYTICS-API.md`, `docs/ARCHITECTURE.md`, `frontend/README.md`, regras em `.cursor/rules/`.
+
 ---
 
 ## 2. Profissionalismo — o que já está bem
@@ -27,7 +33,7 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 |------|----------|
 | Código | Um ficheiro principal claro, funções com responsabilidade; comentário de header e exports para regressão. |
 | Testes | Regressão cobre normalização, merge, loja, dedupe, avaliações, dedupe de URLs PDP. |
-| Documentação interna | `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/adr/`, `FLUXO.md`, regras em `.cursor/rules/`. |
+| Documentação interna | `README.md`, `docs/ARCHITECTURE.md`, `docs/ANALYTICS-API.md`, `docs/ROADMAP.md`, `docs/adr/`, `FLUXO.md`, `frontend/README.md`, regras em `.cursor/rules/`. |
 | Saída de dados | Separação `output/dados_produtos.json` vs `output/extra/`. |
 | `gitignore` | `node_modules/`, perfil Chrome, `output/*` (com `.gitkeep` onde importa). |
 | Variáveis de ambiente | Comportamento configurável (URL, headed, PII em peek, limites PDP). |
@@ -36,13 +42,12 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 ## 3. Profissionalismo — melhorias recomendadas
 
-1. **README na raiz do repositório** — hoje não existe `README.md` na root (só notas em `.cursor/docs/`). Para GitHub e onboarding: objetivo, instalação, `npm run coleta` / `coleta:completa`, aviso de ToS, link para `FLUXO.md` e `docs/ARCHITECTURE.md`.
+1. **Manter docs alinhadas ao código** — após mudar fluxos do painel, API ou scrape: **`FLUXO.md`** (incl. § painel quando aplicável), **`docs/ANALYTICS-API.md`** se endpoints mudarem, **`frontend/README.md`**, e parágrafos em **`docs/ARCHITECTURE.md`** / **`README.md`** quando o contrato ou o scraping mudarem (`.cursor/rules/fluxo-doc-update.mdc`).
 2. **CI mínima** — GitHub Actions (ou outro) a correr `npm test` em push/PR; falha cedo se quebrar o parser.
 3. **Linter (ESLint) + formatação (Prettier, opcional)** — consistência e erros comuns; pode ser só em `src/` e `test/`.
-4. **Alinhar documentação com o código** — ex.: `docs/ARCHITECTURE.md` ainda menciona fluxo “sem abrir PDP” no objetivo; o projeto suporta **PDP opcional** (`PDP_GALLERY`) — vale atualizar o parágrafo de objetivo.
-5. **Roadmap** — tarefas em `docs/ROADMAP.md` (ex. testes para `normalizeItem` com JSON de exemplo) podem estar parcialmente resolvidas; rever checkboxes.
-6. **Tamanho de `scrapeCategory.mjs`** — com o tempo, considerar módulos (`normalizeItem`, extratores, writer) se a manutenção ficar pesada (não urgente).
-7. **Versionamento** — `engines` no `package.json` (`"node": ">=20"` ou a versão realmente usada) para evitar surpresas em equipa.
+4. **Roadmap** — tarefas em `docs/ROADMAP.md` (ex. testes para `normalizeItem` com JSON de exemplo) podem estar parcialmente resolvidas; rever checkboxes.
+5. **Tamanho de `scrapeCategory.mjs`** — com o tempo, considerar módulos (`normalizeItem`, extratores, writer) se a manutenção ficar pesada (não urgente).
+6. **Versionamento** — `engines` no `package.json` (`"node": ">=20"` ou a versão realmente usada) para evitar surpresas em equipa.
 
 ---
 
@@ -75,8 +80,8 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 | Item | Nota |
 |------|------|
-| README raiz | Facilita clonagem e confiança no repo. |
-| CI (test) | Garante regressão contínua. |
+| README raiz | Existe (`README.md`); manter links para `FLUXO.md` e analytics. |
+| CI (test) | GitHub Actions com `npm test` em PR/push (`README.md`); `validate:schemas` continua local (sem `output/` no clone). |
 | **Licença** (`LICENSE`) | Inexistente na raiz — definir (MIT, etc.) se o repo for público. |
 | Conformidade ToS TikTok | Decisão de produto/legal; o código não a substitui. |
 | Categorização de erros de scrape | Pode-se devolver `status` + `note` mais granulares (já parcialmente existe). |
@@ -86,8 +91,8 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 ## 7. Resumo executivo (para colar no Cursor)
 
-> Scraper Node (Puppeteer Stealth) que coleta uma categoria TikTok Shop via XHR + `__MODERN_ROUTER_DATA__`, normaliza para `Map` por `product_id`, gera `output/dados_produtos.json` e opcionalmente enriquece com PDP. Testes de regressão presentes. **Pontos fortes:** separação saída principal vs `extra/`, testes, docs internos. **Melhorar:** README, CI, enquadramento doc/ToS, revisão Roadmap, reduzir PII em modos debug. **Segurança:** não versionar `output/`, logs nem perfil Chrome; cuidado com PII em peeks; consciência de ToS. **Falta:** LICENSE visível, `.env.example` opcional, ESLint opcional.
+> **Pipeline:** coleta (Puppeteer Stealth) → JSON `output/` → import Prisma → relatórios CLI/lib + **API Fastify** autenticada → **React/Vite** (categorias, analytics global/por categoria, workspace por produto, Produtos em análise). **Pontos fortes:** contrato JSON + schema AJV, histórico na BD por `ScrapeRun`, analytics partilhados CLI/API, export Spaces só no servidor, UI coerente (tema escuro). **Em desenvolvimento:** deploy produção (sem Docker no repo), rate limits / hardening API se exposta à internet, eventual separação droplet coleta vs painel. **Segurança:** não commitar `output/`, perfil Chrome, `.env`; `ANALYTICS_API_KEY` obrigatória na API; consciência ToS TikTok. **Aberto:** LICENSE se repo público, ESLint opcional, rever `docs/ROADMAP.md`.
 
 ---
 
-*Gerado para contexto; atualizar após mudanças relevantes no código.*
+*Actualizar este ficheiro após mudanças relevantes em scrape, API, painel ou import.*

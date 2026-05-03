@@ -179,3 +179,12 @@ Branches usuais: **`main`** (principal) e **`backup`**. **`git branch`** mostra 
 ### 8. Portas customizadas
 
 Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), documenta nos teus README locais ou actualiza esta nota aqui para a equipa.
+
+### 9. Painel web — comportamento actual (rápido)
+
+- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). O cartão inteiro é cliclável (`/categoria/...` com estado `categoryUrl`).
+- **`/analytics`** — Analytics **global**. Os separadores (Top Products, Opportunities, …) **pedem dados à API ao abrir e ao mudar de separador**. O botão **Carregar dados** **actualiza** só o separador activo (útil depois de novo import ou para forçar refresh).
+- **`/categoria/:slug`** — Mesmos relatórios com **`?categoryUrl=...`**; carregamento automático igual ao global.
+- **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`.
+- **`/a-mao`** — Produtos em análise: histórico local + métricas via API. Em **Exportar** (coluna Ações nas tabelas Analytics), após o POST ao Spaces o fluxo regista o produto no histórico e **navega para `/a-mao`**.
+- **Enriquecer PDP** — Não corre sozinho ao abrir links; é acção explícita (**POST `/analytics/pdp-enrich`**) descrita em `scripts/analytics/pdp-enrich-route.mjs`.

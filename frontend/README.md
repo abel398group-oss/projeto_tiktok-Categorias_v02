@@ -27,28 +27,31 @@ A barra superior (**AppShell**) liga as áreas principais:
 
 | Rota | Descrição |
 |------|-----------|
-| **`/`** | **Analytics** — separadores Top Products, Opportunities, Product Score, Escalar, Mapa; botão **Carregar dados** pede o endpoint da aba activa. |
-| **`/a-mao`** | **Produtos em análise** — atalhos e **histórico** de produtos visitados (`recentWorkspace.js`, só neste browser). **Não** exige carregar relatórios da API para ver o histórico. |
-| **`/produto/:productId`** | **Workspace** do produto (detalhes, notas, etc.). Chama **GET** `/analytics/product-workspace/:productId`. |
+| **`/`** | **Painel inicial — Categorias**: cartões (`GET /analytics/categories`), cartão inteiro navega para **`/categoria/:slug`**. Atalho «Analytics global» leva a **`/analytics`**. |
+| **`/analytics`** | **Analytics global** — separadores Top Products, Opportunities, Product Score, Escalar, Mapa. Cada separador **pede o GET respectivo ao abrir ou ao mudar de aba** (ver `analyticsDashboardCache.jsx`). **Carregar dados** **actualiza** o separador activo (refresh explícito). |
+| **`/categoria/:slug`** | Mesmos relatórios com query **`categoryUrl`** na API (resolvida via `location.state` ou lista de categorias). Carregamento automático por separador, como em `/analytics`. |
+| **`/a-mao`** | **Produtos em análise** — histórico local (`recentWorkspace.js`) + métricas via **GET** `product-workspace`. Não depende de pré-carregar relatórios. |
+| **`/produto/:productId`** | **Workspace** do produto (detalhes, notas, ZIP de imagens). Chama **GET** `/analytics/product-workspace/:productId`. |
 
 Endpoints dos relatórios: `/analytics/top-products`, `…/opportunities`, `…/product-score`, `…/scalable-products`, `…/category-map`.
 
 ### Fluxo usual (Analytics → Spaces → histórico)
 
-1. **`/` Analytics** · abrir o separador **Product Score** · **Carregar dados**.  
-2. **Clicar no nome** do produto → abre **`/produto/:productId`** (workspace no browser).  
-3. Voltar quando quiser: em **`/a-mao` · Produtos em análise** aparece o histórico local (`recentWorkspace.js`) dos produtos cujo workspace já abriu.  
-4. Para **DigitalOcean Spaces**: na mesma tabela **Product Score**, coluna **Ações**, usar **Exportar** (a API faz o upload; credenciais `SPACES_*` só no servidor).
+1. **`/analytics`** (ou categoria) · o separador activo **carrega sozinho**.  
+2. **Clicar no nome** do produto (várias tabelas) → **`/produto/:productId`**.  
+3. **`/a-mao`** lista o histórico (inclui produtos adicionados ao **Exportar**).  
+4. **Exportar** (coluna Ações): **POST** export Spaces; após o pedido o fluxo vai para **`/a-mao`** e regista o produto no histórico.
 
 ## Como aceder à workspace do produto
 
-- Na tabela **Product Score**, **clique no nome do produto** (coluna **nome**). Esse link abre `/produto/<productId TikTok>`.
+- Nas tabelas onde o **nome** é link (ex.: Product Score, Top Products com `productId`), o clique abre `/produto/<productId TikTok>`.
 - **Já não existe** o botão **«Página»** na coluna **Ações**; o acesso à workspace é **só** pelo nome (ou navegando directamente pela URL `/produto/...`).
 
 ## Exportar ao DigitalOcean Spaces
 
-- Na tabela **Product Score** (**Analytics**, depois de carregar dados), o botão **Exportar** está na coluna **Ações** (uma linha por produto).
+- Nas tabelas Analytics com coluna **Ações** (Top Products, Opportunities, Product Score, Escalar por tabela, Mapa por tabela — ver `App.jsx`), o botão **Exportar** está por linha após carregar dados da aba.
 - Gera/normaliza o pacote **JSON + imagens** do produto e envia para o **DigitalOcean Spaces** via **POST** `/analytics/export-product-to-spaces`.
+- Depois do pedido (sucesso ou erro de rede/API), o fluxo no painel **regista o produto no histórico** e navega para **`/a-mao`** (Produtos em análise).
 - Fluxo válido quando a API responde com sucesso ao export e os ficheiros aparecem no bucket com o prefixo devolvido pela API — o utilizador só confirma no painel Spaces.
 - Para funcionar, a **API tem de estar a correr**, a **BD** deve ter dados do último scrape, e no **servidor** têm de estar configuradas **`SPACES_*`** (endpoint, bucket, chaves). O frontend **apenas** dispara o POST com **`Authorization: Bearer`** + **`VITE_ANALYTICS_API_KEY`**; **não** deve receber credenciais Spaces.
 
