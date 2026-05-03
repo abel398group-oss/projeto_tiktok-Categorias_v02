@@ -2,6 +2,24 @@
 
 Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 2026), alinhado a `docs/ROADMAP.md` e a `docs/ARCHITECTURE.md`.
 
+## [0.1.1] - 2026-05-06
+
+### Documentation
+
+- **`FLUXO.md` §9**: comportamento actual do painel (rotas `/`, `/analytics`, `/categoria/…`, `/produto/…`, `/a-mao`, export Spaces, PDP enrich por referência técnica).
+- **`docs/ANALYTICS-API.md`**: `GET /analytics/product-workspace/:id` com fallback de snapshot (último run global vs. snapshot mais recente do produto), campos `snapshotFromLatestGlobalRun` / `globalLatestScrapeRun`; linha **`POST /analytics/pdp-enrich`**; texto de export alinhado ao core Spaces.
+- **`frontend/README.md`**: rotas, carregamento automático das abas de relatório, cartões de categorias clicáveis, fluxo Exportar → histórico e **`/a-mao`**.
+- **`README.md`**: apontadores para **`FLUXO.md`** §9 e **`frontend/README.md`** em desenvolvimento rápido.
+- **`docs/ANALISE-PROJETO-CURSOR.md`**: stack BD + API + painel actualizada; tabela “o que falta” e resumo executivo revistos; lista de melhorias sem duplicação óbvia.
+- **`.cursor/rules`**: **`frontend-analytics-ui.mdc`** (cache, categorias, Exportar/`a-mao`); **`fluxo-doc-update.mdc`** menciona § do painel no FLUXO.
+- **`docs/ARCHITECTURE.md`**: novo diagrama Mermaid **dados ↔ API ↔ UI** (leitura de fluxo runtime).
+
+### Changed
+
+- Nenhuma alteração funcional obrigatória nesta entrada — apenas documentação e regras Cursor.
+
+---
+
 ## [0.1.0] - 2026-04-26
 
 ### Added
