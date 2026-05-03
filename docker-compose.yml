@@ -5,8 +5,9 @@
 # Para build do frontend, o Compose lê também VITE_ANALYTICS_API_KEY a partir deste mesmo `.env`
 # (${VITE_ANALYTICS_API_KEY} na secção build args abaixo).
 #
-# A API escuta em 0.0.0.0:3333 dentro da rede Docker; o browser fala sempre na porta 80 do `web`,
-# que faz proxy para o serviço `api`.
+# A API escuta em 0.0.0.0:3333 dentro da rede Docker; o contentor `web` expõe Nginx na porta 80 interna.
+# No host, por defeito usa-se 8080 para evitar conflito com Nginx/EasyPanel já na porta 80.
+# Opcional no `.env`: COMPOSE_WEB_PORT=80 (só se a porta 80 do host estiver livre).
 
 services:
   api:
@@ -28,7 +29,7 @@ services:
       args:
         VITE_ANALYTICS_API_KEY: ${VITE_ANALYTICS_API_KEY:-}
     ports:
-      - "80:80"
+      - "${COMPOSE_WEB_PORT:-8080}:80"
     depends_on:
       - api
     restart: unless-stopped

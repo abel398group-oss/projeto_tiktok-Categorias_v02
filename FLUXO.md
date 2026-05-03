@@ -188,3 +188,9 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 - **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`.
 - **`/a-mao`** — Produtos em análise: histórico local + métricas via API. Em **Exportar** (coluna Ações nas tabelas Analytics), após o POST ao Spaces o fluxo regista o produto no histórico e **navega para `/a-mao`**.
 - **Enriquecer PDP** — Não corre sozinho ao abrir links; é acção explícita (**POST `/analytics/pdp-enrich`**) descrita em `scripts/analytics/pdp-enrich-route.mjs`.
+
+### 10. Docker no Droplet (API + painel; painel em **:8080** por defeito)
+
+- Documentação: **`docs/DOCKER.md`**. Na VM: clone (ex. `/var/www/tiktok-analytics`), **`.env`** na raiz com `DATABASE_URL`, **`ANALYTICS_API_KEY`** e **`VITE_ANALYTICS_API_KEY`** iguais; depois `docker compose up -d --build`.
+- Painel: **`http://<IP-DO-DROPLET>:8080/`** (se a porta 80 do host estiver livre, podes definir `COMPOSE_WEB_PORT=80` no `.env`). Saúde: **`curl -s http://127.0.0.1:8080/health`** no servidor.
+- CI: **`.github/workflows/deploy-droplet-docker.yml`** — secrets `DROPLET_HOST`, `DROPLET_USER`, `DROPLET_SSH_KEY` (e opcionalmente `DROPLET_DEPLOY_PATH`); no Droplet o `.env` mantém-se à mão (não vem do GitHub).
