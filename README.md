@@ -4,6 +4,7 @@ Scraper de categorias do TikTok Shop (Node.js, Puppeteer) com saída em `output/
 
 - Fluxo e comandos: [`FLUXO.md`](FLUXO.md)
 - **Deploy Droplet simples:** [`docs/DEPLOY-DROPLET-SIMPLES.md`](docs/DEPLOY-DROPLET-SIMPLES.md) (`deploy/*.example`)
+- **Docker (API + Nginx + Compose):** [`docs/DOCKER.md`](docs/DOCKER.md) — `docker compose up -d --build`
 - Tarefas e visão: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Arquitetura e contrato JSON: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Analytics (queries locais sobre a base): [`docs/ANALYTICS.md`](docs/ANALYTICS.md)

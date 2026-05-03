@@ -1,0 +1,34 @@
+# Uso rápido (na pasta do projeto, com `.env` preenchido):
+#   docker compose up -d --build
+#
+# O ficheiro `.env` deve ter pelo menos DATABASE_URL e ANALYTICS_API_KEY (como em .env.example).
+# Para build do frontend, o Compose lê também VITE_ANALYTICS_API_KEY a partir deste mesmo `.env`
+# (${VITE_ANALYTICS_API_KEY} na secção build args abaixo).
+#
+# A API escuta em 0.0.0.0:3333 dentro da rede Docker; o browser fala sempre na porta 80 do `web`,
+# que faz proxy para o serviço `api`.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      ANALYTICS_API_HOST: "0.0.0.0"
+      ANALYTICS_API_PORT: "3333"
+    expose:
+      - "3333"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_ANALYTICS_API_KEY: ${VITE_ANALYTICS_API_KEY:-}
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped

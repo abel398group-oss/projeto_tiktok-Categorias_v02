@@ -204,9 +204,38 @@ sudo systemctl status tiktok-analytics-api
 Teste local no servidor:
 
 ```bash
-curl -s -H "Authorization: Bearer SUA_CHAVE" http://127.0.0.1:3333/health
+curl -s http://127.0.0.1:3333/health
 curl -s -H "Authorization: Bearer SUA_CHAVE" http://127.0.0.1:3333/analytics/categories
 ```
+
+---
+
+### 10b. Alternativa: PM2 (evitar crash com NVM)
+
+Se usaste **NVM**, o processo do **PM2** (arrancado como serviço ou por outro utilizador) **não** carrega `nvm.sh` — `pm2 start "npm run analytics:api"` costuma ir para **errored** (restarts em loop) porque `node` / `npm` não estão no `PATH`.
+
+**Opção A (recomendada no Droplet):** instalar Node com **apt/NodeSource** (`/usr/bin/node`) e usar o exemplo do repositório:
+
+```bash
+cd /opt/projeto_tiktok-Categorias_v02   # ou /var/www/tiktok-analytics
+cp deploy/ecosystem.pm2.example.cjs ecosystem.config.cjs
+nano ecosystem.config.cjs    # ajustar cwd; interpreter = saída de: command -v node
+pm2 delete analytics-api 2>/dev/null
+pm2 start ecosystem.config.cjs
+pm2 save && pm2 startup
+```
+
+**Opção B (ficar com NVM):** no **mesmo** utilizador onde corres o PM2:
+
+```bash
+command -v node    # copia este caminho para ecosystem.config.cjs → interpreter
+```
+
+Não relies em `npm run analytics:api` dentro do PM2 sem garantir esse `PATH`.
+
+Diagnóstico: `pm2 logs analytics-api --lines 80` (`command not found`, `DATABASE_URL`, `ANALYTICS_API_KEY`, ou erro Prisma aparecem aí).
+
+---
 
 Depois, pelo **domínio** (sem expor a chave no URL; usa header no `curl`):
 
@@ -258,13 +287,15 @@ sudo nginx -t && sudo systemctl reload nginx
 |----------|-----|
 | `deploy/nginx-tiktok-analytics.example.conf` | Virtual host Nginx |
 | `deploy/tiktok-analytics-api.service.example` | Unidade systemd |
+| `deploy/ecosystem.pm2.example.cjs` | PM2 (`interpreter` = Node absoluto; evita NVM) |
 | `frontend/.env.production.example` | Variáveis do build |
 
 ---
 
 ## Problemas comuns
 
-- **502 em `/analytics/...`** — API parada ou porta errada; `journalctl -u tiktok-analytics-api -n 50`
+- **502 em `/analytics/...`** — API parada ou porta errada; `journalctl -u tiktok-analytics-api -n 50` ou `pm2 logs analytics-api`
+- **PM2 `errored` / restarts infinitos** — quase sempre **Node fora do PATH** (NVM) ou `.env`; usar `deploy/ecosystem.pm2.example.cjs` com `interpreter` absoluto ou NodeSource em `/usr/bin/node`
 - **`ECONNREFUSED` no browser** — normal se tentares porta 3333 no browser público; o front **não** deve usar `VITE_API_URL` externo neste modelo — usa apenas o mesmo domínio + Nginx
 - **Prisma / SSL** — confirma `?sslmode=require` na Managed DB da DO
 - **Página React 404 ao refrescar `/analytics`** — confirma `try_files … /index.html` no bloco estático do Nginx (está no exemplo)

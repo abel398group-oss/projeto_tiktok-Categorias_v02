@@ -1,0 +1,21 @@
+# API analytics (Fastify + Prisma). Chromium/puppeteer não é necessário em runtime aqui — evita download pesado na build.
+FROM node:20-bookworm-slim AS base
+WORKDIR /app
+RUN apt-get update && apt-get install -y openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN npm ci
+
+COPY . .
+
+RUN chmod +x deploy/docker-api-entrypoint.sh \
+  && npx prisma generate
+
+ENV NODE_ENV=production
+EXPOSE 3333
+
+ENTRYPOINT ["/app/deploy/docker-api-entrypoint.sh"]
