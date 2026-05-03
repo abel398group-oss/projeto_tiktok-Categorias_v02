@@ -1997,7 +1997,8 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
         <>
           <p style={{ fontSize: "0.8rem", opacity: 0.75 }}>
             Relatórios filtrados com <code>categoryUrl</code> na API (mesmos separadores que o painel global). O separador
-            activo só recebe dados após <strong>Carregar dados</strong>.
+            activo <strong>carrega automaticamente</strong> ao abrir esta vista ou ao mudar de separador. Use{" "}
+            <strong>Carregar dados</strong> para actualizar só o separador actual a partir da API.
           </p>
           <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
             Para ver <strong>todos</strong> os produtos da última importação, use{" "}

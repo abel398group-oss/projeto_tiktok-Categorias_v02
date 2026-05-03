@@ -238,7 +238,8 @@ tbody td {
   align-items: stretch;
 }
 
-.tk-category-card {
+/* Link React Router no lugar de <article>: cartão inteiro clicável */
+a.tk-category-card {
   display: flex;
   flex-direction: column;
   border-radius: var(--tk-radius-lg);
@@ -247,10 +248,16 @@ tbody td {
   box-shadow: var(--tk-shadow-sm);
   min-height: 220px;
   overflow: hidden;
+  text-decoration: none;
+  color: inherit;
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease,
     transform 0.16s ease;
+}
+
+a.tk-category-card:hover .tk-category-card__cta {
+  color: #7dd3fc;
 }
 
 .tk-category-card:hover {

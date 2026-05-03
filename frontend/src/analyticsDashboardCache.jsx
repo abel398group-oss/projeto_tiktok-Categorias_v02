@@ -61,6 +61,41 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     }
   }, [current, filterKey]);
 
+  /**
+   * Analytics por categoria: carrega o separador actual ao abrir ou ao mudar de separador
+   * (evita depender só do botão «Carregar dados»).
+   * Analytics global mantém carregamento manual.
+   */
+  useEffect(() => {
+    if (filterKey === "") return;
+    if (!current) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const path = current.path;
+    const cacheKey = current.key;
+    const q = `?categoryUrl=${encodeURIComponent(filterKey)}`;
+    void (async () => {
+      try {
+        const json = await apiFetch(`${path}${q}`);
+        if (!cancelled) {
+          setCache((c) => ({ ...c, [cacheKey]: json }));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message ?? String(e));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterKey, tab, current?.key, current?.path]);
+
   const value = useMemo(
     () => ({
       tab,

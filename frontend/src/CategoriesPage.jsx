@@ -136,7 +136,13 @@ export default function CategoriesPage() {
               };
 
               return (
-                <article key={key} className="tk-category-card">
+                <Link
+                  key={key}
+                  to={to}
+                  state={statePayload}
+                  className="tk-category-card"
+                  aria-label={`Abrir análise da categoria ${label}`}
+                >
                   <div className="tk-category-card__body">
                     <p className="tk-category-card__eyebrow">Categoria</p>
                     <h2 className="tk-category-card__title">{label}</h2>
@@ -172,11 +178,9 @@ export default function CategoriesPage() {
                     </dl>
                   </div>
                   <footer className="tk-category-card__footer">
-                    <Link to={to} state={statePayload} className="tk-category-card__cta">
-                      Abrir análise →
-                    </Link>
+                    <span className="tk-category-card__cta">Abrir análise →</span>
                   </footer>
-                </article>
+                </Link>
               );
             })}
           </section>
