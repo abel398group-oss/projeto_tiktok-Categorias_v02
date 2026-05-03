@@ -1,5 +1,8 @@
 /**
- * Detalhe de produto para a página «workspace» (último ScrapeRun, mesmo score que product-score).
+ * Detalhe de produto para a página «workspace».
+ * Preferência: snapshot no **último** ScrapeRun global (alinha ao product-score na faixa principal).
+ * Se não existir nesse run (produto aparece só noutras importações ou em visão por categoria), usa o
+ * **snapshot mais recente** do mesmo produto — mesmo critério do export Spaces (`export-product-to-spaces-core`).
  */
 import { extractOrderedImageUrls } from "../../lib/extract-image-urls.mjs";
 import {
@@ -44,16 +47,35 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     return { error: "not_found", message: `Produto não encontrado: productId=${idTrim}` };
   }
 
-  const snap = product.snapshots[0];
+  /** @type {import("@prisma/client").ProductSnapshot | null} */
+  let snap = product.snapshots[0] ?? null;
+  /** Coleta a que o `snap` pertence (para metadados da resposta). */
+  let effectiveScrapeRun = latest;
+  let snapshotFromLatestGlobalRun = true;
+
   if (!snap) {
-    return {
-      error: "no_snapshot",
-      message: "Este produto não tem snapshot no último ScrapeRun (última importação)."
-    };
+    const fb = await prisma.productSnapshot.findFirst({
+      where: { productRefId: product.id },
+      orderBy: [{ scrapeRun: { collectedAt: "desc" } }, { capturedAt: "desc" }],
+      include: {
+        scrapeRun: { select: { id: true, collectedAt: true } }
+      }
+    });
+
+    if (!fb) {
+      return {
+        error: "no_snapshot",
+        message: "Este produto não tem nenhum snapshot na base (importe dados primeiro)."
+      };
+    }
+
+    snap = fb;
+    effectiveScrapeRun = fb.scrapeRun;
+    snapshotFromLatestGlobalRun = false;
   }
 
   const prevPorRef = new Map();
-  if (count >= 2 && previous) {
+  if (snapshotFromLatestGlobalRun && count >= 2 && previous) {
     const prevSnaps = await prisma.productSnapshot.findMany({
       where: { scrapeRunId: previous.id, salesCount: { not: null } },
       select: { productRefId: true, salesCount: true }
@@ -63,7 +85,9 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     }
   }
 
-  const ctx = { prevPorRef, count, previous };
+  const ctx = snapshotFromLatestGlobalRun
+    ? { prevPorRef, count, previous }
+    : { prevPorRef: new Map(), count: 0, previous: null };
 
   const s = {
     ...snap,
@@ -80,7 +104,10 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
 
   /** @type {string | null} */
   let deltaHint = null;
-  if (line.deltaVendas === "—") {
+  if (!snapshotFromLatestGlobalRun) {
+    deltaHint =
+      "Dados da coleta mais recente deste produto na base (neste momento não há snapshot dele no último import global). Δ vendas entre runs não aplicável.";
+  } else if (line.deltaVendas === "—") {
     if (count < 2 || previous == null) {
       deltaHint = "Δ vendas: são precisos pelo menos dois ScrapeRuns e vendas registadas nos dois para comparar.";
     } else {
@@ -102,13 +129,20 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
   /** @param {unknown} j */
   const jsonSnippet = (j) => (j != null && typeof j === "object" ? j : null);
 
+  const effCollected =
+    effectiveScrapeRun.collectedAt instanceof Date
+      ? effectiveScrapeRun.collectedAt.toISOString()
+      : String(effectiveScrapeRun.collectedAt ?? "");
+
   return {
-    scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
+    scrapeRun: { id: effectiveScrapeRun.id, collectedAt: effCollected },
+    globalLatestScrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
+    snapshotFromLatestGlobalRun,
     previousRun:
-      previous != null
+      snapshotFromLatestGlobalRun && previous != null
         ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() }
         : null,
-    hasGrowthComparableRuns: count >= 2 && previous != null,
+    hasGrowthComparableRuns: snapshotFromLatestGlobalRun && count >= 2 && previous != null,
     productId: product.productId,
     nome: (product.name ?? "—").trim() || "—",
     nomeLista: line.nome,

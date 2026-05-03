@@ -26,7 +26,7 @@ function sortRecentNewestFirst(list) {
   });
 }
 
-/** @typedef {{ loading?: boolean, preco?: unknown, vendas?: unknown, rating?: unknown, nome?: string, error?: string | null }} RowDetail */
+/** @typedef {{ loading?: boolean, preco?: unknown, vendas?: unknown, rating?: unknown, nome?: string, error?: string | null, workspaceNote?: string | null }} RowDetail */
 
 const btnBase = {
   padding: "0.28rem 0.55rem",
@@ -117,7 +117,7 @@ export default function HandsOnPage() {
     setDetails((prev) => {
       const next = { ...prev };
       for (const id of ids) {
-        next[id] = { ...next[id], loading: true, error: next[id]?.error ?? null };
+        next[id] = { ...next[id], loading: true, error: next[id]?.error ?? null, workspaceNote: next[id]?.workspaceNote ?? null };
       }
       return next;
     });
@@ -148,13 +148,24 @@ export default function HandsOnPage() {
         const next = { ...prev };
         for (const r of results) {
           if (r.ok && r.payload) {
+            /** @type {Record<string, unknown>} */
+            const p = r.payload;
+            const fromLatest = p.snapshotFromLatestGlobalRun;
+            const note =
+              typeof fromLatest === "boolean" &&
+              !fromLatest &&
+              typeof p.deltaHint === "string" &&
+              p.deltaHint.trim() !== ""
+                ? p.deltaHint
+                : null;
             next[r.id] = {
               loading: false,
-              preco: r.payload.preco ?? "—",
-              vendas: r.payload.vendas ?? "—",
-              rating: r.payload.rating ?? "—",
-              nome: typeof r.payload.nome === "string" ? r.payload.nome : undefined,
-              error: null
+              preco: p.preco ?? "—",
+              vendas: p.vendas ?? "—",
+              rating: p.rating ?? "—",
+              nome: typeof p.nome === "string" ? p.nome : undefined,
+              error: null,
+              workspaceNote: note
             };
           } else if (!r.ok) {
             next[r.id] = {
@@ -162,7 +173,8 @@ export default function HandsOnPage() {
               preco: "—",
               vendas: "—",
               rating: "—",
-              error: typeof r.err === "string" ? r.err : "—"
+              error: typeof r.err === "string" ? r.err : "—",
+              workspaceNote: null
             };
           }
         }
@@ -407,6 +419,11 @@ export default function HandsOnPage() {
                     {d?.error ? (
                       <p style={{ margin: "0.35rem 0 0", fontSize: "0.65rem", opacity: 0.75, color: "#f0a08a", lineHeight: 1.35 }}>
                         API: {d.error.length > 160 ? `${d.error.slice(0, 157)}…` : d.error}
+                      </p>
+                    ) : null}
+                    {!d?.error && d?.workspaceNote ? (
+                      <p style={{ margin: "0.35rem 0 0", fontSize: "0.63rem", opacity: 0.78, color: "#9db4c8", lineHeight: 1.35 }}>
+                        {d.workspaceNote.length > 200 ? `${d.workspaceNote.slice(0, 197)}…` : d.workspaceNote}
                       </p>
                     ) : null}
                   </div>
