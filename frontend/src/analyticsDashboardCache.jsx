@@ -62,19 +62,17 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
   }, [current, filterKey]);
 
   /**
-   * Analytics por categoria: carrega o separador actual ao abrir ou ao mudar de separador
-   * (evita depender só do botão «Carregar dados»).
-   * Analytics global mantém carregamento manual.
+   * Carrega o separador activo ao abrir a vista ou ao mudar de separador (global e por categoria).
+   * «Carregar dados» refresca apenas o separador actual.
    */
   useEffect(() => {
-    if (filterKey === "") return;
     if (!current) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     const path = current.path;
     const cacheKey = current.key;
-    const q = `?categoryUrl=${encodeURIComponent(filterKey)}`;
+    const q = filterKey !== "" ? `?categoryUrl=${encodeURIComponent(filterKey)}` : "";
     void (async () => {
       try {
         const json = await apiFetch(`${path}${q}`);

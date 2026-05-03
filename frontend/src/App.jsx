@@ -2023,8 +2023,10 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
             dados importados.
           </p>
           <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
-            Ao voltar do <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, os dados já carregados
-            mantêm-se nesta sessão — use <strong>Carregar dados</strong> só quando quiser actualizar da API.
+            O separador activo <strong>carrega automaticamente</strong> ao abrir o Analytics ou ao mudar de separador. Use{" "}
+            <strong>Carregar dados</strong> para actualizar só o separador actual a partir da API. Ao voltar do{" "}
+            <strong>workspace do produto</strong> ou de <strong>Produtos em análise</strong>, o que já estava em cache
+            mantém-se na sessão até recarregar ou mudar de vista.
           </p>
         </>
       )}
