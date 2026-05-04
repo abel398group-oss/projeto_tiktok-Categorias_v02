@@ -10,8 +10,8 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
-    /** Se 5173 estiver ocupada, o Vite usa outra (ex. 5174). Abre o URL indicado no terminal. */
-    strictPort: false,
+    /** Mantém sempre 5173: se estiver ocupada, o comando falha (evita abrir outra porta por engano e quebrar o proxy). Libertar: encerra outros `vite` ou `npx kill-port 5173`. */
+    strictPort: true,
     proxy: {
       "/analytics": { target: "http://127.0.0.1:3333", changeOrigin: true },
       "/health": { target: "http://127.0.0.1:3333", changeOrigin: true }

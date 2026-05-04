@@ -1,5 +1,7 @@
 # Deploy com Docker (modo simples)
 
+**Desenvolvimento:** Postgres só no PC — `docker-compose.postgres-local.yml` e `npm run db:docker:*` (ver `FLUXO.md`); **não** é o mesmo ficheiro que o stack abaixo.
+
 Um contentor corre a **API** (Node + Prisma); outro o **Nginx** com o build do **React** e proxy de `/analytics` e `/health` para a API.
 
 ## Requisitos

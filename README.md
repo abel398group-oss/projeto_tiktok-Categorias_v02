@@ -15,6 +15,28 @@ Scraper de categorias do TikTok Shop (Node.js, Puppeteer) com saída em `output/
 - Node.js >= 20
 - npm
 
+### Primeira vez local (painel + API)
+
+**Pré-requisito:** Docker Desktop (Windows/Mac) ou Docker Engine a correr, se usares Postgres local do repo (`npm run db:docker:*`).
+
+```bash
+npm install
+(cd frontend && npm install)
+npm run setup:local
+npm run db:docker:bootstrap   # Postgres em Docker na porta host 5433 + migrações Prisma (primeira vez)
+npm run db:check               # deve mostrar «Ligação à base OK»
+```
+
+O `.env.example` já define **`DATABASE_URL`** para essa base local (`tiktok_shop_dev`). Se o teu `.env` era antigo com `...@HOST:5432`, copia a línea **`DATABASE_URL=`** do `.env.example` para o teu `.env`.
+
+Opcionalmente importa dados: `npm run db:import:output` (com `output/dados_produtos.json` já gerados).
+
+```bash
+npm run dev:all
+```
+
+Painel em **`http://localhost:5173/`** (`strictPort` — se falhar, `npx kill-port 5173`).
+
 ## CI / Testes automáticos
 
 O GitHub Actions executa, em cada push e pull request:
@@ -111,7 +133,7 @@ npm run dev:all
 ```
 
 - **API** → por defeito **`http://127.0.0.1:3333`** (`npm run analytics:api` atrás de `api:dev`).
-- **Frontend** → normalmente **`http://localhost:5173/`** (Vite tenta abrir o browser; se **5173** estiver ocupada, o Vite pode arrancar em **outra porta** — vê o URL no terminal, ex. `http://localhost:5174/`).
+- **Frontend** → **`http://localhost:5173/`** (configuração **`strictPort`** : se 5173 estiver ocupada o Vite falha; liberta a porta ou encerra outro `vite`).
 
 **Pré-requisitos**
 

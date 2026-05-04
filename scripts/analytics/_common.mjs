@@ -2,7 +2,7 @@
 export function requireDatabaseUrl() {
   if (!process.env.DATABASE_URL?.trim()) {
     console.error(
-      "DATABASE_URL não definida. Configure .env ou execute: node --env-file=.env scripts/analytics/<scripto>.mjs"
+      "DATABASE_URL não definida. Copie .env.example → .env (npm run setup:local) e defina DATABASE_URL."
     );
     throw new Error("DATABASE_URL missing");
   }

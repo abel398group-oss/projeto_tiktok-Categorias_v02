@@ -17,7 +17,7 @@ npm run analytics:api
 Ou directamente:
 
 ```bash
-node --env-file=.env scripts/analytics/server.mjs
+node --import ./scripts/load-root-env.mjs scripts/analytics/server.mjs
 ```
 
 Por defeito escuta em **`127.0.0.1:3333`**. Sobrescrever:
