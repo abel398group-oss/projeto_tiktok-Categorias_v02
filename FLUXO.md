@@ -3,20 +3,21 @@
 ## Comandos
 
 1. `npm install` (deps, raiz uma vez)
-2. `npm run coleta:completa:db` (coleta completa → Postgres)
-3. `npm run prisma:studio` (ver BD no browser)
-4. `npm run dev:all` (API + painel mesmo terminal)
-5. `npm run db:import:output` (só importar JSON já gerado)
-6. `npm run coleta:db` (grelha rápida → Postgres)
-7. `npm run coleta:completa` (JSON com PDP, sem import)
-8. `npm run coleta:completa:login:db` (completa com browser/login)
-9. `npm run analytics:product-score` (relatório score no terminal)
-10. `npm run analytics:api` (só servidor API)
-11. `cd frontend && npm run dev` (só Vite — API noutro terminal)
-12. `npm test` (testes scrape)
-13. `npm run validate:schemas` (validar JSON vs schema)
-14. `npm run validate:db-vs-json` (comparar BD vs JSON)
-15. `npm start` (completa + score no fim)
+2. `npm run setup:local` (`.env` + `frontend/.env` a partir dos exemplos — primeira vez)
+3. `npm run coleta:completa:db` (coleta completa → Postgres)
+4. `npm run prisma:studio` (ver BD no browser)
+5. `npm run dev:all` (API + painel mesmo terminal)
+6. `npm run db:import:output` (só importar JSON já gerado)
+7. `npm run coleta:db` (grelha rápida → Postgres)
+8. `npm run coleta:completa` (JSON com PDP, sem import)
+9. `npm run coleta:completa:login:db` (completa com browser/login)
+10. `npm run analytics:product-score` (relatório score no terminal)
+11. `npm run analytics:api` (só servidor API)
+12. `cd frontend && npm run dev` (só Vite — API noutro terminal)
+13. `npm test` (testes scrape)
+14. `npm run validate:schemas` (validar JSON vs schema)
+15. `npm run validate:db-vs-json` (comparar BD vs JSON)
+16. `npm start` (completa + score no fim)
 
 ---
 
@@ -28,7 +29,12 @@ Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser
 
 ```bash
 npm install
+npm run setup:local   # cria .env e frontend/.env a partir dos .env.example (se ainda não existirem)
 ```
+
+**Postgres:** o modelo actual do `.env.example` usa Postgres **Docker** local na porta **`5433`** (`tiktok_dev` / `tiktok_shop_dev`). Depois do `setup:local`, fluxo típico: **`npm run db:docker:bootstrap`**, **`npm run db:check`**. Para Postgres remoto (ex. DigitalOcean), comenta a `DATABASE_URL` local e põe a URI certa (**`sslmode=require`**, porta **25060**).
+
+As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`frontend/.env`) vêm alinhadas nos exemplos (`uma-chave-local`). Se `.env` ainda tinha **`...@HOST:5432`** (modelo antigo), atualiza só a línea **`DATABASE_URL=`** conforme `.env.example` actual.
 
 ### Coleta (duas categorias) + JSON
 
@@ -64,9 +70,16 @@ npm install
 
 | Situação | Comando |
 |---------|---------|
+| Subir **Postgres só local** (Docker, porta host **5433**) | `npm run db:docker:up` |
+| Esperar porta 5433 (diagnóstico) | `npm run db:docker:wait` |
+| Postgres local **+ migrações** + generate (primeira vez) | `npm run db:docker:bootstrap` |
+| Parar Postgres local Docker | `npm run db:docker:down` |
 | Importar `output/dados_*.json` → Postgres (isolado) | `npm run db:import:output` |
+| Testar ligação Postgres / `DATABASE_URL` (diagnóstico) | `npm run db:check` |
 | Interface web para ver dados (`localhost:5555` típico) | `npm run prisma:studio` |
 | Gerar cliente Prisma | `npm run prisma:generate` |
+
+**`npm run db:docker:bootstrap`** corrige automaticamente **`DATABASE_URL`** se ainda for o placeholder **`HOST:5432`**, depois faz *up* Docker + migrações + `generate`. **Erro EPERM** no Windows ao `generate`: fecha `dev:all`, apaga a pasta **`node_modules/.prisma`** e corre `npx prisma generate` outra vez (OneDrive ou antivírus bloqueiam o `.dll`).
 
 ### Analytics no terminal (CLI, precisa `DATABASE_URL` + `.env`)
 
@@ -167,7 +180,7 @@ npm install
 npm run dev
 ```
 
-Por defeito **http://localhost:5173/** (outra porta se 5173 estiver ocupada — vê o URL no terminal).
+Por defeito **http://localhost:5173/** (`strictPort`: se 5173 estiver ocupada o `npm run dev` falha — liberta a porta primeiro).
 
 ### 6. PDP / `fotos_pdp`
 

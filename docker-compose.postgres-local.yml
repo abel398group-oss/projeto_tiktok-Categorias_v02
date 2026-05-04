@@ -1,0 +1,27 @@
+# Postgres só para desenvolvimento local — não faz parte do deploy Droplet/stack API+web.
+# Uso:
+#   npm run db:docker:up
+#   npm run db:docker:bootstrap   # espera porta + prisma migrate deploy
+#
+# Credenciais fixas apenas para dev local (fracas de propósito). Porta host 5433 → evita choque com Postgres já instalado na 5432.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tiktok-shop-postgres-local
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: tiktok_dev
+      POSTGRES_PASSWORD: tiktok_dev_local
+      POSTGRES_DB: tiktok_shop_dev
+    volumes:
+      - tiktok_shop_pg_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiktok_dev -d tiktok_shop_dev"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  tiktok_shop_pg_local:

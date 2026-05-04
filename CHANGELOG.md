@@ -7,18 +7,20 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 ### Documentation
 
 - **`FLUXO.md` §9**: comportamento actual do painel (rotas `/`, `/analytics`, `/categoria/…`, `/produto/…`, `/a-mao`, export Spaces, PDP enrich por referência técnica).
-- **`docs/ANALYTICS-API.md`**: `GET /analytics/product-workspace/:id` com fallback de snapshot (último run global vs. snapshot mais recente do produto), campos `snapshotFromLatestGlobalRun` / `globalLatestScrapeRun`; linha **`POST /analytics/pdp-enrich`**; texto de export alinhado ao core Spaces.
+- **`docs/ANALYTICS-API.md`**: `GET /analytics/product-workspace/:id` com fallback de snapshot (último run global vs. snapshot mais recente do produto), campos `snapshotFromLatestGlobalRun` / `globalLatestScrapeRun`; linha **`POST /analytics/pdp-enrich`**; texto de export alinhado ao core Spaces; arranque directo com `node --import ./scripts/load-root-env.mjs …` (substitui `--env-file=.env`).
 - **`frontend/README.md`**: rotas, carregamento automático das abas de relatório, cartões de categorias clicáveis, fluxo Exportar → histórico e **`/a-mao`**.
-- **`README.md`**: apontadores para **`FLUXO.md`** §9 e **`frontend/README.md`** em desenvolvimento rápido; job de CI (`npm test` + `validate:schemas:ci`); validação de schema local vs CI.
+- **`README.md`**: apontadores para **`FLUXO.md`** §9 e **`frontend/README.md`** em desenvolvimento rápido; job de CI (`npm test` + `validate:schemas:ci`); validação de schema local vs CI; secção **Primeira vez local**.
 - **`docs/ANALISE-PROJETO-CURSOR.md`**: stack BD + API + painel actualizada; tabela “o que falta” e resumo executivo revistos; lista de melhorias sem duplicação óbvia.
 - **`.cursor/rules`**: **`frontend-analytics-ui.mdc`** (cache, categorias, Exportar/`a-mao`); **`fluxo-doc-update.mdc`** menciona § do painel no FLUXO.
 - **`docs/ARCHITECTURE.md`**: novo diagrama Mermaid **dados ↔ API ↔ UI** (leitura de fluxo runtime).
 - **`docs/ROADMAP.md`:** API analytics e painel `frontend/` como **v1 entregues**; secção **CI e qualidade** reorganizada; validação de schema no CI com fixtures.
-- **`FLUXO.md`:** tabela *Qualidade / schemas* — `npm run validate:schemas:ci` (reproduz o check do Actions sem `output/`).
+- **`FLUXO.md`:** tabela *Qualidade / schemas* — `npm run validate:schemas:ci` (reproduz o check do Actions sem `output/`); primeira instalação com **`npm run setup:local`**.
 
 ### Added
 
 - **CI (`validate:schemas:ci`):** GitHub Actions passa também a validar `schemas/*.schema.json` contra JSON mínimos em `test/fixtures/schema-ci/` (sem depender de `output/`). Script local: `npm run validate:schemas:ci`; suporte genérico: `node scripts/validate-output-schema.mjs --data-dir <dir>`.
+- **`dotenv` + `scripts/load-root-env.mjs`:** `npm run analytics:api`, `api:dev`, CLIs `analytics:*`, `db:import:output` e cadeias `:db` da coleta carregam `.env` na raiz **se existir** (sem `node --env-file=.env`, que erroava sem ficheiro). **`npm run setup:local`** cria `.env` e `frontend/.env` a partir dos exemplos; exemplos alinham `ANALYTICS_API_KEY` / `VITE_ANALYTICS_API_KEY` (`uma-chave-local`).
+- **Postgres local (Docker só dev):** `docker-compose.postgres-local.yml` (Postgres 16, porta host **5433**), comandos **`npm run db:docker:up`**, **`db:docker:bootstrap`**, **`db:docker:down`**, **`db:docker:wait`**, **`scripts/wait-tcp.mjs`**. O **`.env.example`** define por defeito **`DATABASE_URL`** para essa base local.
 
 ---
 

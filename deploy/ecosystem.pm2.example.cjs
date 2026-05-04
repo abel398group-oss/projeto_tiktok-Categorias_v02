@@ -19,8 +19,7 @@
  *      pm2 save
  *      pm2 startup   # seguir instrução impressa uma vez
  *
- * `--env-file=.env`: igual ao `npm run analytics:api` — exige `.env` com
- * DATABASE_URL, ANALYTICS_API_KEY, etc. (ver .env.example).
+ * `--import ./scripts/load-root-env.mjs`: carrega `.env` na raiz se existir (alinhado a `npm run analytics:api`; evita que o Node falhe se `.env` ainda não foi criado — o processo continua a exigir variáveis válidas para subir a API).
  */
 module.exports = {
   apps: [
@@ -29,7 +28,7 @@ module.exports = {
       cwd: "/opt/projeto_tiktok-Categorias_v02",
       script: "scripts/analytics/server.mjs",
       interpreter: "/usr/bin/node",
-      node_args: "--env-file=.env",
+      node_args: "--import ./scripts/load-root-env.mjs",
       instances: 1,
       exec_mode: "fork",
       autorestart: true,

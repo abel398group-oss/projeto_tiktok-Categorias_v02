@@ -39,7 +39,7 @@ function numEq(a, b) {
 async function main() {
   if (!process.env.DATABASE_URL?.trim()) {
     throw new Error(
-      "DATABASE_URL não definida. Ex.: node --env-file=.env scripts/validate-db-vs-json.mjs"
+      "DATABASE_URL não definida. Corra npm run setup:local e edite .env na raiz."
     );
   }
 
