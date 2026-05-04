@@ -89,7 +89,9 @@ function pickLatestRunMeta(runs) {
  *   lastCollectedAt: string | null,
  *   lastImportedAt: string | null,
  *   lastScrapeRunCreatedAt: string | null,
- *   lastScrapeRunId: string | null
+ *   lastScrapeRunId: string | null,
+ *   lastImportProductCount: number | null,
+ *   lastImportSellerCount: number | null
  * }> }>}
  */
 export async function listImportedCategories(prisma) {
@@ -184,7 +186,8 @@ SELECT * FROM per_product
       lastCollectedAt,
       lastImportedAt,
       lastScrapeRunCreatedAt,
-      lastScrapeRunId: lastScrapeRunId
+      lastScrapeRunId,
+      _productIds: [...b.productIds]
     };
   });
 
@@ -194,5 +197,81 @@ SELECT * FROM per_product
     return tb - ta || (b.totalProducts ?? 0) - (a.totalProducts ?? 0);
   });
 
-  return { categories };
+  await enrichCategoriesWithImportAndSellers(prisma, categories);
+
+  const sanitized = categories.map(({ _productIds: _discard, ...rest }) => rest);
+  return { categories: sanitized };
+}
+
+/**
+ * Produtos / lojas únicos apenas na última scrape run aplicável ao bucket da categoria (paralelo aos cartões na UI).
+ * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {Array<Record<string, unknown> & {
+ *   lastScrapeRunId: string | null,
+ *   _productIds: string[]
+ * }>} categories
+ */
+async function enrichCategoriesWithImportAndSellers(prisma, categories) {
+  const allPid = [...new Set(categories.flatMap((c) => /** @type {string[]} */ (c._productIds)))];
+  const runIds = [
+    ...new Set(
+      categories
+        .map((c) => c.lastScrapeRunId)
+        .filter((x) => x != null && String(x).trim() !== "")
+        .map(String)
+    )
+  ];
+
+  if (allPid.length === 0) {
+    for (const c of categories) {
+      c.lastImportProductCount = null;
+      c.lastImportSellerCount = null;
+      delete c._productIds;
+    }
+    return;
+  }
+
+  const snapshotRows =
+    runIds.length > 0
+      ? await prisma.productSnapshot.findMany({
+          where: {
+            scrapeRunId: { in: runIds },
+            productRefId: { in: allPid }
+          },
+          select: {
+            scrapeRunId: true,
+            productRefId: true,
+            product: { select: { sellerRefId: true } }
+          }
+        })
+      : [];
+
+  for (const c of categories) {
+    const pidSet = new Set(/** @type {string[]} */ (c._productIds));
+    const rid = c.lastScrapeRunId != null ? String(c.lastScrapeRunId) : "";
+
+    /** @type {number | null} */
+    let lastImportProductCount = null;
+    /** @type {number | null} */
+    let lastImportSellerCount = null;
+    if (rid) {
+      let snapN = 0;
+      /** @type {Set<string>} */
+      const sellerRefs = new Set();
+      for (const row of snapshotRows) {
+        if (row.scrapeRunId !== rid || !pidSet.has(row.productRefId)) continue;
+        snapN += 1;
+        const ref = row.product?.sellerRefId;
+        if (ref != null && String(ref).trim() !== "") {
+          sellerRefs.add(String(ref));
+        }
+      }
+      lastImportProductCount = snapN;
+      lastImportSellerCount = sellerRefs.size;
+    }
+
+    c.lastImportProductCount = lastImportProductCount;
+    c.lastImportSellerCount = lastImportSellerCount;
+    delete c._productIds;
+  }
 }

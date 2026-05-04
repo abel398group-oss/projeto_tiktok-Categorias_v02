@@ -328,7 +328,7 @@ a.tk-category-card:hover .tk-category-card__cta {
 
 .tk-category-card__meta > div {
   display: grid;
-  grid-template-columns: 7.2rem 1fr;
+  grid-template-columns: minmax(6rem, 9.35rem) 1fr;
   gap: 0.35rem;
   font-size: 0.74rem;
 }

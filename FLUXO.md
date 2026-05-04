@@ -202,7 +202,7 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 
 ### 9. Painel web — comportamento actual (rápido)
 
-- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). O cartão inteiro é cliclável (`/categoria/...` com estado `categoryUrl`).
+- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). Contagem grande = **produtos únicos na base**; **Última importação** = produtos snapshots na última run da pasta; **Lojas nesta corrida** = lojas distintas só nesses mesmos snapshots (quantidade nesta volta, sem lista de nomes). O cartão inteiro é cliclável (`/categoria/...` com estado `categoryUrl`).
 - **`/analytics`** — Analytics **global**. Os separadores (Top Products, Opportunities, …) **pedem dados à API ao abrir e ao mudar de separador**. O botão **Carregar dados** **actualiza** só o separador activo (útil depois de novo import ou para forçar refresh).
 - **`/categoria/:slug`** — Mesmos relatórios com **`?categoryUrl=...`**; carregamento automático igual ao global.
 - **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`.

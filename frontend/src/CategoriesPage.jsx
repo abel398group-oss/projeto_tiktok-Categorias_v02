@@ -161,9 +161,31 @@ export default function CategoriesPage() {
                     ) : null}
                     <div className="tk-category-card__kpi">
                       <span className="tk-category-card__kpi-val">{n}</span>
-                      <span className="tk-category-card__kpi-label">produtos</span>
+                      <span className="tk-category-card__kpi-label">produtos únicos na base</span>
                     </div>
                     <dl className="tk-category-card__meta">
+                      <div>
+                        <dt title="Snapshots da última importação associados a esta categoria">
+                          Última importação
+                        </dt>
+                        <dd>
+                          {row.lastImportProductCount != null
+                            ? `${Number(row.lastImportProductCount).toLocaleString("pt-BR")} produtos nesta corrida`
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt title="Lojas distintas (produtos ligados à loja na BD) nesta mesma corrida/importação que acima">
+                          Lojas nesta corrida
+                        </dt>
+                        <dd>
+                          {row.lastImportSellerCount != null
+                            ? `${Number(row.lastImportSellerCount).toLocaleString(
+                                "pt-BR"
+                              )} lojas distintas`
+                            : "—"}
+                        </dd>
+                      </div>
                       <div>
                         <dt>Última coleta</dt>
                         <dd>{formatDateTime(row.lastCollectedAt)}</dd>
