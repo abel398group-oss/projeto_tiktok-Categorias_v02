@@ -18,6 +18,8 @@ model ScrapeRun {
   finalUrl          String?  @map("final_url")
   totalProducts     Int?     @map("total_products")
   filterDescription String?  @map("filter_description")
+  /// Origem lógica do run (ex.: quick_scrape por import padrão); não entra no inputHash.
+  runType           String?  @default("unknown") @map("run_type")
   /// SHA-256 hex dos ficheiros consolidados (produtos + lojas); dedupe de importação idempotente.
   inputHash         String?  @unique @map("input_hash")
 

@@ -110,6 +110,18 @@ function computeInputHash(produtosText, lojasTextOrAbsent) {
 }
 
 /**
+ * IMPORT_RUN_TYPE opcional: quick_scrape | pdp_enrich | unknown (por defeito quick_scrape neste importador).
+ * @returns {"quick_scrape" | "pdp_enrich" | "unknown"}
+ */
+function resolveImportRunType() {
+  const v = process.env.IMPORT_RUN_TYPE?.trim().toLowerCase();
+  if (v === "pdp_enrich") return "pdp_enrich";
+  if (v === "unknown") return "unknown";
+  if (v === "quick_scrape" || v === "") return "quick_scrape";
+  return "quick_scrape";
+}
+
+/**
  * @param {import("@prisma/client").PrismaClient} client
  */
 async function importMain() {
@@ -161,6 +173,7 @@ async function importMain() {
       finalUrl: finalUrl,
       totalProducts: total,
       filterDescription: filtro,
+      runType: resolveImportRunType(),
       inputHash
     }
   });

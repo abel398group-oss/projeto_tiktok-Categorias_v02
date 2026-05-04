@@ -79,6 +79,8 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 | Interface web para ver dados (`localhost:5555` típico) | `npm run prisma:studio` |
 | Gerar cliente Prisma | `npm run prisma:generate` |
 
+- **Import opcional:** variável **`IMPORT_RUN_TYPE`** (no `.env` ou na mesma linha do comando): por defeito o import **grava** **`quick_scrape`** em `ScrapeRun.run_type`; usar **`IMPORT_RUN_TYPE=pdp_enrich`** para marcar *enrich* (não altera `input_hash` nem idempotência).
+
 **`npm run db:docker:bootstrap`** corrige automaticamente **`DATABASE_URL`** se ainda for o placeholder **`HOST:5432`**, depois faz *up* Docker + migrações + `generate`. **Erro EPERM** no Windows ao `generate`: fecha `dev:all`, apaga a pasta **`node_modules/.prisma`** e corre `npx prisma generate` outra vez (OneDrive ou antivírus bloqueiam o `.dll`).
 
 ### Analytics no terminal (CLI, precisa `DATABASE_URL` + `.env`)

@@ -169,7 +169,7 @@ Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline r
 
 ### Histórico e auditoria por importação / run
 
-- **`scrape_runs`** (`ScrapeRun`): uma linha **por importação** bem sucedida a partir do consolidado (metadados da coleta + `input_hash` quando aplicável).
+- **`scrape_runs`** (`ScrapeRun`): uma linha **por importação** bem sucedida a partir do consolidado (metadados da coleta + `input_hash` quando aplicável). Campo opcional **`run_type`**: etiqueta da origem lógica do run (import padrão: `quick_scrape`; valores futuros definidos pelo processo que criar o run); **não** entra no cálculo de `input_hash`.
 - **`product_snapshots`** / **`seller_snapshots`**: métricas e campos que mudam no tempo, **por run**; sempre **novas** linhas neste fluxo de import.
 
 - **`raw_payloads`** (`RawPayload`): envelope **`consolidated_output`** com cópia do JSON importado para auditoria (dados frios).
