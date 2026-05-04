@@ -5,6 +5,7 @@ import { AnalyticsDashboardCacheProvider } from "./analyticsDashboardCache.jsx";
 import { AnalyticsDashboard } from "./App.jsx";
 import { categoryDisplayLabel, categoryToPathSegment } from "./CategoriesPage.jsx";
 import { parseCategoryBreadForHeader } from "./mapCategoryUi.js";
+import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
 
 /**
  * Resolve `categorySlug` da URL contra a lista da API ou estado vindo da lista de categorias.
@@ -41,7 +42,10 @@ function titleFromDecodedSegment(decoded) {
       const segs = new URL(s).pathname.split("/").filter(Boolean);
       const cIdx = segs.findIndex((x) => String(x).toLowerCase() === "c");
       if (cIdx >= 0 && segs[cIdx + 1]) {
-        return humanizeHyphenSlug(segs[cIdx + 1]);
+        const slugPart = segs[cIdx + 1];
+        const pt = translateSlugToPt(slugPart);
+        if (pt) return pt;
+        return humanizeHyphenSlug(slugPart);
       }
     } catch {
       /* noop */

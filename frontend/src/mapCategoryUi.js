@@ -3,6 +3,8 @@
  * até quando a API ainda não aplica parse no servidor ou há cache antigo.
  */
 
+import { translateCategoryPathEnToPt } from "./tiktokCategoryLabelsPt.js";
+
 const SHOP_MASTER = "TikTok Shop";
 
 /** @param {string} segment */
@@ -165,4 +167,29 @@ export function mapCategoryTableLabels(masterName, subName) {
   if (parsed) return parsed;
 
   return { mestre, categoria: subRaw.replace(/\?[^\s]+$/, "").trimEnd() };
+}
+
+/**
+ * Cabeçalho analytics por categoria — nomes de pasta em PT quando conhecidos.
+ * @param {{ masterCategory: string, subcategory: string } | null | undefined} bread
+ */
+export function localizeCategoryBread(bread) {
+  if (!bread) return bread;
+  return {
+    masterCategory: translateCategoryPathEnToPt(bread.masterCategory),
+    subcategory: translateCategoryPathEnToPt(bread.subcategory)
+  };
+}
+
+/**
+ * Células mestre · categoria do Mapa, com PT quando disponível na tabela de rótulos.
+ * @param {string | undefined | null} masterName
+ * @param {string | undefined | null} subName
+ */
+export function mapCategoryTableLabelsPt(masterName, subName) {
+  const { mestre, categoria } = mapCategoryTableLabels(masterName, subName);
+  return {
+    mestre: translateCategoryPathEnToPt(mestre),
+    categoria: translateCategoryPathEnToPt(categoria)
+  };
 }
