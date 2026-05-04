@@ -6,6 +6,8 @@ Este ficheiro é a **única** fonte de tarefas objetivas do projeto. Não usar `
 
 Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
+**Radar de ideias (parking list, sem compromisso até virar `- [ ]` aqui):** `docs/RADAR-IDEIAS.md`
+
 **Módulo de preço v1 (abril 2026):** validado manualmente (produtos com e sem desconto, duas categorias) e protegido por testes. **Não** alterar lógica de preço, `normalizeItem` ou campos de desconto na exportação **sem** nova issue/tarefa explícita; qualquer toque nesses trechos: correr `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de preço) e `.cursor/rules/scrape-mjs-patterns.mdc`.
 
 **Módulo de vendas v1 (abril 2026):** após ajuste no `mergeProductById` (máximo `sales_count` entre colisões), **validado manualmente**; **aprovado com ressalva controlada** (feed ≠ pixel-perfect com UI; ver contrato de vendas). **Não** alterar extração/merge de vendas sem tarefa explícita e `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de vendas) e `.cursor/rules/scrape-mjs-patterns.mdc`.
