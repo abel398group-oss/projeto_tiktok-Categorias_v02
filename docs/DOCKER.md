@@ -51,6 +51,35 @@ git pull
 docker compose up -d --build
 ```
 
+### Se `git pull` diz que alterações locais seriam sobrescritas (`docker-compose.yml`, `package-lock.json`, …)
+
+O clone na VM ficou atrás da `origin` e comandos novos (`npm run db:check`, scripts em `scripts/`) **não aparecem** até o `pull` concluir com sucesso.
+
+1. **`cd`** ao directório certo (**sempre** o clone, ex. `/var/www/tiktok-analytics`; **não** correr `npm`/Prisma em `/root` — erro `ENOENT` / `Missing script`).
+2. Ver estado: **`git status`**
+3. Opções (escolher uma):
+
+   - **Guardar e alinhar com o repo (recomendado se não precisares dos diffs na VM):**  
+     **`git stash push -m vm-local -- docker-compose.yml package-lock.json`** (ou **`git stash -u`** se houver mais ficheiros) → **`git pull`** → opcional **`git stash pop`** (resolver conflitos se aparecerem).
+   - **Só queres o que está na `origin` e os ficheiros listados foram alterados por engano:**  
+     **`git restore docker-compose.yml package-lock.json`** (Git ≥ 2.23; equivalente mais antigo: **`git checkout -- docker-compose.yml package-lock.json`**) → **`git pull`**.
+
+4. Depois: **`docker compose up -d --build`** **ou**, se trabalhás na raiz com Node sem Compose para diagnóstico: **`npm install`** → **`npx prisma migrate deploy`** → **`npm run db:check`**.
+
+### Host vs contentor (`prisma`/npm)
+
+No **servidor só com SSH**, usar **`docker compose exec api …`** quando a API está em Compose (entrada faz `migrate deploy`; ver `deploy/docker-api-entrypoint.sh`). O binário **`prisma`** pode não estar no `PATH` do host — usar **`npx prisma …`** dentro do clone **ou** no contentor onde as `node_modules` existem.
+
+### Prisma Studio a partir da VM no teu browser
+
+Studio escuta **`127.0.0.1:5555`** no servidor no `--network host` típico. No **PC**, abrir túnel (noutro terminal local):
+
+```bash
+ssh -L 5555:127.0.0.1:5555 root@<IP-DO-DROPLET>
+```
+
+No servidor: **`npm run prisma:studio`** (ou equivalente no contentor) e **não** interromper com Ctrl+C enquanto quiseres a UI. No browser local: **http://127.0.0.1:5555**.
+
 ## Deploy automático (GitHub Actions)
 
 O workflow `.github/workflows/deploy-droplet-docker.yml` corre em cada **`push`** em **`main`** ou quando carregas **Run workflow** em **Actions**. Faz SSH ao Droplet, alinha o `git` com `origin/main` e corre **`docker compose up -d --build`**.

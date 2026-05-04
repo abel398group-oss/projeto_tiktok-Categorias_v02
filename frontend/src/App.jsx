@@ -11,7 +11,8 @@ import {
   applyProductFilters,
   filtersAreInactive
 } from "./productFilters.js";
-import { mapCategoryTableLabels } from "./mapCategoryUi.js";
+import { localizeCategoryBread, mapCategoryTableLabelsPt } from "./mapCategoryUi.js";
+import { translateCategoryPathEnToPt } from "./tiktokCategoryLabelsPt.js";
 import { ColumnResizeGrip, useColumnWidths } from "./useColumnWidths.jsx";
 import {
   sortMapSubcatsByColumn,
@@ -235,6 +236,12 @@ function asArray(x) {
   return Array.isArray(x) ? x : [];
 }
 
+/** Texto de categoria/subcategoria da API → rótulo PT quando mapeado (sitemap TikTok). */
+function catCellPt(v) {
+  if (v == null || String(v).trim() === "") return "—";
+  return translateCategoryPathEnToPt(String(v));
+}
+
 function TableTop({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
@@ -417,10 +424,10 @@ function TableTop({ data }) {
                   )}
                 </td>
                 <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                  {row.categoriaPrincipal ?? "—"}
+                  {catCellPt(row.categoriaPrincipal)}
                 </td>
                 <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                  {row.subcategoria ?? "—"}
+                  {catCellPt(row.subcategoria)}
                 </td>
                 <td style={tdEllipsis} title={typeof row.loja === "string" ? row.loja : undefined}>
                   {row.loja ?? "—"}
@@ -639,10 +646,10 @@ function TableOpp({ data }) {
               <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.nome}</td>
               <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                {row.categoriaPrincipal ?? "—"}
+                {catCellPt(row.categoriaPrincipal)}
               </td>
               <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                {row.subcategoria ?? "—"}
+                {catCellPt(row.subcategoria)}
               </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
@@ -1057,10 +1064,10 @@ function TableScore({ data }) {
                 </Link>
               </td>
               <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                {row.categoriaPrincipal ?? "—"}
+                {catCellPt(row.categoriaPrincipal)}
               </td>
               <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                {row.subcategoria ?? "—"}
+                {catCellPt(row.subcategoria)}
               </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
@@ -1382,7 +1389,7 @@ function TableCategoryMap({ data }) {
         </thead>
         <tbody>
           {sortedSubcats.map((row, idx) => {
-            const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
+            const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
             return (
               <tr key={row._key}>
                 <td style={{ ...tdStyle, ...tdPosStyle }}>{idx + 1}</td>
@@ -1520,7 +1527,7 @@ function TableCategoryMap({ data }) {
         </thead>
         <tbody>
           {sortedTops.map((row, i) => {
-            const { mestre, categoria } = mapCategoryTableLabels(row.masterName, row.subName);
+            const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
             return (
               <tr key={row.rowKey || i}>
                 <td style={{ ...tdStyle, ...tdPosStyle }}>{i + 1}</td>
@@ -1528,10 +1535,10 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{categoria}</td>
                 <td style={tdStyle}>{row.nome}</td>
                 <td style={{ ...tdStyle, ...tdEllipsis }} title={String(row.categoriaPrincipal ?? "")}>
-                  {row.categoriaPrincipal ?? "—"}
+                  {catCellPt(row.categoriaPrincipal)}
                 </td>
                 <td style={{ ...tdStyle, ...tdEllipsis }} title={String(row.subcategoria ?? "")}>
-                  {row.subcategoria ?? "—"}
+                  {catCellPt(row.subcategoria)}
                 </td>
                 <td style={tdStyle}>{row.score}</td>
                 <td style={tdStyle}>{row.vendas ?? "—"}</td>
@@ -1706,10 +1713,10 @@ function TableScalableSections({ data }) {
         <td style={tdPosStyle}>{i + 1}</td>
         <td>{row.nome}</td>
         <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-          {row.categoriaPrincipal ?? "—"}
+          {catCellPt(row.categoriaPrincipal)}
         </td>
         <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-          {row.subcategoria ?? "—"}
+          {catCellPt(row.subcategoria)}
         </td>
         <td>{row.score}</td>
         <td>{row.vendas ?? "—"}</td>
@@ -1937,6 +1944,11 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
 
   const heading = pageTitle ?? "Analytics (API)";
 
+  const categoryBreadDisplay = useMemo(
+    () => (categoryBread ? localizeCategoryBread(categoryBread) : null),
+    [categoryBread]
+  );
+
   const showSubLine =
     categoryBread &&
     categoryBread.subcategory !== categoryBread.masterCategory &&
@@ -1967,7 +1979,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
       >
         {heading}
       </h1>
-      {variant === "category" && categoryBread ? (
+      {variant === "category" && categoryBread && categoryBreadDisplay ? (
         <div
           style={{
             fontSize: "0.86rem",
@@ -1983,12 +1995,12 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
         >
           <p style={{ margin: "0 0 0.25rem", opacity: 0.92 }}>
             <span style={{ opacity: 0.7 }}>Categoria principal:</span>{" "}
-            <strong>{categoryBread.masterCategory}</strong>
+            <strong>{categoryBreadDisplay.masterCategory}</strong>
           </p>
           {showSubLine ? (
             <p style={{ margin: 0, opacity: 0.92 }}>
               <span style={{ opacity: 0.7 }}>Subcategoria:</span>{" "}
-              <strong>{categoryBread.subcategory}</strong>
+              <strong>{categoryBreadDisplay.subcategory}</strong>
             </p>
           ) : null}
         </div>

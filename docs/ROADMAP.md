@@ -6,6 +6,8 @@ Este ficheiro é a **única** fonte de tarefas objetivas do projeto. Não usar `
 
 Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
+**Radar de ideias (parking list, sem compromisso até virar `- [ ]` aqui):** `docs/RADAR-IDEIAS.md`
+
 **Módulo de preço v1 (abril 2026):** validado manualmente (produtos com e sem desconto, duas categorias) e protegido por testes. **Não** alterar lógica de preço, `normalizeItem` ou campos de desconto na exportação **sem** nova issue/tarefa explícita; qualquer toque nesses trechos: correr `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de preço) e `.cursor/rules/scrape-mjs-patterns.mdc`.
 
 **Módulo de vendas v1 (abril 2026):** após ajuste no `mergeProductById` (máximo `sales_count` entre colisões), **validado manualmente**; **aprovado com ressalva controlada** (feed ≠ pixel-perfect com UI; ver contrato de vendas). **Não** alterar extração/merge de vendas sem tarefa explícita e `npm test`. Ver `docs/ARCHITECTURE.md` (contrato de vendas) e `.cursor/rules/scrape-mjs-patterns.mdc`.
@@ -35,6 +37,7 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Validação local** `npm run validate:schemas` (lê `output/dados_*.json`) e **opção `--data-dir`** em `scripts/validate-output-schema.mjs` para outras pastas
 - [x] **Importador JSON → Postgres v1** (`npm run db:import:output` → `scripts/import-output-to-db.mjs`); identidade com upsert, histórico em snapshots, envelope bruto em `RawPayload`
 - [x] **Proteção contra reimportação duplicada** — `inputHash` (SHA-256 do input consolidado) em `ScrapeRun`; segunda importação do mesmo payload não duplica snapshots
+- [x] **Metadados de origem:** `run_type` em `ScrapeRun` (opcional na BD com default `"unknown"`; import padrão grava **`quick_scrape`**; opcional `IMPORT_RUN_TYPE=pdp_enrich` no mesmo importador) — não altera hash nem relatórios
 - [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities`, `analytics:product-score` — ver `docs/ANALYTICS.md`
 - [x] **API analytics HTTP read-only (v1):** Fastify (`npm run analytics:api`), `scripts/analytics/server.mjs`, `docs/ANALYTICS-API.md`; auth com `ANALYTICS_API_KEY`
 - [x] **Painel web (v1 UI):** Vite + React em `frontend/` — `npm run frontend:dev`; fluxo em `FLUXO.md`

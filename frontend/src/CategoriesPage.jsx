@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "./api.js";
+import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
 
 const EMPTY_LIST_MSG =
   "Nenhuma categoria importada ainda. Rode uma coleta e importe os dados para começar.";
@@ -19,12 +20,19 @@ export function categoryToPathSegment(row) {
 /** Nome curto para a listagem — slug legível quando existe. */
 export function categoryDisplayLabel(row) {
   const slug = row.categorySlug != null ? String(row.categorySlug).trim() : "";
-  if (slug !== "") return slug;
+  if (slug !== "") {
+    const pt = translateSlugToPt(slug);
+    return pt || slug.replace(/-/g, " ").replace(/\s+/g, " ").trim() || slug;
+  }
   try {
     const u = new URL(row.categoryKey.startsWith("http") ? row.categoryKey : `https://${row.categoryKey}`);
     const segs = u.pathname.split("/").filter(Boolean);
     const cIdx = segs.findIndex((s) => String(s).toLowerCase() === "c");
-    if (cIdx >= 0 && segs[cIdx + 1]) return segs[cIdx + 1];
+    if (cIdx >= 0 && segs[cIdx + 1]) {
+      const leaf = String(segs[cIdx + 1]);
+      const pt = translateSlugToPt(leaf);
+      return pt || (leaf.replace(/-/g, " ").replace(/\s+/g, " ").trim() || leaf);
+    }
     return segs[segs.length - 1] || row.categoryKey;
   } catch {
     return row.categoryKey.length > 48 ? `${row.categoryKey.slice(0, 45)}…` : row.categoryKey;
