@@ -13,6 +13,7 @@
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
     "setup:local": "node scripts/setup-local-env.mjs",
     "db:check": "node scripts/check-database-connection.mjs",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:docker:ensure-url": "node scripts/ensure-local-database-url.mjs",
     "db:docker:up": "docker compose -f docker-compose.postgres-local.yml up -d",
     "db:docker:down": "docker compose -f docker-compose.postgres-local.yml down",

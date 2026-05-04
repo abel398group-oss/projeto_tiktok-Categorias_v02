@@ -76,6 +76,8 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 | Parar Postgres local Docker | `npm run db:docker:down` |
 | Importar `output/dados_*.json` → Postgres (isolado) | `npm run db:import:output` |
 | Testar ligação Postgres / `DATABASE_URL` (diagnóstico) | `npm run db:check` |
+| Aplicar migrações pendentes (Postgres já acessível; **sem Docker** ou diagnóstico manual) | `npm run db:migrate:deploy` |
+| Migrações com **Docker no Droplet** | Automáticas: **a** cada arranque do contentor **`api`** corre `prisma migrate deploy` (`deploy/docker-api-entrypoint.sh`); não é preciso comando extra só por causa do Studio |
 | Interface web para ver dados (`localhost:5555` típico) | `npm run prisma:studio` |
 | Gerar cliente Prisma | `npm run prisma:generate` |
 
@@ -212,4 +214,5 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 - Se **`git pull` abortar** por alterações locais (`docker-compose.yml`, `package-lock.json`, …), o código fica desactualizado (ex. sem `db:check`). Ver **`docs/DOCKER.md`** — secção *Se `git pull` diz que alterações locais seriam sobrescritas*.
 - **Prisma Studio** no servidor: no PC usa **`ssh -L 5555:127.0.0.1:5555 …`** e no servidor **`npm run prisma:studio`** sem fechar com Ctrl+C; no browser local **http://127.0.0.1:5555**.
 - Painel: **`http://<IP-DO-DROPLET>:8080/`** (se a porta 80 do host estiver livre, podes definir `COMPOSE_WEB_PORT=80` no `.env`). Saúde: **`curl -s http://127.0.0.1:8080/health`** no servidor.
+- **Migrações:** com Compose, ficam aplicadas quando o **`api`** sobe (**`docker compose up`** / rebuild). Só corres **`npm run db:migrate:deploy`** na VM se trabalhares **sem** contentor contra a mesma `DATABASE_URL` (host → Postgres).
 - CI: **`.github/workflows/deploy-droplet-docker.yml`** — secrets `DROPLET_HOST`, `DROPLET_USER`, `DROPLET_SSH_KEY` (e opcionalmente `DROPLET_DEPLOY_PATH`); no Droplet o `.env` mantém-se à mão (não vem do GitHub).
