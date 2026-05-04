@@ -1,0 +1,32 @@
+---
+description: Analytics API + libs em scripts/analytics — ESM válido; evitar regressão que derruba a API (painel sem dados).
+globs: scripts/analytics/**/*.mjs
+alwaysApply: false
+---
+
+# `scripts/analytics` — sintaxe ESM e arranque da API
+
+O Fastify (**`npm run analytics:api`** / **`dev:all`**) importa libs em **`scripts/analytics/lib/*.mjs`**. Um **syntax error** nesses módulos (ex. **`Illegal return statement`**) faz o processo Node **morrer de imediato** o **Vite** passa a mostrar **`ECONNREFUSED 127.0.0.1:3333`** no proxy (**`/analytics/categories`** e restantes rotas falham).
+
+## Nunca fazer (causa habitual de regressão)
+
+- Deixar **`return`**, **`break`**, **`continue`** ou **`await`** **fora** de uma função de nível de módulo.
+- Cortar/colapsar edições que deixem **corpo órfão** depois do `}` de fecho de **`listImportedCategories`**, **`enrich*`**, etc. (fragmentos de antiga função a seguir **`export async function …`** válida).
+- Fechar **`}`** a menos antes de declarar nova **`async function`** — validar sempre o par **função ↔ chaves**.
+- **`categories-catalog.mjs`:** há **duas** funções bem delimitadas — **`listImportedCategories`** e **`enrichCategoriesWithImportAndSellers`**; nada de lógica “solta” entre elas nem após `return { categories }`.
+
+## Sempre antes de dar a alteração por concluída
+
+1. Correr **`node --check`** no ficheiro editado:
+
+   ```bash
+   node --check scripts/analytics/lib/NOME_DO_FICHEIRO.mjs
+   ```
+
+2. Se tocaste em código importado pela API, opcional rápido: **importação do módulo** (`node -e "import('./scripts/analytics/lib/…').then(()=>console.log('ok'))"` na raiz do repo).
+
+3. Confirmar **`npm run dev:all`** (ou só API): log arranca **`[API]`** sem traceback de syntax; porta **3333** a ouvir.
+
+## Nota UX
+
+Alterações grandes em **`CategoriesPage.jsx`** podem disparar aviso Fast Refresh (**export misto nomeado/default**); isso não derruba a API — apenas um refresh manual pode ser preciso no browser.
