@@ -18,6 +18,7 @@ Não monorepo: um pacote **npm** (não pnpm workspaces). **Scraper:** `src/scrap
 - **`.cursor/docs/README.md`** — índice rápido para a IA.
 - **`.cursor/rules/scrape-mjs-patterns.mdc`** — padrões ao editar o scraper (quando `scrapeCategory.mjs` estiver no contexto).
 - **`.cursor/rules/produto-fotos-json-e-bd.mdc`** — mapeamento **`fotos` / `fotos_pdp`** ↔ **`images` / `pdp_images`** na BD e anti‑regressões.
+- **`.cursor/rules/droplet-docker-prisma.mdc`** — SSH/Droplet, `git pull`, Docker Compose, Prisma Studio (túnel), migrações no *entrypoint* da API (**não regredir** para “migra obrigatório só para Studio” ou `npm` fora do clone).
 
 ## Evolutivo e consistência
 

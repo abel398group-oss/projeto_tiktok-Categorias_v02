@@ -19,7 +19,7 @@ Esta pasta é um **índice para a IA do Cursor** neste repositório. A documenta
 | Scripts npm (headed, debug, caça, peek) | `package.json` |
 | Perfil de login (local, não committar) | `.chrome-tiktok-profile/` (ignorado no git) |
 | Itens a ignorar no commit | `.gitignore` (incl. `output/*` exc. `.gitkeep`) |
-| Regras persistentes do Cursor (convenções) | `.cursor/rules/*.mdc` (ex.: `task-management`, `architecture-context`) |
+| Regras persistentes do Cursor (convenções) | `.cursor/rules/*.mdc` (ex.: `task-management`, `architecture-context`, **`droplet-docker-prisma`** para VM/Docker/Prisma) |
 
 ## Uso
 
