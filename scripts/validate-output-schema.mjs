@@ -1,6 +1,11 @@
 /**
  * Valida `output/dados_produtos.json` e `output/dados_lojas.json` contra `schemas/*.schema.json`.
- * Uso: npm run validate:schemas (a partir da raiz do repositório).
+ * Uso:
+ *   npm run validate:schemas
+ *   npm run validate:schemas:ci  (fixture em test/fixtures/schema-ci/, para CI sem output/)
+ *
+ * Ou: node scripts/validate-output-schema.mjs --data-dir <dir-relativa-à-raiz>
+ *     (o diretório deve conter dados_produtos.json e dados_lojas.json)
  */
 import { readFile, access, constants } from "node:fs/promises";
 import path from "node:path";
@@ -10,18 +15,32 @@ import Ajv2020 from "ajv/dist/2020.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 
-const pairs = [
-  {
-    name: "dados_produtos",
-    dataPath: path.join(root, "output", "dados_produtos.json"),
-    schemaPath: path.join(root, "schemas", "dados_produtos.schema.json")
-  },
-  {
-    name: "dados_lojas",
-    dataPath: path.join(root, "output", "dados_lojas.json"),
-    schemaPath: path.join(root, "schemas", "dados_lojas.schema.json")
+function parseDataDir(argv) {
+  const i = argv.indexOf("--data-dir");
+  if (i === -1 || argv[i + 1] == null || String(argv[i + 1]).trim() === "") {
+    return null;
   }
-];
+  return path.resolve(root, argv[i + 1]);
+}
+
+const dataDir = parseDataDir(process.argv.slice(2));
+
+function buildPairs(baseDirForJson) {
+  return [
+    {
+      name: "dados_produtos",
+      dataPath: path.join(baseDirForJson, "dados_produtos.json"),
+      schemaPath: path.join(root, "schemas", "dados_produtos.schema.json")
+    },
+    {
+      name: "dados_lojas",
+      dataPath: path.join(baseDirForJson, "dados_lojas.json"),
+      schemaPath: path.join(root, "schemas", "dados_lojas.schema.json")
+    }
+  ];
+}
+
+const pairs = dataDir != null ? buildPairs(dataDir) : buildPairs(path.join(root, "output"));
 
 async function fileExists(p) {
   try {
@@ -51,9 +70,11 @@ let hadInvalid = false;
 
 for (const { name, dataPath, schemaPath } of pairs) {
   if (!(await fileExists(dataPath))) {
-    console.error(
-      `Ficheiro em falta: ${path.relative(root, dataPath)}. Gere a coleta (ex.: npm run coleta) ou copie os JSON para output/ antes de validar.`
-    );
+    const hint =
+      dataDir != null
+        ? `Confirme o caminho --data-dir (${path.relative(root, dataDir)}).`
+        : "Gere a coleta (ex.: npm run coleta) ou copie os JSON para output/ antes de validar.";
+    console.error(`Ficheiro em falta: ${path.relative(root, dataPath)}. ${hint}`);
     hadMissingFile = true;
     continue;
   }
@@ -82,5 +103,9 @@ if (hadInvalid) {
 }
 
 if (!hadMissingFile && !hadInvalid) {
-  console.log("Validação concluída: todos os ficheiros de output obedecem ao schema.");
+  console.log(
+    dataDir != null
+      ? "Validação concluída: os ficheiros indicados obedecem ao schema."
+      : "Validação concluída: todos os ficheiros de output obedecem ao schema."
+  );
 }

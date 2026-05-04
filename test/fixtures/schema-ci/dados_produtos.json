@@ -1,0 +1,19 @@
+{
+  "coletado_em": "2026-05-04T12:00:00.000Z",
+  "categoria_url": "https://shop.tiktok.com/br/c/ci-fixture-product/601152",
+  "final_url": "https://shop.tiktok.com/br/c/ci-fixture-product/601152",
+  "status": "ok",
+  "total": 1,
+  "filtro": "ci-fixture-minimal",
+  "itens": [
+    {
+      "product_id": "1732000000000000999",
+      "tem_desconto": false,
+      "nome": "Produto fixture CI",
+      "preco": 19.9,
+      "moeda": "BRL",
+      "preco_original": null,
+      "seller_id": "seller-fixture-001"
+    }
+  ]
+}

@@ -27,24 +27,27 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 
 ## CI e qualidade (repositório)
 
-- [x] **CI simples (GitHub Actions):** em cada push e pull request corre `npm test` (ver `.github/workflows/ci.yml` e `README.md`).
+**v1 actual (no repo):**
+
+- [x] **CI (GitHub Actions):** push e PR — `npm test` **e** `npm run validate:schemas:ci` (fixtures em `test/fixtures/schema-ci/`) — ver `.github/workflows/ci.yml` e `README.md`.
 - [x] Governança mínima do repositório (gitignore, CHANGELOG, ADR, engines, README)
 - [x] **JSON Schema** dos outputs (`schemas/dados_produtos.schema.json`, `schemas/dados_lojas.schema.json`)
-- [x] **Script local** de validação de schema (`npm run validate:schemas` → `scripts/validate-output-schema.mjs`)
+- [x] **Validação local** `npm run validate:schemas` (lê `output/dados_*.json`) e **opção `--data-dir`** em `scripts/validate-output-schema.mjs` para outras pastas
 - [x] **Importador JSON → Postgres v1** (`npm run db:import:output` → `scripts/import-output-to-db.mjs`); identidade com upsert, histórico em snapshots, envelope bruto em `RawPayload`
 - [x] **Proteção contra reimportação duplicada** — `inputHash` (SHA-256 do input consolidado) em `ScrapeRun`; segunda importação do mesmo payload não duplica snapshots
 - [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities`, `analytics:product-score` — ver `docs/ANALYTICS.md`
+- [x] **API analytics HTTP read-only (v1):** Fastify (`npm run analytics:api`), `scripts/analytics/server.mjs`, `docs/ANALYTICS-API.md`; auth com `ANALYTICS_API_KEY`
+- [x] **Painel web (v1 UI):** Vite + React em `frontend/` — `npm run frontend:dev`; fluxo em `FLUXO.md`
 
-**Futuro (não implementar agora):**
+**Futuro — evoluções (não bloqueadores da v1):**
 
 - [ ] **Score** versionado / persistido (tabela ou materialização) e ajuste de pesos por categoria
 - [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
-- [ ] **API** read-only (mesmas métricas)
-- [ ] **Dashboard** consumindo API
 - [ ] Integração **n8n / WhatsApp** via API (sem acesso SQL directo ao Postgres)
 
+**Futuro — qualidade / infra:**
+
 - [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.
-- [ ] **Validação de schema no CI** com **fixture** versionada (ficheiros JSON de exemplo) — o CI continua **sem** depender de `output/` local.
 - [ ] **CI com lint / typecheck** se o projeto adoptar ferramentas (ESLint, TypeScript, etc.) noutro passo.
 - [ ] Hash / dedupe **por categoria ou run** granular, se o fluxo evoluir (hoje é por ficheiro consolidado completo)
 - [ ] Dados frios pesados: `storagePath` (object storage) em vez de JSONB só
@@ -99,9 +102,11 @@ Onde fornecedor ou operador **informa** (fora do feed bruto do marketplace), ent
 
 - admin interno · utilizador vendedor · fornecedor · analista/operador · contas **próprias** da operação (TikTok / loja).
 
-### 7. Front / dashboard (futuro)
+### 7. Front / dashboard
 
-- login · dashboard de produtos · **ranking** de produtos · ficha de produto · ficha de loja/seller · gráficos (vendas, preço, avaliações) · **simulador de viabilidade** · área do fornecedor.
+**Actual (v1):** existe painel em `frontend/` (Vite/React) ligado à API analytics em desenvolvimento — ver `FLUXO.md` e `README.md`; **sem** fluxo de login multi-utilizador ainda.
+
+**Alvo futuro:** login · dashboards adicionais · **ranking** de produtos · ficha de produto · ficha de loja/seller · gráficos avançados (vendas, preço, avaliações) · **simulador de viabilidade** · área do fornecedor.
 
 ### 8. Estratégia multi-marketplace
 
@@ -114,9 +119,9 @@ A arquitetura de dados e análise deve suportar:
 - O scraper TikTok **continua a ser estabilizado**; não alterar pipeline sem necessidade.  
 - **Mantido** o **modelo JSON híbrido** na raiz de `output/` (`dados_produtos` + `dados_lojas`, após consolidação multi-categoria quando aplicável) como **fonte de coleta** e input do importador.  
 - **`dados_lojas.json`** em uso.  
-- **Postgres / Prisma:** esquema em `prisma/schema.prisma`; **importador JSON → base** (`npm run db:import:output`) e **analytics v1** em CLI só leitura (`scripts/analytics/`, ver `docs/ANALYTICS.md`) **já fazem parte do repositório**.  
+- **Postgres / Prisma:** esquema em `prisma/schema.prisma`; **importador JSON → base** (`npm run db:import:output`), **analytics v1** em CLI só leitura (`scripts/analytics/`, ver `docs/ANALYTICS.md`), **API analytics** Fastify e **painel** em `frontend/` **já fazem parte do repositório** (detalhes no `README.md` / `FLUXO.md`).  
 - **Não** priorizar, neste momento, **enriquecimento pesado via PDP** (ex.: `shop_info` rico no HTML do PDP) por **risco** de puzzle / anti‑bot e custo de visitas.  
-- **Próximos macros** (sem ordem fixa; alinhado à secção **Futuro** em CI e qualidade): score **persistido** / versionado e motor de **viabilidade**; **API** read-only e **dashboard**; **expandir categorias** de coleta; fixtures/schema no CI, smoke opcional do browser, dados frios em **object storage** quando fizer sentido.
+- **Próximos macros** (sem ordem fixa; alinhado à secção **Futuro** em CI e qualidade): score **persistido** / versionado e motor de **viabilidade**; fortalecer **painel/API** (auth, features); **expandir categorias** de coleta; smoke opcional do browser em CI, dados frios em **object storage** quando fizer sentido.
 
 ### 10. Regras de proteção (desenvolvimento)
 
@@ -193,15 +198,15 @@ Validação manual: produtos **com** e **sem** desconto em **duas** categorias; 
 
 ## Próximas fases (ordem recomendada, alto nível)
 
-**Já entregues no repositório (contexto):** esquema **Postgres/Prisma**, **importador** JSON → base, **analytics v1** em CLI sobre snapshots, **CI** com `npm test`, **JSON Schema** + validação local — ver secção **CI e qualidade** acima.
+**Já entregues no repositório (contexto):** esquema **Postgres/Prisma**, **importador** JSON → base, **analytics v1** em CLI sobre snapshots, **API analytics** Fastify, **painel** Vite/React, **CI** com `npm test` + **validação de schema com fixtures**, **JSON Schema** + validação local sobre `output/` — ver secção **CI e qualidade** acima.
 
-1. **Manter o scraper estável** (regressão `npm test`; CI em push/PR).  
+1. **Manter o scraper estável** (regressão `npm test`; CI em push/PR com `validate:schemas:ci`).  
 2. **Validar outputs** reais (`dados_produtos`, `dados_lojas`, debug se necessário) e `npm run validate:schemas` / `validate:db-vs-json` quando aplicável.  
 3. **Contrato dos JSONs** — manter `docs/ARCHITECTURE.md` e `schemas/` alinhados quando o pipeline exportado mudar.  
 4. **Testar** mais categorias reais; validar variação de dados e edge cases.  
-5. **Evoluir analytics e score** — heurística persistida / versionada, pesos por categoria; ver itens **Futuro** na secção CI (API, dashboard, viabilidade).  
+5. **Evoluir analytics e score** — heurística persistida / versionada, pesos por categoria; ver itens **Futuro — evoluções** na secção CI (viabilidade, integrações).  
 6. **Otimizar velocidade** da coleta e do import quando houver medição (paralelismo, batch, rate limit — **após** critérios de negócio e sem quebrar idempotência).  
-7. **Front / dashboard** / **API** read-only quando a equipa priorizar (dependências em **Futuro**).
+7. Evoluir **painel / API** (login, relatórios adicionais, hardening) conforme prioridade — v1 já no repositório; ver secção **CI e qualidade** e **Front / dashboard** acima.
 
 Não implica prazos: é **sequência orientadora**; itens 4–7 podem avançar em paralelo onde fizer sentido.
 

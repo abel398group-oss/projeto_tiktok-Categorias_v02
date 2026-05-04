@@ -10,6 +10,7 @@
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
     "test": "node --test test/scrape-regression.test.mjs",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
+    "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
     "pdp:enrich": "node scripts/pdp-enrich-products.mjs",
     "test:spaces": "node --env-file=.env scripts/test-spaces-upload.mjs",
     "export:product-spaces": "node --env-file=.env scripts/export-product-to-spaces.mjs",

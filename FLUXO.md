@@ -98,7 +98,8 @@ npm install
 | Situação | Comando |
 |---------|---------|
 | Testes de regressão do scrape | `npm test` |
-| Validar outputs contra schema | `npm run validate:schemas` |
+| Validar outputs contra schema (precisa `output/dados_*.json`) | `npm run validate:schemas` |
+| Mesmo check de schema que o CI (fixtures, sem `output/`) | `npm run validate:schemas:ci` |
 | Comparar DB vs JSON | `npm run validate:db-vs-json` |
 
 ---

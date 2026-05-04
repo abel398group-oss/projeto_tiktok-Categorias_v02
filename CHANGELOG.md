@@ -9,14 +9,16 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 - **`FLUXO.md` §9**: comportamento actual do painel (rotas `/`, `/analytics`, `/categoria/…`, `/produto/…`, `/a-mao`, export Spaces, PDP enrich por referência técnica).
 - **`docs/ANALYTICS-API.md`**: `GET /analytics/product-workspace/:id` com fallback de snapshot (último run global vs. snapshot mais recente do produto), campos `snapshotFromLatestGlobalRun` / `globalLatestScrapeRun`; linha **`POST /analytics/pdp-enrich`**; texto de export alinhado ao core Spaces.
 - **`frontend/README.md`**: rotas, carregamento automático das abas de relatório, cartões de categorias clicáveis, fluxo Exportar → histórico e **`/a-mao`**.
-- **`README.md`**: apontadores para **`FLUXO.md`** §9 e **`frontend/README.md`** em desenvolvimento rápido.
+- **`README.md`**: apontadores para **`FLUXO.md`** §9 e **`frontend/README.md`** em desenvolvimento rápido; job de CI (`npm test` + `validate:schemas:ci`); validação de schema local vs CI.
 - **`docs/ANALISE-PROJETO-CURSOR.md`**: stack BD + API + painel actualizada; tabela “o que falta” e resumo executivo revistos; lista de melhorias sem duplicação óbvia.
 - **`.cursor/rules`**: **`frontend-analytics-ui.mdc`** (cache, categorias, Exportar/`a-mao`); **`fluxo-doc-update.mdc`** menciona § do painel no FLUXO.
 - **`docs/ARCHITECTURE.md`**: novo diagrama Mermaid **dados ↔ API ↔ UI** (leitura de fluxo runtime).
+- **`docs/ROADMAP.md`:** API analytics e painel `frontend/` como **v1 entregues**; secção **CI e qualidade** reorganizada; validação de schema no CI com fixtures.
+- **`FLUXO.md`:** tabela *Qualidade / schemas* — `npm run validate:schemas:ci` (reproduz o check do Actions sem `output/`).
 
-### Changed
+### Added
 
-- Nenhuma alteração funcional obrigatória nesta entrada — apenas documentação e regras Cursor.
+- **CI (`validate:schemas:ci`):** GitHub Actions passa também a validar `schemas/*.schema.json` contra JSON mínimos em `test/fixtures/schema-ci/` (sem depender de `output/`). Script local: `npm run validate:schemas:ci`; suporte genérico: `node scripts/validate-output-schema.mjs --data-dir <dir>`.
 
 ---
 

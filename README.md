@@ -17,11 +17,14 @@ Scraper de categorias do TikTok Shop (Node.js, Puppeteer) com saída em `output/
 
 ## CI / Testes automáticos
 
-O GitHub Actions executa npm test em push e pull request.  
-Merge só deve ocorrer com testes a verde.  
-Protege módulos críticos: preço, vendas, merge e loja.
+O GitHub Actions executa, em cada push e pull request:
 
-A validação de **schema** dos JSON de saída (`npm run validate:schemas`) é **local** — não corre no CI, para não falhar quando `output/` não existe no clone (ex.: GitHub Actions). No futuro pode integrar-se com ficheiros de fixture.
+- `npm test` (regressão do parser / merge),
+- `npm run validate:schemas:ci` (JSON mínimos em `test/fixtures/schema-ci/` vs `schemas/*.schema.json`).
+
+Merge só deve ocorrer com o job a verde. Isto protege módulos críticos (preço, vendas, merge, loja) e quebras de contrato no schema sem depender de `output/` local.
+
+Para validar uma **coleta real** na tua máquina, usa `npm run validate:schemas` (lê `output/dados_*.json`).
 
 ## Validação de schema dos outputs
 
@@ -32,6 +35,12 @@ npm run validate:schemas
 ```
 
 Correr **depois** de uma coleta que tenha gerado os dois ficheiros na raiz de `output/`, por exemplo após `npm run coleta` ou `npm run coleta:completa`.
+
+Para reproduzir o mesmo check do CI sem `output/`:
+
+```bash
+npm run validate:schemas:ci
+```
 
 ## Importar coleta para o Postgres (Prisma)
 
