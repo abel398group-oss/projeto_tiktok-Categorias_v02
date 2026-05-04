@@ -18,6 +18,7 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 
 ### Added
 
+- **Coleta grelha (`scrapeCategory`):** após o scroll, cliques automáticos opcionais em **View more** / **Ver mais** (env `VIEW_MORE_MAX_CLICKS`, `VIEW_MORE`, `VIEW_MORE_DRAIN_MS`) para carregar mais produtos via o mesmo pipeline XHR + merge.
 - **CI (`validate:schemas:ci`):** GitHub Actions passa também a validar `schemas/*.schema.json` contra JSON mínimos em `test/fixtures/schema-ci/` (sem depender de `output/`). Script local: `npm run validate:schemas:ci`; suporte genérico: `node scripts/validate-output-schema.mjs --data-dir <dir>`.
 - **`dotenv` + `scripts/load-root-env.mjs`:** `npm run analytics:api`, `api:dev`, CLIs `analytics:*`, `db:import:output` e cadeias `:db` da coleta carregam `.env` na raiz **se existir** (sem `node --env-file=.env`, que erroava sem ficheiro). **`npm run setup:local`** cria `.env` e `frontend/.env` a partir dos exemplos; exemplos alinham `ANALYTICS_API_KEY` / `VITE_ANALYTICS_API_KEY` (`uma-chave-local`).
 - **Postgres local (Docker só dev):** `docker-compose.postgres-local.yml` (Postgres 16, porta host **5433**), comandos **`npm run db:docker:up`**, **`db:docker:bootstrap`**, **`db:docker:down`**, **`db:docker:wait`**, **`scripts/wait-tcp.mjs`**. O **`.env.example`** define por defeito **`DATABASE_URL`** para essa base local.

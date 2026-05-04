@@ -160,6 +160,8 @@ export CATEGORY_URL="https://shop.tiktok.com/br/c/..."
 npm run coleta
 ```
 
+**View more (mais produtos na grelha):** por defeito o `scrapeCategory` clica até **8** vezes (máx. **10**) em **View more** / **Ver mais** após o scroll. Desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`; ajustar espera pós-clique: `VIEW_MORE_DRAIN_MS` (ms, default 4500). Ver `docs/ARCHITECTURE.md`.
+
 ### 4. API analytics (GET relatórios + POST export Spaces)
 
 - Arranque: **`npm run analytics:api`**.
