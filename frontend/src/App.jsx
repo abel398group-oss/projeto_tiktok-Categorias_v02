@@ -20,7 +20,9 @@ import {
   sortOppItemsByColumn,
   sortScalableRowsByColumn,
   sortScoreRowsByColumn,
-  sortTopItemsByColumn
+  sortTopItemsByColumn,
+  firstFloat,
+  parseDelta as parseDeltaVendasStr
 } from "./sortUtils.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { SpacesExportActionCell, SpacesExportFeedback, useSpacesExport } from "./spacesExport.jsx";
@@ -114,7 +116,7 @@ function PlainTh({ label, title, resizeColIdx, onGrip }) {
 }
 
 /**
- * Cabeçalho tipo Excel na aba Opportunities: texto do botão ordena (igual aos outros relatórios); ▾ abre filtro por coluna.
+ * Cabeçalho tipo Excel: título ordena; ▾ abre filtro por coluna (lista de valores ou min/máx.).
  * @param {{
  *   label: string,
  *   colKey: string,
@@ -124,17 +126,23 @@ function PlainTh({ label, title, resizeColIdx, onGrip }) {
  *   sortKey: string,
  *   sortDir: SortDir,
  *   onSortLabel: (k: string) => void,
- *   colFilters: typeof OPP_COL_FILTERS_INITIAL,
- *   setColFilters: (u: typeof OPP_COL_FILTERS_INITIAL | ((p: typeof OPP_COL_FILTERS_INITIAL) => typeof OPP_COL_FILTERS_INITIAL)) => void,
+ *   colFilters: Record<string, unknown>,
+ *   setColFilters: (
+ *     u: Record<string, unknown> | ((p: Record<string, unknown>) => Record<string, unknown>)
+ *   ) => void,
  *   menuOpenKey: string | null,
  *   setMenuOpenKey: (k: string | null) => void,
  *   onApplySort: (key: string, dir: SortDir) => void,
  *   datasetRows: readonly Record<string, unknown>[],
+ *   rowMatches: (row: Record<string, unknown>, filters: Record<string, unknown>) => boolean,
+ *   menuHeaderId?: string,
+ *   distinctFieldKey: campo na linha para valores distintos quando difere de colKey,
+ *   quickSortShortcut?: { key: string, dir: SortDir, label: string } | null,
  *   resizeColIdx?: number,
  *   onGrip?: (idx: number) => (e: import("react").MouseEvent) => void
  * }} props
  */
-function OppExcelSortTh({
+function ExcelSortTh({
   label,
   colKey,
   filterMode,
@@ -149,27 +157,36 @@ function OppExcelSortTh({
   setMenuOpenKey,
   onApplySort,
   datasetRows,
+  rowMatches,
+  menuHeaderId,
+  distinctFieldKey,
+  quickSortShortcut = null,
   resizeColIdx,
   onGrip
 }) {
+  const hk = menuHeaderId ?? colKey;
+  const dField = distinctFieldKey ?? colKey;
   const wrapRef = useRef(/** @type {HTMLTableCellElement | null} */ (null));
   const [listNeedle, setListNeedle] = useState("");
-  const open = menuOpenKey === colKey;
+  const open = menuOpenKey === hk;
   const activeSort = sortKey === colKey;
   const resize = resizeColIdx != null && onGrip;
 
   const relaxedForDistinct = useMemo(
-    () => oppFiltersRelaxColumn(colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey),
+    () => excelRelaxColumnFilters(colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey),
     [colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey]
   );
 
   const rowsForDistinct = useMemo(() => {
     return datasetRows.filter((r) =>
-      oppRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), relaxedForDistinct)
+      rowMatches(/** @type {Record<string, unknown>} */ (r), relaxedForDistinct)
     );
-  }, [datasetRows, relaxedForDistinct]);
+  }, [datasetRows, relaxedForDistinct, rowMatches]);
 
-  const distinctValues = useMemo(() => oppDistinctSortedForColumn(rowsForDistinct, colKey), [rowsForDistinct, colKey]);
+  const distinctValues = useMemo(
+    () => oppDistinctSortedForColumn(rowsForDistinct, dField),
+    [rowsForDistinct, dField]
+  );
 
   const filteredDistinct = useMemo(() => {
     const n = listNeedle.trim().toLowerCase();
@@ -235,11 +252,11 @@ function OppExcelSortTh({
 
   const toggleDistinctValue = (/** @type {string} */ opt) => {
     setColFilters((prev) => {
-      const rel = oppFiltersRelaxColumn(prev, colKey, filterMode, rangeMinKey, rangeMaxKey);
+      const rel = excelRelaxColumnFilters(prev, colKey, filterMode, rangeMinKey, rangeMaxKey);
       const subset = datasetRows.filter((r) =>
-        oppRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), rel)
+        rowMatches(/** @type {Record<string, unknown>} */ (r), rel)
       );
-      const full = oppDistinctSortedForColumn(subset, colKey);
+      const full = oppDistinctSortedForColumn(subset, dField);
       const cur = prev[colKey];
       let next = cur === null ? [...full] : [.../** @type {string[]} */ (cur)];
       if (next.includes(opt)) next = next.filter((x) => x !== opt);
@@ -299,7 +316,7 @@ function OppExcelSortTh({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setMenuOpenKey(open ? null : colKey);
+            setMenuOpenKey(open ? null : hk);
           }}
           style={dropdownBtnStyle}
         >
@@ -483,25 +500,38 @@ function OppExcelSortTh({
           >
             Limpar filtro desta coluna
           </button>
-          <button
-            type="button"
-            style={{
-              width: "100%",
-              fontSize: "0.68rem",
-              padding: "0.28rem",
-              cursor: "pointer",
-              border: "1px dashed var(--tk-border)",
-              borderRadius: "var(--tk-radius-sm)",
-              background: "var(--tk-surface-inset)",
-              color: "var(--tk-text-muted)"
-            }}
-            onClick={() => onApplySort("avalMed", "desc")}
-          >
-            Ordenação da lista (rating ↓)
-          </button>
+          {quickSortShortcut ? (
+            <button
+              type="button"
+              style={{
+                width: "100%",
+                fontSize: "0.68rem",
+                padding: "0.28rem",
+                cursor: "pointer",
+                border: "1px dashed var(--tk-border)",
+                borderRadius: "var(--tk-radius-sm)",
+                background: "var(--tk-surface-inset)",
+                color: "var(--tk-text-muted)"
+              }}
+              onClick={() => onApplySort(quickSortShortcut.key, quickSortShortcut.dir)}
+            >
+              {quickSortShortcut.label}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </th>
+  );
+}
+
+/** Cabeçalho Excel na aba Opportunities — atalho rápido ordena por rating médio. */
+function OppExcelSortTh(props) {
+  return (
+    <ExcelSortTh
+      {...props}
+      rowMatches={oppRowMatchesColFilters}
+      quickSortShortcut={{ key: "avalMed", dir: "desc", label: "Ordenação da lista (rating ↓)" }}
+    />
   );
 }
 
@@ -647,6 +677,96 @@ const OPP_COL_FILTERS_INITIAL = {
   avalMedMax: ""
 };
 
+/** Filtros tipo Excel nas outras abas (mesmo modelo: texto/categoria = `null` ou array). */
+const TOP_COL_TEXT_KEYS = /** @type {const} */ (["nome", "categoriaPrincipal", "subcategoria", "loja"]);
+
+const TOP_FILTERS_INITIAL = {
+  nome: null,
+  categoriaPrincipal: null,
+  subcategoria: null,
+  loja: null,
+  precoMin: "",
+  precoMax: "",
+  vendasMin: "",
+  vendasMax: "",
+  ratingMin: "",
+  ratingMax: ""
+};
+
+const SCORE_COL_TEXT_KEYS = /** @type {const} */ (["classific", "nome", "categoriaPrincipal", "subcategoria", "loja"]);
+
+const SCORE_EXCEL_FILTERS_INITIAL = {
+  classific: null,
+  nome: null,
+  categoriaPrincipal: null,
+  subcategoria: null,
+  loja: null,
+  scoreMin: "",
+  scoreMax: "",
+  precoMin: "",
+  precoMax: "",
+  vendasMin: "",
+  vendasMax: "",
+  ratingMin: "",
+  ratingMax: "",
+  deltaMin: "",
+  deltaMax: ""
+};
+
+const MAP_SUB_COL_TEXT_KEYS = /** @type {const} */ (["masterName", "subName", "classification"]);
+
+const MAP_SUB_FILTERS_INITIAL = {
+  masterName: null,
+  subName: null,
+  classification: null,
+  scoreMin: "",
+  scoreMax: "",
+  totalProductsMin: "",
+  totalProductsMax: "",
+  totalSalesMin: "",
+  totalSalesMax: "",
+  avgRatingMin: "",
+  avgRatingMax: "",
+  avgPriceMin: "",
+  avgPriceMax: "",
+  opportunitiesMin: "",
+  opportunitiesMax: ""
+};
+
+const MAP_TOP_COL_TEXT_KEYS = /** @type {const} */ (["masterName", "subName", "nome", "categoriaPrincipal", "subcategoria"]);
+
+const MAP_TOP_FILTERS_INITIAL = {
+  masterName: null,
+  subName: null,
+  nome: null,
+  categoriaPrincipal: null,
+  subcategoria: null,
+  scoreMin: "",
+  scoreMax: "",
+  vendasMin: "",
+  vendasMax: "",
+  ratingMin: "",
+  ratingMax: "",
+  precoMin: "",
+  precoMax: "",
+  deltaMin: "",
+  deltaMax: ""
+};
+
+const SCALE_COL_TEXT_KEYS = /** @type {const} */ (["nome", "categoriaPrincipal", "subcategoria"]);
+
+const SCALE_FILTERS_INITIAL = {
+  nome: null,
+  categoriaPrincipal: null,
+  subcategoria: null,
+  scoreMin: "",
+  scoreMax: "",
+  vendasMin: "",
+  vendasMax: "",
+  ratingMin: "",
+  ratingMax: ""
+};
+
 /**
  * Copia filtros sem restricções na coluna indicada — para lista de valores do menu ▾ (como no Excel).
  * @param {typeof OPP_COL_FILTERS_INITIAL} f
@@ -655,7 +775,7 @@ const OPP_COL_FILTERS_INITIAL = {
  * @param {string} [rkMin]
  * @param {string} [rkMax]
  */
-function oppFiltersRelaxColumn(f, omitColKey, omitMode, rkMin, rkMax) {
+function excelRelaxColumnFilters(f, omitColKey, omitMode, rkMin, rkMax) {
   const o = { ...f };
   if (omitMode === "text" || omitMode === "category") {
     const k = omitColKey;
@@ -742,21 +862,201 @@ function oppRowMatchesColFilters(row, f) {
 }
 
 /**
+ * Listas texto (arrays) ou pares numéricos preenchidos nos filtros Excel.
+ */
+function excelColumnFiltersSomeActive(f, textKeys, rangePairs) {
+  for (let i = 0; i < textKeys.length; i++) {
+    if (Array.isArray(f[textKeys[i]])) return true;
+  }
+  for (let i = 0; i < rangePairs.length; i++) {
+    const [a, b] = rangePairs[i];
+    if (String(f[a] ?? "").trim() !== "" || String(f[b] ?? "").trim() !== "") return true;
+  }
+  return false;
+}
+
+/**
+ * @param {typeof TOP_FILTERS_INITIAL} f filtros estado
+ */
+function topRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.nome, f.nome == null ? null : f.nome)) return false;
+  if (!oppMatchTextAllowlist(row.categoriaPrincipal, f.categoriaPrincipal == null ? null : f.categoriaPrincipal))
+    return false;
+  if (!oppMatchTextAllowlist(row.subcategoria, f.subcategoria == null ? null : f.subcategoria)) return false;
+  if (!oppMatchTextAllowlist(row.loja, f.loja == null ? null : f.loja)) return false;
+
+  const preco = oppNumericCell(row.preco);
+  const pmn = oppParseBoundInput(f.precoMin);
+  const pmx = oppParseBoundInput(f.precoMax);
+  if (pmn != null && (Number.isNaN(preco) || preco < pmn)) return false;
+  if (pmx != null && (Number.isNaN(preco) || preco > pmx)) return false;
+
+  const vendas = oppNumericCell(row.vendas);
+  const vmn = oppParseBoundInput(f.vendasMin);
+  const vmx = oppParseBoundInput(f.vendasMax);
+  if (vmn != null && (Number.isNaN(vendas) || vendas < vmn)) return false;
+  if (vmx != null && (Number.isNaN(vendas) || vendas > vmx)) return false;
+
+  const rating = oppNumericCell(row.avaliacao);
+  const rmn = oppParseBoundInput(f.ratingMin);
+  const rmx = oppParseBoundInput(f.ratingMax);
+  if (rmn != null && (Number.isNaN(rating) || rating < rmn)) return false;
+  if (rmx != null && (Number.isNaN(rating) || rating > rmx)) return false;
+
+  return true;
+}
+
+function topAnyColumnFiltersExcelActive(f) {
+  return excelColumnFiltersSomeActive(f, [...TOP_COL_TEXT_KEYS], [
+    ["precoMin", "precoMax"],
+    ["vendasMin", "vendasMax"],
+    ["ratingMin", "ratingMax"]
+  ]);
+}
+
+/**
+ * @param {typeof SCORE_EXCEL_FILTERS_INITIAL} f
+ */
+function scoreExcelRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.classific, f.classific == null ? null : f.classific)) return false;
+  if (!oppMatchTextAllowlist(row.nome, f.nome == null ? null : f.nome)) return false;
+  if (!oppMatchTextAllowlist(row.categoriaPrincipal, f.categoriaPrincipal == null ? null : f.categoriaPrincipal))
+    return false;
+  if (!oppMatchTextAllowlist(row.subcategoria, f.subcategoria == null ? null : f.subcategoria)) return false;
+  if (!oppMatchTextAllowlist(row.loja, f.loja == null ? null : f.loja)) return false;
+
+  const scoreVal = oppNumericCell(row.score);
+  if (!boundOk(scoreVal, f.scoreMin, f.scoreMax)) return false;
+
+  const preco = oppNumericCell(row.preco);
+  if (!boundOk(preco, f.precoMin, f.precoMax)) return false;
+
+  const vendas = oppNumericCell(row.vendas);
+  if (!boundOk(vendas, f.vendasMin, f.vendasMax)) return false;
+
+  const rat = firstFloat(row.rating != null ? String(row.rating) : undefined);
+  if (!boundOk(rat, f.ratingMin, f.ratingMax)) return false;
+
+  const dn =
+    typeof row.deltaVendas === "string"
+      ? parseDeltaVendasStr(row.deltaVendas)
+      : oppNumericCell(row.deltaVendas);
+  if (!boundOk(dn, f.deltaMin, f.deltaMax)) return false;
+
+  return true;
+}
+
+/** @param {number} val @param {string} rawMin @param {string} rawMax */
+function boundOk(val, rawMin, rawMax) {
+  const mn = oppParseBoundInput(rawMin);
+  const mx = oppParseBoundInput(rawMax);
+  if (mn != null && (Number.isNaN(val) || val < mn)) return false;
+  if (mx != null && (Number.isNaN(val) || val > mx)) return false;
+  return true;
+}
+
+function scoreExcelAnyColumnFiltersActive(f) {
+  return excelColumnFiltersSomeActive(f, [...SCORE_COL_TEXT_KEYS], [
+    ["scoreMin", "scoreMax"],
+    ["precoMin", "precoMax"],
+    ["vendasMin", "vendasMax"],
+    ["ratingMin", "ratingMax"],
+    ["deltaMin", "deltaMax"]
+  ]);
+}
+
+/** @param {Record<string, unknown>} row dados agregados da sub na pasta */
+function mapSubRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.masterName, f.masterName == null ? null : f.masterName)) return false;
+  if (!oppMatchTextAllowlist(row.subName, f.subName == null ? null : f.subName)) return false;
+  if (!oppMatchTextAllowlist(row.classification, f.classification == null ? null : f.classification)) return false;
+
+  if (!boundOk(oppNumericCell(row.score), f.scoreMin, f.scoreMax)) return false;
+  if (!boundOk(oppNumericCell(row.totalProducts), f.totalProductsMin, f.totalProductsMax)) return false;
+  if (!boundOk(oppNumericCell(row.totalSales), f.totalSalesMin, f.totalSalesMax)) return false;
+  if (!boundOk(oppNumericCell(row.avgRating), f.avgRatingMin, f.avgRatingMax)) return false;
+  if (!boundOk(oppNumericCell(row.avgPrice), f.avgPriceMin, f.avgPriceMax)) return false;
+  if (!boundOk(oppNumericCell(row.opportunities), f.opportunitiesMin, f.opportunitiesMax)) return false;
+
+  return true;
+}
+
+function mapSubAnyColumnFiltersExcelActive(f) {
+  return excelColumnFiltersSomeActive(f, [...MAP_SUB_COL_TEXT_KEYS], [
+    ["scoreMin", "scoreMax"],
+    ["totalProductsMin", "totalProductsMax"],
+    ["totalSalesMin", "totalSalesMax"],
+    ["avgRatingMin", "avgRatingMax"],
+    ["avgPriceMin", "avgPriceMax"],
+    ["opportunitiesMin", "opportunitiesMax"]
+  ]);
+}
+
+/** @param {Record<string, unknown>} row linha combinada SKU em destaque */
+function mapTopRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.masterName, f.masterName == null ? null : f.masterName)) return false;
+  if (!oppMatchTextAllowlist(row.subName, f.subName == null ? null : f.subName)) return false;
+  if (!oppMatchTextAllowlist(row.nome, f.nome == null ? null : f.nome)) return false;
+  if (!oppMatchTextAllowlist(row.categoriaPrincipal, f.categoriaPrincipal == null ? null : f.categoriaPrincipal))
+    return false;
+  if (!oppMatchTextAllowlist(row.subcategoria, f.subcategoria == null ? null : f.subcategoria)) return false;
+
+  if (!boundOk(oppNumericCell(row.score), f.scoreMin, f.scoreMax)) return false;
+  if (!boundOk(oppNumericCell(row.vendas), f.vendasMin, f.vendasMax)) return false;
+
+  const rat = firstFloat(row.rating != null ? String(row.rating) : undefined);
+  if (!boundOk(rat, f.ratingMin, f.ratingMax)) return false;
+
+  if (!boundOk(oppNumericCell(row.preco), f.precoMin, f.precoMax)) return false;
+  if (!boundOk(oppNumericCell(row.delta), f.deltaMin, f.deltaMax)) return false;
+
+  return true;
+}
+
+function mapTopAnyColumnFiltersExcelActive(f) {
+  return excelColumnFiltersSomeActive(f, [...MAP_TOP_COL_TEXT_KEYS], [
+    ["scoreMin", "scoreMax"],
+    ["vendasMin", "vendasMax"],
+    ["ratingMin", "ratingMax"],
+    ["precoMin", "precoMax"],
+    ["deltaMin", "deltaMax"]
+  ]);
+}
+
+/** Escalar validados / apostas — mesma estrutura de linha */
+function scaleRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.nome, f.nome == null ? null : f.nome)) return false;
+  if (!oppMatchTextAllowlist(row.categoriaPrincipal, f.categoriaPrincipal == null ? null : f.categoriaPrincipal))
+    return false;
+  if (!oppMatchTextAllowlist(row.subcategoria, f.subcategoria == null ? null : f.subcategoria)) return false;
+
+  if (!boundOk(oppNumericCell(row.score), f.scoreMin, f.scoreMax)) return false;
+  if (!boundOk(oppNumericCell(row.vendas), f.vendasMin, f.vendasMax)) return false;
+
+  const rat = firstFloat(row.rating != null ? String(row.rating) : undefined);
+  if (!boundOk(rat, f.ratingMin, f.ratingMax)) return false;
+
+  return true;
+}
+
+function scaleAnyColumnFiltersExcelActive(f) {
+  return excelColumnFiltersSomeActive(f, [...SCALE_COL_TEXT_KEYS], [
+    ["scoreMin", "scoreMax"],
+    ["vendasMin", "vendasMax"],
+    ["ratingMin", "ratingMax"]
+  ]);
+}
+
+/**
  * Algum filtro de coluna activo na tabela Opportunities (checkboxes/lista ou intervalo numérico).
  * @param {typeof OPP_COL_FILTERS_INITIAL} f
  */
 function oppAnyOppColumnFiltersActive(f) {
-  if (OPP_COL_TEXT_KEYS.some((k) => Array.isArray(f[k]))) return true;
-  if (
-    String(f.precoMin ?? "").trim() !== "" ||
-    String(f.precoMax ?? "").trim() !== "" ||
-    String(f.vendasMin ?? "").trim() !== "" ||
-    String(f.vendasMax ?? "").trim() !== "" ||
-    String(f.avalMedMin ?? "").trim() !== "" ||
-    String(f.avalMedMax ?? "").trim() !== ""
-  )
-    return true;
-  return false;
+  return excelColumnFiltersSomeActive(f, [...OPP_COL_TEXT_KEYS], [
+    ["precoMin", "precoMax"],
+    ["vendasMin", "vendasMax"],
+    ["avalMedMin", "avalMedMax"]
+  ]);
 }
 
 const oppFilterInputStyle = {
@@ -786,9 +1086,15 @@ function TableTop({ data }) {
   const colW = useColumnWidths(CW_TOP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const [expanded, setExpanded] = useState(false);
+  /** Filtros por coluna (linhas já carregadas no painel). */
+  const [topColFilters, setTopColFilters] = useState(() => ({ ...TOP_FILTERS_INITIAL }));
+  /** Qual coluna tem o menu ▾ aberto. */
+  const [topMenuKey, setTopMenuKey] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
     setExpanded(false);
+    setTopColFilters({ ...TOP_FILTERS_INITIAL });
+    setTopMenuKey(null);
   }, [data?.scrapeRun?.id]);
 
   const topIntro = (
@@ -821,10 +1127,19 @@ function TableTop({ data }) {
   /** Alinhado ao relatório Top: primeiro por vendas, maior→menor. */
   const [sort, setSort] = useState(() => ({ key: "vendas", dir: /** @type {SortDir} */ ("desc") }));
 
-  const items = useMemo(() => {
+  const filteredRawTop = useMemo(() => {
     if (rawItems.length === 0) return [];
-    return sortTopItemsByColumn(rawItems, sort.key, sort.dir);
-  }, [rawItems, sort]);
+    return rawItems.filter((row) =>
+      topRowMatchesColFilters(/** @type {Record<string, unknown>} */ (row), topColFilters)
+    );
+  }, [rawItems, topColFilters]);
+
+  const filtersActiveTopExcel = useMemo(() => topAnyColumnFiltersExcelActive(topColFilters), [topColFilters]);
+
+  const items = useMemo(() => {
+    if (filteredRawTop.length === 0) return [];
+    return sortTopItemsByColumn(filteredRawTop, sort.key, sort.dir);
+  }, [filteredRawTop, sort]);
 
   const displayRows = useMemo(() => {
     if (items.length <= TOP_PRODUCTS_VISIBLE_DEFAULT || expanded) {
@@ -837,11 +1152,17 @@ function TableTop({ data }) {
     typeof data?.rankingTotal === "number" && Number.isFinite(data.rankingTotal)
       ? data.rankingTotal
       : items.length;
-  const hasMoreLocally = items.length > TOP_PRODUCTS_VISIBLE_DEFAULT;
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
   }, []);
+
+  const onTopApplySort = useCallback((key, dir) => {
+    setSort({ key, dir });
+    setTopMenuKey(null);
+  }, []);
+
+  const hasMoreLocally = items.length > TOP_PRODUCTS_VISIBLE_DEFAULT;
 
   if (data == null) {
     return (
@@ -881,6 +1202,12 @@ function TableTop({ data }) {
         <strong>página de trabalho</strong> (<code>/produto/…</code>) quando o produto tem <code>productId</code>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {filtersActiveTopExcel && rawItems.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+          Depois dos filtros do ▾ nas colunas: <strong>{filteredRawTop.length}</strong> de {rawItems.length} linha
+          {rawItems.length !== 1 ? "s" : ""}.
+        </p>
+      ) : null}
       {rankingTotal > TOP_PRODUCTS_VISIBLE_DEFAULT ? (
         <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
           <strong>Ranking nesta corrida:</strong> {rankingTotal.toLocaleString("pt-BR")} produto
@@ -900,66 +1227,135 @@ function TableTop({ data }) {
         <thead>
           <tr>
             <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
-            <SortTh
+            <ExcelSortTh
               label="nome"
               colKey="nome"
+              filterMode="text"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={{ key: "vendas", dir: "desc", label: "Ordenação da lista (vendas ↓)" }}
               resizeColIdx={1}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="categoria"
               colKey="categoriaPrincipal"
+              filterMode="category"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={2}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="sub"
               colKey="subcategoria"
+              filterMode="category"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={3}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="loja"
               colKey="loja"
+              filterMode="text"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={4}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="preço"
               colKey="preco"
+              filterMode="range"
+              rangeMinKey="precoMin"
+              rangeMaxKey="precoMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="vendas"
               colKey="vendas"
+              filterMode="range"
+              rangeMinKey="vendasMin"
+              rangeMaxKey="vendasMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="rating"
               colKey="rating"
+              filterMode="range"
+              rangeMinKey="ratingMin"
+              rangeMaxKey="ratingMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={topColFilters}
+              setColFilters={setTopColFilters}
+              menuOpenKey={topMenuKey}
+              setMenuOpenKey={setTopMenuKey}
+              onApplySort={onTopApplySort}
+              datasetRows={rawItems}
+              rowMatches={topRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
@@ -973,7 +1369,17 @@ function TableTop({ data }) {
           </tr>
         </thead>
         <tbody>
-          {displayRows.map((row) => {
+          {items.length === 0 ? (
+            <tr>
+              <td colSpan={10} style={{ padding: "0.75rem 0.65rem", fontSize: "0.82rem", opacity: 0.9 }}>
+                Nenhuma linha com os filtros ▾ actuais.{" "}
+                <button type="button" className="tk-btn-soft" onClick={() => setTopColFilters({ ...TOP_FILTERS_INITIAL })}>
+                  Limpar filtros de coluna
+                </button>
+              </td>
+            </tr>
+          ) : (
+            displayRows.map((row) => {
             const pos = items.indexOf(row) + 1;
             const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
             const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
@@ -1031,7 +1437,8 @@ function TableTop({ data }) {
                 </td>
               </tr>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
       {hasMoreLocally ? (
@@ -1667,13 +2074,34 @@ function TableScore({ data }) {
   const [sort, setSort] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
   const [filterDraft, setFilterDraft] = useState(() => ({ ...INITIAL_FILTER_STATE }));
   const [filterApplied, setFilterApplied] = useState(() => ({ ...INITIAL_FILTER_STATE }));
+  /** Filtros cabeçalho tipo Excel (a jusante do painel de presetes). */
+  const [scoreExcelColFilters, setScoreExcelColFilters] = useState(() => ({ ...SCORE_EXCEL_FILTERS_INITIAL }));
+  const [scoreExcelMenuKey, setScoreExcelMenuKey] = useState(/** @type {string | null} */ (null));
+
+  useEffect(() => {
+    setScoreExcelColFilters({ ...SCORE_EXCEL_FILTERS_INITIAL });
+    setScoreExcelMenuKey(null);
+  }, [data?.scrapeRun?.id]);
 
   const filteredRows = useMemo(() => applyProductFilters(rawRows, filterApplied), [rawRows, filterApplied]);
 
+  const scoreExcelFiltered = useMemo(
+    () =>
+      filteredRows.filter((r) =>
+        scoreExcelRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), scoreExcelColFilters)
+      ),
+    [filteredRows, scoreExcelColFilters]
+  );
+
+  const filtersScoreExcelActive = useMemo(
+    () => scoreExcelAnyColumnFiltersActive(scoreExcelColFilters),
+    [scoreExcelColFilters]
+  );
+
   const rows = useMemo(() => {
-    if (filteredRows.length === 0) return [];
-    return sortScoreRowsByColumn(filteredRows, sort.key, sort.dir);
-  }, [filteredRows, sort]);
+    if (scoreExcelFiltered.length === 0) return [];
+    return sortScoreRowsByColumn(scoreExcelFiltered, sort.key, sort.dir);
+  }, [scoreExcelFiltered, sort]);
 
   const onApplyFilters = useCallback(() => {
     setFilterApplied({ ...filterDraft });
@@ -1686,6 +2114,11 @@ function TableScore({ data }) {
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC));
+  }, []);
+
+  const onScoreExcelApplySort = useCallback((key, dir) => {
+    setSort({ key, dir });
+    setScoreExcelMenuKey(null);
   }, []);
 
   if (data == null) {
@@ -1732,105 +2165,219 @@ function TableScore({ data }) {
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
         Métricas numéricas fazem primeiro clique maior→menor; nome, categoria, sub e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
-        <strong>Ações</strong> não se ordenam.{" "}
+        <strong>Ações</strong> não se ordenam. O menu <strong>▾</strong> nas colunas filtra com lista de valores (tipo Excel) sobre as linhas
+        que ainda passam pelo painel de cima.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {filtersScoreExcelActive && filteredRows.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+          Filtros de coluna ▾: <strong>{scoreExcelFiltered.length}</strong> de {filteredRows.length} linha
+          {filteredRows.length !== 1 ? "s" : ""} após o painel de presets.
+        </p>
+      ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       {filteredRows.length === 0 ? (
         <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros actuais — ajuste os limites ou clique em Limpar.</p>
+      ) : scoreExcelFiltered.length === 0 ? (
+        <p style={{ opacity: 0.88 }}>
+          Nenhuma linha com os filtros ▾ do cabeçalho.{" "}
+          <button type="button" className="tk-btn-soft" onClick={() => setScoreExcelColFilters({ ...SCORE_EXCEL_FILTERS_INITIAL })}>
+            Limpar filtros de coluna
+          </button>
+        </p>
       ) : (
         <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
             <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
-            <SortTh
+            <ExcelSortTh
               label="score"
               colKey="score"
+              filterMode="range"
+              rangeMinKey="scoreMin"
+              rangeMaxKey="scoreMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
               resizeColIdx={1}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="classificação"
               colKey="classific"
+              filterMode="text"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={2}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="nome"
               colKey="nome"
+              filterMode="text"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={3}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="categoria"
               colKey="categoriaPrincipal"
+              filterMode="category"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={4}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="sub"
               colKey="subcategoria"
+              filterMode="category"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="loja"
               colKey="loja"
+              filterMode="text"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={6}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="preço"
               colKey="preco"
+              filterMode="range"
+              rangeMinKey="precoMin"
+              rangeMaxKey="precoMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="vendas"
               colKey="vendas"
+              filterMode="range"
+              rangeMinKey="vendasMin"
+              rangeMaxKey="vendasMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="rating"
               colKey="rating"
+              filterMode="range"
+              rangeMinKey="ratingMin"
+              rangeMaxKey="ratingMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="delta"
               colKey="delta"
+              filterMode="range"
+              rangeMinKey="deltaMin"
+              rangeMaxKey="deltaMax"
               sortKey={sort.key}
               sortDir={sort.dir}
-              onSort={onSort}
+              onSortLabel={onSort}
+              colFilters={scoreExcelColFilters}
+              setColFilters={setScoreExcelColFilters}
+              menuOpenKey={scoreExcelMenuKey}
+              setMenuOpenKey={setScoreExcelMenuKey}
+              onApplySort={onScoreExcelApplySort}
+              datasetRows={filteredRows}
+              rowMatches={scoreExcelRowMatchesColFilters}
+              quickSortShortcut={null}
               resizeColIdx={10}
               onGrip={colW.onGripMouseDown}
             />
@@ -2020,18 +2567,47 @@ function TableCategoryMap({ data }) {
     return rows;
   }, [masters]);
 
+  const [mapSubColFilters, setMapSubColFilters] = useState(() => ({ ...MAP_SUB_FILTERS_INITIAL }));
+  const [mapTopColFilters, setMapTopColFilters] = useState(() => ({ ...MAP_TOP_FILTERS_INITIAL }));
+  const [mapSubMenuKey, setMapSubMenuKey] = useState(/** @type {string | null} */ (null));
+  const [mapTopMenuKey, setMapTopMenuKey] = useState(/** @type {string | null} */ (null));
+
+  useEffect(() => {
+    setMapSubColFilters({ ...MAP_SUB_FILTERS_INITIAL });
+    setMapTopColFilters({ ...MAP_TOP_FILTERS_INITIAL });
+    setMapSubMenuKey(null);
+    setMapTopMenuKey(null);
+  }, [data?.scrapeRun?.id]);
+
   const [sortSub, setSortSub] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
   const [sortTop, setSortTop] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
 
+  const flatSubFiltered = useMemo(
+    () =>
+      flatSubcats.filter((r) =>
+        mapSubRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), mapSubColFilters)
+      ),
+    [flatSubcats, mapSubColFilters]
+  );
+
+  const flatTopFiltered = useMemo(
+    () =>
+      flatTops.filter((r) => mapTopRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), mapTopColFilters)),
+    [flatTops, mapTopColFilters]
+  );
+
+  const mapSubFiltersExcelActive = useMemo(() => mapSubAnyColumnFiltersExcelActive(mapSubColFilters), [mapSubColFilters]);
+  const mapTopFiltersExcelActive = useMemo(() => mapTopAnyColumnFiltersExcelActive(mapTopColFilters), [mapTopColFilters]);
+
   const sortedSubcats = useMemo(() => {
-    if (flatSubcats.length === 0) return [];
-    return sortMapSubcatsByColumn(flatSubcats, sortSub.key, sortSub.dir);
-  }, [flatSubcats, sortSub]);
+    if (flatSubFiltered.length === 0) return [];
+    return sortMapSubcatsByColumn(flatSubFiltered, sortSub.key, sortSub.dir);
+  }, [flatSubFiltered, sortSub]);
 
   const sortedTops = useMemo(() => {
-    if (flatTops.length === 0) return [];
-    return sortMapTopProductsByColumn(flatTops, sortTop.key, sortTop.dir);
-  }, [flatTops, sortTop]);
+    if (flatTopFiltered.length === 0) return [];
+    return sortMapTopProductsByColumn(flatTopFiltered, sortTop.key, sortTop.dir);
+  }, [flatTopFiltered, sortTop]);
 
   const onSortSub = useCallback((k) => {
     setSortSub((s) => toggleSort(s.key, s.dir, k, SORT_MAP_SUB_DESC));
@@ -2039,6 +2615,16 @@ function TableCategoryMap({ data }) {
 
   const onSortTop = useCallback((k) => {
     setSortTop((s) => toggleSort(s.key, s.dir, k, SORT_MAP_TOP_DESC));
+  }, []);
+
+  const onMapSubApplySort = useCallback((key, dir) => {
+    setSortSub({ key, dir });
+    setMapSubMenuKey(null);
+  }, []);
+
+  const onMapTopApplySort = useCallback((key, dir) => {
+    setSortTop({ key, dir });
+    setMapTopMenuKey(null);
   }, []);
 
   if (data == null) {
@@ -2100,96 +2686,213 @@ function TableCategoryMap({ data }) {
         {data.scoreMethod ? <span style={{ opacity: 0.88 }}>{data.scoreMethod}</span> : null}.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {mapSubFiltersExcelActive && flatSubcats.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.45rem" }}>
+          Filtros ▾ (tabela subcategorias): <strong>{flatSubFiltered.length}</strong> de {flatSubcats.length} linha(s).
+        </p>
+      ) : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
         <colgroup>{colWSub.colElements}</colgroup>
         <thead>
           <tr>
             <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colWSub.onGripMouseDown} />
-            <SortTh
+            <ExcelSortTh
               label="mestre"
               colKey="masterName"
+              filterMode="text"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:masterName"
+              quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
               resizeColIdx={1}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="categoria · ID"
               colKey="subName"
+              filterMode="text"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:subName"
+              quickSortShortcut={null}
               resizeColIdx={2}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="score"
               colKey="score"
+              filterMode="range"
+              rangeMinKey="scoreMin"
+              rangeMaxKey="scoreMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:score"
+              quickSortShortcut={null}
               resizeColIdx={3}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="classificação"
               colKey="classification"
+              filterMode="text"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:classification"
+              quickSortShortcut={null}
               resizeColIdx={4}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="produtos"
               colKey="totalProducts"
+              filterMode="range"
+              rangeMinKey="totalProductsMin"
+              rangeMaxKey="totalProductsMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:totalProducts"
+              quickSortShortcut={null}
               resizeColIdx={5}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="vendas (Σ)"
               colKey="totalSales"
+              filterMode="range"
+              rangeMinKey="totalSalesMin"
+              rangeMaxKey="totalSalesMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:totalSales"
+              quickSortShortcut={null}
               resizeColIdx={6}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="rating méd."
               colKey="avgRating"
+              filterMode="range"
+              rangeMinKey="avgRatingMin"
+              rangeMaxKey="avgRatingMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:avgRating"
+              quickSortShortcut={null}
               resizeColIdx={7}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="preço méd."
               colKey="avgPrice"
+              filterMode="range"
+              rangeMinKey="avgPriceMin"
+              rangeMaxKey="avgPriceMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:avgPrice"
+              quickSortShortcut={null}
               resizeColIdx={8}
               onGrip={colWSub.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="oport."
               colKey="opportunities"
+              filterMode="range"
+              rangeMinKey="opportunitiesMin"
+              rangeMaxKey="opportunitiesMax"
               sortKey={sortSub.key}
               sortDir={sortSub.dir}
-              onSort={onSortSub}
+              onSortLabel={onSortSub}
+              colFilters={mapSubColFilters}
+              setColFilters={setMapSubColFilters}
+              menuOpenKey={mapSubMenuKey}
+              setMenuOpenKey={setMapSubMenuKey}
+              onApplySort={onMapSubApplySort}
+              datasetRows={flatSubcats}
+              rowMatches={mapSubRowMatchesColFilters}
+              menuHeaderId="sub:opportunities"
+              quickSortShortcut={null}
               resizeColIdx={9}
               onGrip={colWSub.onGripMouseDown}
             />
           </tr>
         </thead>
         <tbody>
-          {sortedSubcats.map((row, idx) => {
+          {sortedSubcats.length === 0 ? (
+            <tr>
+              <td colSpan={10} style={{ ...tdStyle, padding: "0.75rem 0.45rem" }}>
+                Nenhuma linha com os filtros ▾ actuais.{" "}
+                <button type="button" className="tk-btn-soft" onClick={() => setMapSubColFilters({ ...MAP_SUB_FILTERS_INITIAL })}>
+                  Limpar filtros desta tabela
+                </button>
+              </td>
+            </tr>
+          ) : (
+            sortedSubcats.map((row, idx) => {
             const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
             return (
               <tr key={row._key}>
@@ -2205,7 +2908,8 @@ function TableCategoryMap({ data }) {
               <td style={tdStyle}>{row.opportunities}</td>
             </tr>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
 
@@ -2221,99 +2925,214 @@ function TableCategoryMap({ data }) {
           Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
         </span>
       </p>
+      {mapTopFiltersExcelActive && flatTops.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.45rem" }}>
+          Filtros ▾ (SKU destacados): <strong>{flatTopFiltered.length}</strong> de {flatTops.length} linha(s).
+        </p>
+      ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colWTop.colElements}</colgroup>
         <thead>
           <tr>
             <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colWTop.onGripMouseDown} />
-            <SortTh
+            <ExcelSortTh
               label="mestre"
               colKey="masterName"
+              filterMode="text"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:masterName"
+              quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
               resizeColIdx={1}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="categoria · ID"
               colKey="subName"
+              filterMode="text"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:subName"
+              quickSortShortcut={null}
               resizeColIdx={2}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="nome"
               colKey="nome"
+              filterMode="text"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:nome"
+              quickSortShortcut={null}
               resizeColIdx={3}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="cat. SKU"
               colKey="categoriaPrincipal"
+              filterMode="category"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:categoriaPrincipal"
+              quickSortShortcut={null}
               resizeColIdx={4}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="sub SKU"
               colKey="subcategoria"
+              filterMode="category"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:subcategoria"
+              quickSortShortcut={null}
               resizeColIdx={5}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="score"
               colKey="score"
+              filterMode="range"
+              rangeMinKey="scoreMin"
+              rangeMaxKey="scoreMax"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:score"
+              quickSortShortcut={null}
               resizeColIdx={6}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="vendas"
               colKey="vendas"
+              filterMode="range"
+              rangeMinKey="vendasMin"
+              rangeMaxKey="vendasMax"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:vendas"
+              quickSortShortcut={null}
               resizeColIdx={7}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="rating"
               colKey="rating"
+              filterMode="range"
+              rangeMinKey="ratingMin"
+              rangeMaxKey="ratingMax"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:rating"
+              quickSortShortcut={null}
               resizeColIdx={8}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="preço"
               colKey="preco"
+              filterMode="range"
+              rangeMinKey="precoMin"
+              rangeMaxKey="precoMax"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:preco"
+              quickSortShortcut={null}
               resizeColIdx={9}
               onGrip={colWTop.onGripMouseDown}
             />
-            <SortTh
+            <ExcelSortTh
               label="Δ vendas"
               colKey="delta"
+              filterMode="range"
+              rangeMinKey="deltaMin"
+              rangeMaxKey="deltaMax"
               sortKey={sortTop.key}
               sortDir={sortTop.dir}
-              onSort={onSortTop}
+              onSortLabel={onSortTop}
+              colFilters={mapTopColFilters}
+              setColFilters={setMapTopColFilters}
+              menuOpenKey={mapTopMenuKey}
+              setMenuOpenKey={setMapTopMenuKey}
+              onApplySort={onMapTopApplySort}
+              datasetRows={flatTops}
+              rowMatches={mapTopRowMatchesColFilters}
+              menuHeaderId="top:delta"
+              quickSortShortcut={null}
               resizeColIdx={10}
               onGrip={colWTop.onGripMouseDown}
             />
@@ -2327,7 +3146,17 @@ function TableCategoryMap({ data }) {
           </tr>
         </thead>
         <tbody>
-          {sortedTops.map((row, i) => {
+          {sortedTops.length === 0 ? (
+            <tr>
+              <td colSpan={13} style={{ ...tdStyle, padding: "0.75rem 0.45rem" }}>
+                Nenhuma linha com os filtros ▾ actuais.{" "}
+                <button type="button" className="tk-btn-soft" onClick={() => setMapTopColFilters({ ...MAP_TOP_FILTERS_INITIAL })}>
+                  Limpar filtros desta tabela
+                </button>
+              </td>
+            </tr>
+          ) : (
+            sortedTops.map((row, i) => {
             const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
             return (
               <tr key={row.rowKey || i}>
@@ -2364,7 +3193,8 @@ function TableCategoryMap({ data }) {
                 </td>
               </tr>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
     </>
@@ -2379,18 +3209,55 @@ function TableScalableSections({ data }) {
 
   const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
 
+  const [scaleValColFilters, setScaleValColFilters] = useState(() => ({ ...SCALE_FILTERS_INITIAL }));
+  const [scalePotColFilters, setScalePotColFilters] = useState(() => ({ ...SCALE_FILTERS_INITIAL }));
+  const [scaleValMenuKey, setScaleValMenuKey] = useState(/** @type {string | null} */ (null));
+  const [scalePotMenuKey, setScalePotMenuKey] = useState(/** @type {string | null} */ (null));
+
+  useEffect(() => {
+    setScaleValColFilters({ ...SCALE_FILTERS_INITIAL });
+    setScalePotColFilters({ ...SCALE_FILTERS_INITIAL });
+    setScaleValMenuKey(null);
+    setScalePotMenuKey(null);
+  }, [data?.scrapeRun?.id]);
+
   const [sortVal, setSortVal] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
   const [sortPot, setSortPot] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
 
+  const rawVFiltered = useMemo(
+    () =>
+      rawV.filter((r) =>
+        scaleRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), scaleValColFilters)
+      ),
+    [rawV, scaleValColFilters]
+  );
+
+  const rawPFiltered = useMemo(
+    () =>
+      rawP.filter((r) =>
+        scaleRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), scalePotColFilters)
+      ),
+    [rawP, scalePotColFilters]
+  );
+
   const v = useMemo(() => {
-    if (rawV.length === 0) return [];
-    return sortScalableRowsByColumn(rawV, sortVal.key, sortVal.dir);
-  }, [rawV, sortVal]);
+    if (rawVFiltered.length === 0) return [];
+    return sortScalableRowsByColumn(rawVFiltered, sortVal.key, sortVal.dir);
+  }, [rawVFiltered, sortVal]);
 
   const p = useMemo(() => {
-    if (rawP.length === 0) return [];
-    return sortScalableRowsByColumn(rawP, sortPot.key, sortPot.dir);
-  }, [rawP, sortPot]);
+    if (rawPFiltered.length === 0) return [];
+    return sortScalableRowsByColumn(rawPFiltered, sortPot.key, sortPot.dir);
+  }, [rawPFiltered, sortPot]);
+
+  const scaleValFiltersExcelActive = useMemo(
+    () => scaleAnyColumnFiltersExcelActive(scaleValColFilters),
+    [scaleValColFilters]
+  );
+  const scalePotFiltersExcelActive = useMemo(
+    () => scaleAnyColumnFiltersExcelActive(scalePotColFilters),
+    [scalePotColFilters]
+  );
 
   const onSortV = useCallback((k) => {
     setSortVal((s) => toggleSort(s.key, s.dir, k, SORT_SCALE_DESC));
@@ -2398,6 +3265,16 @@ function TableScalableSections({ data }) {
 
   const onSortP = useCallback((k) => {
     setSortPot((s) => toggleSort(s.key, s.dir, k, SORT_SCALE_DESC));
+  }, []);
+
+  const onScaleValApplySort = useCallback((key, dir) => {
+    setSortVal({ key, dir });
+    setScaleValMenuKey(null);
+  }, []);
+
+  const onScalePotApplySort = useCallback((key, dir) => {
+    setSortPot({ key, dir });
+    setScalePotMenuKey(null);
   }, []);
 
   const escalarIntro = (
@@ -2570,62 +3447,134 @@ function TableScalableSections({ data }) {
           {rawV.length === 0 ? (
             <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;validados&quot;.</p>
           ) : (
+            <>
+              {scaleValFiltersExcelActive && rawV.length > 0 ? (
+                <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+                  Filtros ▾ nesta lista: <strong>{rawVFiltered.length}</strong> de {rawV.length} linha(s).
+                </p>
+              ) : null}
             <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>
                   <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
-                  <SortTh
+                  <ExcelSortTh
                     label="nome"
                     colKey="nome"
+                    filterMode="text"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:nome"
+                    quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
                     resizeColIdx={1}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="categoria"
                     colKey="categoriaPrincipal"
+                    filterMode="category"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:categoriaPrincipal"
+                    quickSortShortcut={null}
                     resizeColIdx={2}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="sub"
                     colKey="subcategoria"
+                    filterMode="category"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:subcategoria"
+                    quickSortShortcut={null}
                     resizeColIdx={3}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="score"
                     colKey="score"
+                    filterMode="range"
+                    rangeMinKey="scoreMin"
+                    rangeMaxKey="scoreMax"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:score"
+                    quickSortShortcut={null}
                     resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="vendas"
                     colKey="vendas"
+                    filterMode="range"
+                    rangeMinKey="vendasMin"
+                    rangeMaxKey="vendasMax"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:vendas"
+                    quickSortShortcut={null}
                     resizeColIdx={5}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="rating"
                     colKey="rating"
+                    filterMode="range"
+                    rangeMinKey="ratingMin"
+                    rangeMaxKey="ratingMax"
                     sortKey={sortVal.key}
                     sortDir={sortVal.dir}
-                    onSort={onSortV}
+                    onSortLabel={onSortV}
+                    colFilters={scaleValColFilters}
+                    setColFilters={setScaleValColFilters}
+                    menuOpenKey={scaleValMenuKey}
+                    setMenuOpenKey={setScaleValMenuKey}
+                    onApplySort={onScaleValApplySort}
+                    datasetRows={rawV}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="val:rating"
+                    quickSortShortcut={null}
                     resizeColIdx={6}
                     onGrip={colW.onGripMouseDown}
                   />
@@ -2638,8 +3587,22 @@ function TableScalableSections({ data }) {
                   <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
-              <tbody>{renderRows(v)}</tbody>
+              <tbody>
+                {v.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
+                      Nenhuma linha com os filtros ▾.{" "}
+                      <button type="button" className="tk-btn-soft" onClick={() => setScaleValColFilters({ ...SCALE_FILTERS_INITIAL })}>
+                        Limpar filtros desta lista
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  renderRows(v)
+                )}
+              </tbody>
             </table>
+            </>
           )}
         </section>
       )}
@@ -2659,62 +3622,134 @@ function TableScalableSections({ data }) {
           {rawP.length === 0 ? (
             <p style={{ opacity: 0.85 }}>Nenhum produto deste top satisfaz as regras de &quot;apostas&quot;.</p>
           ) : (
+            <>
+              {scalePotFiltersExcelActive && rawP.length > 0 ? (
+                <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+                  Filtros ▾ nesta lista: <strong>{rawPFiltered.length}</strong> de {rawP.length} linha(s).
+                </p>
+              ) : null}
             <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>
                   <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
-                  <SortTh
+                  <ExcelSortTh
                     label="nome"
                     colKey="nome"
+                    filterMode="text"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:nome"
+                    quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
                     resizeColIdx={1}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="categoria"
                     colKey="categoriaPrincipal"
+                    filterMode="category"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:categoriaPrincipal"
+                    quickSortShortcut={null}
                     resizeColIdx={2}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="sub"
                     colKey="subcategoria"
+                    filterMode="category"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:subcategoria"
+                    quickSortShortcut={null}
                     resizeColIdx={3}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="score"
                     colKey="score"
+                    filterMode="range"
+                    rangeMinKey="scoreMin"
+                    rangeMaxKey="scoreMax"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:score"
+                    quickSortShortcut={null}
                     resizeColIdx={4}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="vendas"
                     colKey="vendas"
+                    filterMode="range"
+                    rangeMinKey="vendasMin"
+                    rangeMaxKey="vendasMax"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:vendas"
+                    quickSortShortcut={null}
                     resizeColIdx={5}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <SortTh
+                  <ExcelSortTh
                     label="rating"
                     colKey="rating"
+                    filterMode="range"
+                    rangeMinKey="ratingMin"
+                    rangeMaxKey="ratingMax"
                     sortKey={sortPot.key}
                     sortDir={sortPot.dir}
-                    onSort={onSortP}
+                    onSortLabel={onSortP}
+                    colFilters={scalePotColFilters}
+                    setColFilters={setScalePotColFilters}
+                    menuOpenKey={scalePotMenuKey}
+                    setMenuOpenKey={setScalePotMenuKey}
+                    onApplySort={onScalePotApplySort}
+                    datasetRows={rawP}
+                    rowMatches={scaleRowMatchesColFilters}
+                    menuHeaderId="pot:rating"
+                    quickSortShortcut={null}
                     resizeColIdx={6}
                     onGrip={colW.onGripMouseDown}
                   />
@@ -2727,8 +3762,22 @@ function TableScalableSections({ data }) {
                   <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
-              <tbody>{renderRows(p)}</tbody>
+              <tbody>
+                {p.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
+                      Nenhuma linha com os filtros ▾.{" "}
+                      <button type="button" className="tk-btn-soft" onClick={() => setScalePotColFilters({ ...SCALE_FILTERS_INITIAL })}>
+                        Limpar filtros desta lista
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  renderRows(p)
+                )}
+              </tbody>
             </table>
+            </>
           )}
         </section>
       )}

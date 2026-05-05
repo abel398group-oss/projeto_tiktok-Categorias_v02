@@ -41,6 +41,7 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities`, `analytics:product-score` — ver `docs/ANALYTICS.md`
 - [x] **API analytics HTTP read-only (v1):** Fastify (`npm run analytics:api`), `scripts/analytics/server.mjs`, `docs/ANALYTICS-API.md`; auth com `ANALYTICS_API_KEY`
 - [x] **Painel web (v1 UI):** Vite + React em `frontend/` — `npm run frontend:dev`; fluxo em `FLUXO.md`
+- [x] **Painel — filtros tipo Excel nos cabeçalhos (▾):** nas abas Opportunities, Top Products, Product Score, Mapa de categorias e Escalar (`frontend/src/App.jsx`; componente `ExcelSortTh`).
 - [x] **Grelha categoria:** cliques opcionais (default ligado) em **View more** / **Ver mais** após o scroll (`VIEW_MORE_MAX_CLICKS`, `VIEW_MORE`, `VIEW_MORE_DRAIN_MS` em `src/scrapeCategory.mjs`; ver `docs/ARCHITECTURE.md`) — sem alterar merge, XHR nem `normalizeItem`.
 
 **Futuro — evoluções (não bloqueadores da v1):**

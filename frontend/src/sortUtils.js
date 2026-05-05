@@ -13,14 +13,14 @@ function num(x) {
 }
 
 /** @param {string | undefined} s */
-function firstFloat(s) {
+export function firstFloat(s) {
   if (s == null || s === "") return NaN;
   const m = String(s).match(/^([\d.]+)/);
   return m ? parseFloat(m[1]) : NaN;
 }
 
 /** @param {string | undefined} s */
-function parseDelta(s) {
+export function parseDelta(s) {
   if (s == null || s === "—" || String(s).trim() === "") return NaN;
   const n = parseInt(String(s).replace(/[^\d.-]/g, ""), 10);
   return Number.isNaN(n) ? NaN : n;
