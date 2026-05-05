@@ -39,8 +39,8 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | Método | Caminho | Notas |
 |--------|---------|-------|
 | GET | `/health` | Estado do serviço (sem chave, sem base). |
-| GET | `/analytics/top-products` | Equiv. `npm run analytics:top-products` |
-| GET | `/analytics/opportunities` | Equiv. `npm run analytics:opportunities` |
+| GET | `/analytics/top-products` | Query opcional: `categoryUrl`, `limit` (1–10000, defeito 20). Equiv. CLI sem query. |
+| GET | `/analytics/opportunities` | Idem: `categoryUrl`, `limit` (1–10000, defeito 20). |
 | GET | `/analytics/product-score` | Equiv. `npm run analytics:product-score` |
 | GET | `/analytics/new-products` | Equiv. `npm run analytics:new-products` |
 | GET | `/analytics/growth` | Equiv. `npm run analytics:growth` |
@@ -89,7 +89,7 @@ Equivale conceitualmente a `npm run export:product-spaces -- --product-id <id>`;
 - **Sucesso com dados:** objecto JSON alinhado ao relatório (ex.: `items`, `scrapeRun`, `top` no score, etc.). Ver `scripts/analytics/lib/*.mjs` para campos exactos.
 - **Escalar** (`scalable-products`): inclui **`validatedToScale`**, **`potentialBets`** e contagens opcionais como **`scoredProductsAnalyzed`** (linhas pontuadas no último run consideradas antes dos cortes dos dois grupos). Ver `scripts/analytics/scalable-products.mjs`.
 - **Sem dados / vazio:** normalmente HTTP **200** com `items: []` ou `top: []` e `message` explicativa (igual às mensagens da CLI).
-- Definições de métricas e limites (top 20, score top 30, etc.): **`docs/ANALYTICS.md`**.
+- Definições de métricas e limites (Top / Opportunities com `limit`, score top 30, etc.): **`docs/ANALYTICS.md`** e **`docs/ANALYTICS-RELATORIOS-REGRAS.md`**.
 
 ## Exemplo (curl)
 

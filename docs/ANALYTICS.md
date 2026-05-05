@@ -39,7 +39,7 @@ Heurística **simples v1** no **último** run apenas:
 - `sales_count` entre **10** e **300**
 - `price` não nulo
 
-Ordenação: média desc., depois vendas desc. Limite **20**. O campo “motivo” descreve a regra; **não** é garantia comercial nem score oficial.
+Ordenação: média desc., depois vendas desc. **CLI** e **GET** sem query usam **20** linhas por defeito; o **GET** aceita **`limit`** até **10000** (painel web pede milhares com um único pedido). O campo “motivo” descreve a regra; **não** é garantia comercial nem score oficial.
 
 ### `analytics:product-score`
 

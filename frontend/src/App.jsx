@@ -1,6 +1,6 @@
-import { Suspense, lazy, useState, useCallback, useMemo } from "react";
+import { Suspense, lazy, useState, useCallback, useMemo, useEffect } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
-import { AnalyticsDashboardCacheProvider, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
+import { AnalyticsDashboardCacheProvider, TOP_PRODUCTS_UI_FETCH_LIMIT, OPPORTUNITIES_UI_FETCH_LIMIT, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
 import CategoriesPage from "./CategoriesPage.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
@@ -232,6 +232,12 @@ const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
 const CW_MAP_TOP = [48, 92, 138, 138, 76, 76, 52, 68, 62, 62, 52, 82, 56];
 const CW_SCALE = [48, 132, 74, 74, 52, 68, 76, 74, 54];
 
+/** Top Products: linhas compactas até expandir (API pode trazer até `TOP_PRODUCTS_UI_FETCH_LIMIT`). */
+const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
+
+/** Opportunities: igual padrão — API pode trazer até `OPPORTUNITIES_UI_FETCH_LIMIT`. */
+const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
+
 function asArray(x) {
   return Array.isArray(x) ? x : [];
 }
@@ -246,6 +252,11 @@ function TableTop({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [data?.scrapeRun?.id]);
 
   const topIntro = (
     <IntroCard title="Top Products">
@@ -267,8 +278,9 @@ function TableTop({ data }) {
         </ul>
       </div>
       <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
-        Até <strong>20</strong> linhas, ordenação inicial por vendas (maior → menor); dados do snapshot na base —
-        não são tempo real do TikTok.
+        Por defeito <strong>{TOP_PRODUCTS_VISIBLE_DEFAULT}</strong> linhas; use <strong>Ver mais produtos</strong> para o
+        restante na mesma ordem (ordenada inicialmente por vendas; cabeçalhos alteram a ordem das linhas já carregadas).
+        Dados do snapshot na base — não são tempo real do TikTok.
       </div>
     </IntroCard>
   );
@@ -280,6 +292,19 @@ function TableTop({ data }) {
     if (rawItems.length === 0) return [];
     return sortTopItemsByColumn(rawItems, sort.key, sort.dir);
   }, [rawItems, sort]);
+
+  const displayRows = useMemo(() => {
+    if (items.length <= TOP_PRODUCTS_VISIBLE_DEFAULT || expanded) {
+      return items;
+    }
+    return items.slice(0, TOP_PRODUCTS_VISIBLE_DEFAULT);
+  }, [items, expanded]);
+
+  const rankingTotal =
+    typeof data?.rankingTotal === "number" && Number.isFinite(data.rankingTotal)
+      ? data.rankingTotal
+      : items.length;
+  const hasMoreLocally = items.length > TOP_PRODUCTS_VISIBLE_DEFAULT;
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
@@ -323,6 +348,19 @@ function TableTop({ data }) {
         <strong>página de trabalho</strong> (<code>/produto/…</code>) quando o produto tem <code>productId</code>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {rankingTotal > TOP_PRODUCTS_VISIBLE_DEFAULT ? (
+        <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
+          <strong>Ranking nesta corrida:</strong> {rankingTotal.toLocaleString("pt-BR")} produto
+          {rankingTotal !== 1 ? "s" : ""} com <code>vendas</code> ({hasMoreLocally ? "carregamos a lista até o limite do painel …" : "…"})
+          {!hasMoreLocally && data?.truncated !== true ? " (todos listados)." : null}
+          {expanded || !hasMoreLocally
+            ? ` A mostrar ${items.length.toLocaleString("pt-BR")} na tabela (${expanded ? "vista expandida" : "compacta"}).`
+            : null}
+          {!expanded && hasMoreLocally
+            ? ` A vista compacta mostra os primeiros ${TOP_PRODUCTS_VISIBLE_DEFAULT} pela ordenação atual.`
+            : null}
+        </p>
+      ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
@@ -402,14 +440,15 @@ function TableTop({ data }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((row, i) => {
+          {displayRows.map((row) => {
+            const pos = items.indexOf(row) + 1;
             const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
             const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
             const pid = row.productId;
             const hasProductId = pid != null && String(pid).trim() !== "";
             return (
-              <tr key={`${row.productId}-${i}`}>
-                <td style={tdPosStyle}>{i + 1}</td>
+              <tr key={`${row.productId}-${pos}`}>
+                <td style={tdPosStyle}>{pos}</td>
                 <td>
                   {hasProductId ? (
                     <Link
@@ -462,6 +501,35 @@ function TableTop({ data }) {
           })}
         </tbody>
       </table>
+      {hasMoreLocally ? (
+        <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            type="button"
+            className="tk-btn-soft"
+            onClick={() => setExpanded((ex) => !ex)}
+          >
+            {expanded
+              ? "Mostrar só os primeiros 20"
+              : `Ver mais produtos (${(items.length - TOP_PRODUCTS_VISIBLE_DEFAULT).toLocaleString("pt-BR")} seguintes pela ordem atual)`}
+          </button>
+        </div>
+      ) : null}
+      {data?.truncated === true && rankingTotal > items.length ? (
+        <p
+          style={{
+            fontSize: "0.72rem",
+            opacity: 0.72,
+            marginTop: "0.55rem",
+            maxWidth: "44rem",
+            lineHeight: 1.45
+          }}
+        >
+          O servidor devolve até <strong>{TOP_PRODUCTS_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas; nesta corrida
+          há pelo menos <strong>{rankingTotal.toLocaleString("pt-BR")}</strong> produtos com vendas registadas —
+          aumente <code>TOP_PRODUCTS_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisares de lista
+          completa no browser.
+        </p>
+      ) : null}
     </>
   );
 }
@@ -470,13 +538,19 @@ function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [data?.scrapeRun?.id]);
 
   const oppIntro = (
     <IntroCard title="Opportunities">
       <p style={introLead}>
         <strong>Produtos bem avaliados que ainda não são grandes volumes.</strong> Seleccionados automaticamente na última
         importação com regras simples: <strong>avaliação média alta</strong>, <strong>mínimo de avaliações</strong>, vendas na{" "}
-        <strong>faixa intermediária</strong> e <strong>preço definido</strong> — até <strong>20</strong> linhas (detalhes em Analytics v1 nos docs).
+        <strong>faixa intermediária</strong> e <strong>preço definido</strong> — o painel pode carregar bem mais linhas; por
+        defeito mostramos só as primeiras <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> até expandir (detalhes em Analytics v1 nos docs).
       </p>
       <div style={introLabel}>👉 Use para:</div>
       <ul style={introBullet}>
@@ -486,19 +560,25 @@ function TableOpp({ data }) {
       <div style={introLogicBox}>
         <div style={introLogicLabel}>Como funciona (por dentro)</div>
         <ul style={introLogicUl}>
-          <li>último scrape;</li>
+          <li>último scrape (modo global) ou último snapshot por produto por categoria;</li>
           <li>
             filtros na base: <strong>preço</strong> definido; média de avaliação <strong>≥ 4,5</strong>; total de avaliações{" "}
             <strong>≥ 5</strong>; vendas entre <strong>10 e 300</strong>;
           </li>
           <li>
-            ordenação principal: melhor média de avaliação (com desempate por vendas); <strong>máx. 20</strong> linhas.
+            ordenação principal: melhor média de avaliação (desempate por vendas); o servidor pode devolver até o limite do
+            pedido (<code>limit</code>), o quadro usa <strong>Ver mais produtos</strong> para revelar linhas seguintes já
+            carregadas.
           </li>
           <li>
             Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces (credenciais só no servidor — como
             nos outros relatórios com produtos).
           </li>
         </ul>
+      </div>
+      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
+        Por defeito <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> linhas; use <strong>Ver mais produtos</strong> para o restante na mesma
+        ordem (ordenado inicialmente por média de rating; cabeçalhos alteram a ordem já carregada). Dados do snapshot — não são tempo real do TikTok.
       </div>
       <div style={introWarn}>⚠️ É um filtro exploratório — não garante resultado.</div>
     </IntroCard>
@@ -511,6 +591,19 @@ function TableOpp({ data }) {
     if (rawItems.length === 0) return [];
     return sortOppItemsByColumn(rawItems, sort.key, sort.dir);
   }, [rawItems, sort]);
+
+  const displayRows = useMemo(() => {
+    if (items.length <= OPPORTUNITIES_VISIBLE_DEFAULT || expanded) {
+      return items;
+    }
+    return items.slice(0, OPPORTUNITIES_VISIBLE_DEFAULT);
+  }, [items, expanded]);
+
+  const rankingTotal =
+    typeof data?.rankingTotal === "number" && Number.isFinite(data.rankingTotal)
+      ? data.rankingTotal
+      : items.length;
+  const hasMoreLocally = items.length > OPPORTUNITIES_VISIBLE_DEFAULT;
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_OPP_DESC));
@@ -550,9 +643,24 @@ function TableOpp({ data }) {
       {oppIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> (critério principal aqui).
-        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.{" "}
+        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong>
+        abre a <strong>página de trabalho</strong> (<code>/produto/…</code>) quando há <code>productId</code>.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
+      {rankingTotal > OPPORTUNITIES_VISIBLE_DEFAULT ? (
+        <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
+          <strong>Candidatos ao filtro v1 nesta vista:</strong> {rankingTotal.toLocaleString("pt-BR")} produto
+          {rankingTotal !== 1 ? "s" : ""}
+          {!hasMoreLocally && data?.truncated !== true ? " (todos listados)." : null}
+          {hasMoreLocally
+            ? ` Carregamos a lista até o limite do painel (${OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} máx.).`
+            : null}
+          {expanded || !hasMoreLocally ? ` A mostrar ${items.length.toLocaleString("pt-BR")} na tabela (${expanded ? "expandida" : "compacta"}).` : null}
+          {!expanded && hasMoreLocally
+            ? ` A vista compacta mostra os primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT} pela ordenação atual.`
+            : null}
+        </p>
+      ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
@@ -641,42 +749,90 @@ function TableOpp({ data }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((row, i) => (
-            <tr key={`${row.productId}-${i}`}>
-              <td style={tdPosStyle}>{i + 1}</td>
-              <td>{row.nome}</td>
-              <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                {catCellPt(row.categoriaPrincipal)}
-              </td>
-              <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                {catCellPt(row.subcategoria)}
-              </td>
-              <td>{row.loja}</td>
-              <td>{row.preco ?? "—"}</td>
-              <td>{row.vendas ?? "—"}</td>
-              <td>
-                {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
-              </td>
-              <td>{row.motivo ?? "—"}</td>
-              <SpacesExportActionCell
-                productId={row.productId}
-                nome={row.nome}
-                exportingProductId={exportingProductId}
-                exportToSpace={exportToSpace}
-              />
-              <td>
-                {row.link ? (
-                  <a href={row.link} target="_blank" rel="noopener noreferrer">
-                    abrir
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </td>
-            </tr>
-          ))}
+          {displayRows.map((row) => {
+            const pos = items.indexOf(row) + 1;
+            const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
+            const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
+            const pid = row.productId;
+            const hasProductId = pid != null && String(pid).trim() !== "";
+            return (
+              <tr key={`${row.productId}-${pos}`}>
+                <td style={tdPosStyle}>{pos}</td>
+                <td>
+                  {hasProductId ? (
+                    <Link
+                      to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                      title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                      style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                    >
+                      {row.nome ?? "—"}
+                    </Link>
+                  ) : (
+                    <span title={nomeTitle}>{row.nome ?? "—"}</span>
+                  )}
+                </td>
+                <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                  {catCellPt(row.categoriaPrincipal)}
+                </td>
+                <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                  {catCellPt(row.subcategoria)}
+                </td>
+                <td>{row.loja}</td>
+                <td>{row.preco ?? "—"}</td>
+                <td>{row.vendas ?? "—"}</td>
+                <td>
+                  {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
+                </td>
+                <td>{row.motivo ?? "—"}</td>
+                <SpacesExportActionCell
+                  productId={row.productId}
+                  nome={row.nome}
+                  exportingProductId={exportingProductId}
+                  exportToSpace={exportToSpace}
+                />
+                <td>
+                  {row.link ? (
+                    <a href={row.link} target="_blank" rel="noopener noreferrer">
+                      abrir
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      {hasMoreLocally ? (
+        <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            type="button"
+            className="tk-btn-soft"
+            onClick={() => setExpanded((ex) => !ex)}
+          >
+            {expanded
+              ? `Mostrar só os primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT}`
+              : `Ver mais produtos (${(items.length - OPPORTUNITIES_VISIBLE_DEFAULT).toLocaleString("pt-BR")} seguintes pela ordem atual)`}
+          </button>
+        </div>
+      ) : null}
+      {data?.truncated === true && rankingTotal > items.length ? (
+        <p
+          style={{
+            fontSize: "0.72rem",
+            opacity: 0.72,
+            marginTop: "0.55rem",
+            maxWidth: "44rem",
+            lineHeight: 1.45
+          }}
+        >
+          O servidor devolve até <strong>{OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas; há pelo menos{" "}
+          <strong>{rankingTotal.toLocaleString("pt-BR")}</strong> candidatos ao filtro v1 —
+          aumente <code>OPPORTUNITIES_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisares de lista
+          completa no browser.
+        </p>
+      ) : null}
     </>
   );
 }

@@ -4,6 +4,31 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "./api.js";
 
+/** Limite alto só no separador Top Products — API aplica ordenação única e devolve até N linhas (ver `clampTopProductsLimit`). */
+export const TOP_PRODUCTS_UI_FETCH_LIMIT = 5000;
+
+/** Idem para Opportunities (`clampOpportunitiesLimit`). */
+export const OPPORTUNITIES_UI_FETCH_LIMIT = 5000;
+
+/**
+ * @param {string} path
+ * @param {string} filterKey
+ */
+function buildAnalyticsQuery(path, filterKey) {
+  const p = new URLSearchParams();
+  if (filterKey !== "") {
+    p.set("categoryUrl", filterKey);
+  }
+  if (path === "/analytics/top-products") {
+    p.set("limit", String(TOP_PRODUCTS_UI_FETCH_LIMIT));
+  }
+  if (path === "/analytics/opportunities") {
+    p.set("limit", String(OPPORTUNITIES_UI_FETCH_LIMIT));
+  }
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const ANALYTICS_REPORT_TABS = [
   { id: "top", label: "Top Products", path: "/analytics/top-products", key: "top" },
   { id: "opp", label: "Opportunities", path: "/analytics/opportunities", key: "opp" },
@@ -51,7 +76,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     setLoading(true);
     setError(null);
     try {
-      const q = filterKey !== "" ? `?categoryUrl=${encodeURIComponent(filterKey)}` : "";
+      const q = buildAnalyticsQuery(current.path, filterKey);
       const json = await apiFetch(`${current.path}${q}`);
       setCache((c) => ({ ...c, [current.key]: json }));
     } catch (e) {
@@ -72,7 +97,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     setError(null);
     const path = current.path;
     const cacheKey = current.key;
-    const q = filterKey !== "" ? `?categoryUrl=${encodeURIComponent(filterKey)}` : "";
+    const q = buildAnalyticsQuery(path, filterKey);
     void (async () => {
       try {
         const json = await apiFetch(`${path}${q}`);

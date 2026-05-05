@@ -12,7 +12,22 @@ import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 
-const MAX_ROWS = 20;
+export const OPPORTUNITIES_DEFAULT_LIMIT = 20;
+export const OPPORTUNITIES_MAX_LIMIT = 10000;
+
+/** @param {unknown} raw */
+export function clampOpportunitiesLimit(raw) {
+  const n =
+    typeof raw === "number" && Number.isFinite(raw)
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+        ? Number(raw.trim())
+        : NaN;
+  if (!Number.isFinite(n) || n < 1) {
+    return OPPORTUNITIES_DEFAULT_LIMIT;
+  }
+  return Math.min(Math.floor(n), OPPORTUNITIES_MAX_LIMIT);
+}
 
 /** Texto público da regra (ANALYTICS v1). */
 export const OPPORTUNITIES_RULE_V1_NOTE =
@@ -83,11 +98,16 @@ function snapshotToOpportunityRow(s) {
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
- * @param {{ categoryUrl?: string }} [opts]
+ * @param {{ categoryUrl?: string, limit?: number }} [opts]
+ *   — `limit` em [1, OPPORTUNITIES_MAX_LIMIT]; omitido → OPPORTUNITIES_DEFAULT_LIMIT (CLI).
  */
 export async function getOpportunitiesReport(prisma, opts = {}) {
   const rawCat =
     opts.categoryUrl != null && typeof opts.categoryUrl === "string" ? opts.categoryUrl.trim() : "";
+  const limit =
+    typeof opts.limit === "number" && Number.isFinite(opts.limit)
+      ? Math.min(Math.max(1, Math.floor(opts.limit)), OPPORTUNITIES_MAX_LIMIT)
+      : OPPORTUNITIES_DEFAULT_LIMIT;
 
   const { latest } = await getLatestAndPreviousRun(prisma);
 
@@ -100,36 +120,50 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
   }
 
   if (!rawCat) {
-    const rows = await prisma.productSnapshot.findMany({
-      where: {
-        scrapeRunId: latest.id,
-        price: { not: null },
-        ratingAverage: { gte: 4.5 },
-        ratingTotal: { gte: 5 },
-        salesCount: { gte: 10, lte: 300 }
-      },
-      include: {
-        product: { include: { seller: true } }
-      },
-      orderBy: [{ ratingAverage: "desc" }, { salesCount: "desc" }],
-      take: MAX_ROWS
-    });
+    const whereGlobal = {
+      scrapeRunId: latest.id,
+      price: { not: null },
+      ratingAverage: { gte: 4.5 },
+      ratingTotal: { gte: 5 },
+      salesCount: { gte: 10, lte: 300 }
+    };
 
-    if (rows.length === 0) {
+    const rankingTotal = await prisma.productSnapshot.count({ where: whereGlobal });
+
+    if (rankingTotal === 0) {
       return {
         scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
         items: [],
+        rankingTotal: 0,
+        listed: 0,
+        limit,
+        truncated: false,
+        maxRows: limit,
         message: `Último ScrapeRun (${latest.id}): nenhum produto coincide com os filtros de oportunidade v1.`
       };
     }
 
+    const rows = await prisma.productSnapshot.findMany({
+      where: whereGlobal,
+      include: {
+        product: { include: { seller: true } }
+      },
+      orderBy: [{ ratingAverage: "desc" }, { salesCount: "desc" }],
+      take: limit
+    });
+
     const items = rows.map((s) => snapshotToOpportunityRow(s));
+    const truncated = rankingTotal > items.length;
 
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items,
       ruleNote: OPPORTUNITIES_RULE_V1_NOTE,
-      listed: items.length
+      listed: items.length,
+      rankingTotal,
+      limit,
+      truncated,
+      maxRows: limit
     };
   }
 
@@ -138,6 +172,11 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
+      listed: 0,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       message: "categoryUrl normalizado ficou vazio — confirme a URL da categoria."
     };
   }
@@ -155,6 +194,10 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
       listed: 0,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       categoryUrlFilter: filterKey,
       message: `Nenhum produto encontrado para categoria (${filterKey}).`
     };
@@ -180,25 +223,35 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
     }
     return Number(b.salesCount ?? 0) - Number(a.salesCount ?? 0);
   });
-  const top = candidates.slice(0, MAX_ROWS);
+  const rankingTotal = candidates.length;
+  const top = candidates.slice(0, limit);
 
   if (top.length === 0) {
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
       listed: 0,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       categoryUrlFilter: filterKey,
       message: `Último snapshot por produto nesta categoria: nenhum coincide com os filtros de oportunidade v1 (${filterKey}).`
     };
   }
 
   const items = top.map((s) => snapshotToOpportunityRow(s));
+  const truncated = rankingTotal > items.length;
 
   return {
     scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
     items,
     ruleNote: OPPORTUNITIES_RULE_V1_NOTE,
     listed: items.length,
+    rankingTotal,
+    limit,
+    truncated,
+    maxRows: limit,
     categoryUrlFilter: filterKey
   };
 }

@@ -69,6 +69,26 @@ code {
   border: 1px solid var(--tk-border-soft);
 }
 
+/* Botão secundário / outline (painel Analytics) */
+button.tk-btn-soft {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.42rem 0.85rem;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+  box-shadow: var(--tk-shadow-sm);
+}
+button.tk-btn-soft:hover {
+  border-color: rgb(148 163 184 / 0.28);
+  background: rgb(255 255 255 / 0.04);
+}
+button.tk-btn-soft:focus-visible {
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 2px;
+}
+
 /* Navegação principal — estados tipo painel TMS (ativo / hover claros) */
 nav.tk-app-nav {
   border-bottom: 1px solid var(--tk-border);

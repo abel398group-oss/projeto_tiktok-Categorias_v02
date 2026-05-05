@@ -21,11 +21,12 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 
 **Regra**
 
-- Produtos (`ProductSnapshot`) do **último** `ScrapeRun` com **`sales_count` não nulo**.
-- **`orderBy: sales_count desc`**, **`take: 20`** (`MAX_ROWS`).
+- **Modo global** (sem `categoryUrl`): `ProductSnapshot` do **último** `ScrapeRun` com **`sales_count` não nulo**; **`orderBy: sales_count desc`**; resposta com até **`limit`** linhas (Prisma `take: limit`).
+- **Modo categoria** (`categoryUrl`): produtos cuja categoria normaliza ao filtro; por produto escolhe-se o snapshot com `sales_count` não nulo no run de **`collected_at` mais recente**; ordena-se por vendas desc; aplicam-se as primeiras **`limit`** linhas.
+- **Parâmetro HTTP `limit`:** inteiro em **[1, 10000]** (`TOP_PRODUCTS_MAX_LIMIT`); **omitido ou inválido → 20** (`TOP_PRODUCTS_DEFAULT_LIMIT`, usado pelo CLI `npm run analytics:top-products`). O painel web pede `limit` maior (ex.: 5000) via `analyticsDashboardCache.jsx`; a meta **`rankingTotal`** / **`truncated`** reflecte se há mais produtos no ranking do que **`items`** nesta resposta.
 - **`items[].avaliacao`**: média como **número** ou **`null`** (sem string vazia); `nome` e `loja` sem truncar na API (truncagem só pode ser feita no UI).
 
-**Não há** filtro por desconto, categoria nem loja neste relatório.
+**Não há** filtro HTTP por desconto nem por loja; opcionalmente **`categoryUrl`** restringe a produtos dessa categoria (ver modo categoria acima).
 
 ---
 
@@ -35,16 +36,20 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |--|--|
 | Fonte | `scripts/analytics/lib/opportunities.mjs` |
 
-**Último run**, `ProductSnapshot`:
+**Filtro v1** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente, depois mesmo filtro):
 
 - `price` não nulo  
 - `rating_average >= 4.5`  
 - `rating_total >= 5`  
 - `sales_count >= 10` e `<= 300`
 
-**Ordem servidor:** média descendente → vendas descendente (`take` 20).
+**Ordem servidor:** média descendente → vendas descendente; até **`limit`** linhas na resposta (**defeito 20**, máx. **10000**; omitido ou inválido na query → defeito CLI).
 
----
+Meta-resposta quando há dados: **`rankingTotal`** (quantos snapshots/candidatos passam ao filtro antes do `take`), **`listed`**, **`limit`**, **`truncated`** (true se há mais candidatos do que **`items`**), **`maxRows`** (= `limit`, compatível com clientes).
+
+O painel web pede `limit` alto (ex.: 5000) via `analyticsDashboardCache.jsx`; ajustável com **`OPPORTUNITIES_UI_FETCH_LIMIT`**.
+
+**Não há** filtro HTTP por desconto nem por loja; opcionalmente **`categoryUrl`** como em Top Products.
 
 ## Product Score (`/analytics/product-score`)
 

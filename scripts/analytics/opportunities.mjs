@@ -24,7 +24,17 @@ try {
     console.table(report.items);
     printSeparator();
     console.log(OPPORTUNITIES_RULE_V1_NOTE);
-    console.log(`\nTotal: ${report.items.length}\n`);
+    if (
+      report.truncated === true &&
+      typeof report.rankingTotal === "number" &&
+      report.rankingTotal > report.items.length
+    ) {
+      console.log(
+        `\nMostrados ${report.items.length} de ${report.rankingTotal} candidatos ao filtro v1 (limite desta chamada = ${report.limit}).\n`
+      );
+    } else {
+      console.log(`\nTotal: ${report.items.length}\n`);
+    }
   }
 } catch (e) {
   console.error(e?.message ?? e);

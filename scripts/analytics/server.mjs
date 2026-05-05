@@ -12,9 +12,9 @@ import Fastify from "fastify";
 import { requireDatabaseUrl } from "./_common.mjs";
 import { getGrowthReport } from "./lib/growth.mjs";
 import { getNewProductsReport } from "./lib/new-products.mjs";
-import { getOpportunitiesReport } from "./lib/opportunities.mjs";
+import { clampOpportunitiesLimit, getOpportunitiesReport } from "./lib/opportunities.mjs";
 import { getProductScoreReport } from "./lib/product-score.mjs";
-import { getTopProductsReport } from "./lib/top-products.mjs";
+import { clampTopProductsLimit, getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
@@ -77,7 +77,18 @@ fastify.get("/analytics/top-products", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getTopProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  const limRaw = req.query?.limit;
+  const limit = clampTopProductsLimit(
+    typeof limRaw === "string"
+      ? limRaw
+      : Array.isArray(limRaw) && limRaw.length > 0
+        ? limRaw[0]
+        : undefined
+  );
+  return getTopProductsReport(prisma, {
+    ...(categoryUrl !== "" ? { categoryUrl } : {}),
+    limit
+  });
 });
 
 fastify.get("/analytics/opportunities", async (req) => {
@@ -88,7 +99,18 @@ fastify.get("/analytics/opportunities", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getOpportunitiesReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  const limRaw = req.query?.limit;
+  const limit = clampOpportunitiesLimit(
+    typeof limRaw === "string"
+      ? limRaw
+      : Array.isArray(limRaw) && limRaw.length > 0
+        ? limRaw[0]
+        : undefined
+  );
+  return getOpportunitiesReport(prisma, {
+    ...(categoryUrl !== "" ? { categoryUrl } : {}),
+    limit
+  });
 });
 
 
