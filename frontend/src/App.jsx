@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useCallback, useMemo, useEffect } from "react";
+import { Suspense, lazy, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { AnalyticsDashboardCacheProvider, TOP_PRODUCTS_UI_FETCH_LIMIT, OPPORTUNITIES_UI_FETCH_LIMIT, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
@@ -109,6 +109,398 @@ function PlainTh({ label, title, resizeColIdx, onGrip }) {
     >
       {label}
       {resize ? <ColumnResizeGrip onMouseDown={onGrip(resizeColIdx)} /> : null}
+    </th>
+  );
+}
+
+/**
+ * Cabeçalho tipo Excel na aba Opportunities: texto do botão ordena (igual aos outros relatórios); ▾ abre filtro por coluna.
+ * @param {{
+ *   label: string,
+ *   colKey: string,
+ *   filterMode: 'text' | 'category' | 'range',
+ *   rangeMinKey?: string,
+ *   rangeMaxKey?: string,
+ *   sortKey: string,
+ *   sortDir: SortDir,
+ *   onSortLabel: (k: string) => void,
+ *   colFilters: typeof OPP_COL_FILTERS_INITIAL,
+ *   setColFilters: (u: typeof OPP_COL_FILTERS_INITIAL | ((p: typeof OPP_COL_FILTERS_INITIAL) => typeof OPP_COL_FILTERS_INITIAL)) => void,
+ *   menuOpenKey: string | null,
+ *   setMenuOpenKey: (k: string | null) => void,
+ *   onApplySort: (key: string, dir: SortDir) => void,
+ *   datasetRows: readonly Record<string, unknown>[],
+ *   resizeColIdx?: number,
+ *   onGrip?: (idx: number) => (e: import("react").MouseEvent) => void
+ * }} props
+ */
+function OppExcelSortTh({
+  label,
+  colKey,
+  filterMode,
+  rangeMinKey,
+  rangeMaxKey,
+  sortKey,
+  sortDir,
+  onSortLabel,
+  colFilters,
+  setColFilters,
+  menuOpenKey,
+  setMenuOpenKey,
+  onApplySort,
+  datasetRows,
+  resizeColIdx,
+  onGrip
+}) {
+  const wrapRef = useRef(/** @type {HTMLTableCellElement | null} */ (null));
+  const [listNeedle, setListNeedle] = useState("");
+  const open = menuOpenKey === colKey;
+  const activeSort = sortKey === colKey;
+  const resize = resizeColIdx != null && onGrip;
+
+  const relaxedForDistinct = useMemo(
+    () => oppFiltersRelaxColumn(colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey),
+    [colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey]
+  );
+
+  const rowsForDistinct = useMemo(() => {
+    return datasetRows.filter((r) =>
+      oppRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), relaxedForDistinct)
+    );
+  }, [datasetRows, relaxedForDistinct]);
+
+  const distinctValues = useMemo(() => oppDistinctSortedForColumn(rowsForDistinct, colKey), [rowsForDistinct, colKey]);
+
+  const filteredDistinct = useMemo(() => {
+    const n = listNeedle.trim().toLowerCase();
+    if (!n) return distinctValues;
+    return distinctValues.filter((opt) => {
+      const pt = filterMode === "category" ? translateCategoryPathEnToPt(opt) : opt;
+      const hay = `${opt} ${pt}`.toLowerCase();
+      return n
+        .split(/\s+/)
+        .filter(Boolean)
+        .every((tok) => hay.includes(tok));
+    });
+  }, [distinctValues, listNeedle, filterMode]);
+
+  useEffect(() => {
+    if (!open) setListNeedle("");
+  }, [open]);
+
+  let filterActive = false;
+  if (filterMode === "text" || filterMode === "category") {
+    filterActive = Array.isArray(colFilters[colKey]);
+  } else if (filterMode === "range" && rangeMinKey && rangeMaxKey) {
+    filterActive =
+      String(colFilters[rangeMinKey] ?? "").trim() !== "" || String(colFilters[rangeMaxKey] ?? "").trim() !== "";
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e) => {
+      if (wrapRef.current != null && !wrapRef.current.contains(/** @type {Node} */ (e.target))) {
+        setMenuOpenKey(null);
+      }
+    };
+    const esc = (e) => {
+      if (e.key === "Escape") setMenuOpenKey(null);
+    };
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open, setMenuOpenKey]);
+
+  const dropdownBtnStyle = {
+    flex: "0 0 1.5rem",
+    width: "1.5rem",
+    alignSelf: "stretch",
+    border: "none",
+    borderLeft: "1px solid var(--tk-border-soft)",
+    background: filterActive ? "var(--tk-accent-soft)" : "transparent",
+    color: filterActive ? "var(--tk-accent)" : "var(--tk-text-muted)",
+    cursor: "pointer",
+    fontSize: "0.72rem",
+    lineHeight: 1,
+    padding: 0
+  };
+
+  const selRaw = colFilters[colKey];
+  const sel = Array.isArray(selRaw) ? /** @type {readonly string[]} */ (selRaw) : null;
+
+  const optionChecked = (/** @type {string} */ opt) => (sel === null ? true : sel.includes(opt));
+
+  const toggleDistinctValue = (/** @type {string} */ opt) => {
+    setColFilters((prev) => {
+      const rel = oppFiltersRelaxColumn(prev, colKey, filterMode, rangeMinKey, rangeMaxKey);
+      const subset = datasetRows.filter((r) =>
+        oppRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), rel)
+      );
+      const full = oppDistinctSortedForColumn(subset, colKey);
+      const cur = prev[colKey];
+      let next = cur === null ? [...full] : [.../** @type {string[]} */ (cur)];
+      if (next.includes(opt)) next = next.filter((x) => x !== opt);
+      else next = [...next, opt];
+      if (next.length === 0) return { ...prev, [colKey]: /** @type {typeof selRaw} */ ([]) };
+      if (full.length > 0 && next.length === full.length) return { ...prev, [colKey]: null };
+      return { ...prev, [colKey]: /** @type {typeof selRaw} */ (next) };
+    });
+  };
+
+  return (
+    <th
+      ref={wrapRef}
+      scope="col"
+      style={{
+        position: "relative",
+        verticalAlign: "middle",
+        padding: 0,
+        paddingRight: resize ? "0.65rem" : 0,
+        boxSizing: "border-box",
+        overflow: "visible"
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "stretch", minHeight: "2rem" }}>
+        <button
+          type="button"
+          title="Ordenar por esta coluna"
+          onClick={() => onSortLabel(colKey)}
+          style={{
+            flex: "1 1 auto",
+            minWidth: 0,
+            textAlign: "left",
+            cursor: "pointer",
+            border: "none",
+            background: "transparent",
+            color: "var(--tk-text)",
+            font: "inherit",
+            padding: "0.4rem 0.3rem 0.4rem 0.5rem",
+            borderBottom: activeSort ? "2px solid var(--tk-accent)" : "2px solid transparent",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.3rem"
+          }}
+        >
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+          <span style={{ flex: "0 0 auto", opacity: activeSort ? 1 : 0.38, fontSize: "0.68rem" }} aria-hidden>
+            {activeSort ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="true"
+          aria-label={`Filtro e ordenação: ${label}`}
+          title="Filtro e ordenação (estilo Excel)"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuOpenKey(open ? null : colKey);
+          }}
+          style={dropdownBtnStyle}
+        >
+          ▾
+        </button>
+      </div>
+      {resize ? <ColumnResizeGrip onMouseDown={onGrip(resizeColIdx)} /> : null}
+      {open ? (
+        <div
+          role="menu"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: "100%",
+            marginTop: "1px",
+            zIndex: 100,
+            minWidth: "15rem",
+            maxWidth: "min(22rem, 94vw)",
+            padding: "0.5rem 0.55rem",
+            borderRadius: "var(--tk-radius-md)",
+            border: "1px solid var(--tk-border)",
+            background: "var(--tk-surface-raised)",
+            boxShadow: "0 8px 28px rgb(0 0 0 / 0.5)"
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div style={{ fontSize: "0.68rem", fontWeight: 600, opacity: 0.88, marginBottom: "0.35rem" }}>Ordenar</div>
+          {filterMode === "range" ? (
+            <>
+              <button
+                type="button"
+                className="tk-btn-soft"
+                style={{ width: "100%", marginBottom: "0.3rem", fontSize: "0.72rem", padding: "0.32rem" }}
+                onClick={() => onApplySort(colKey, "asc")}
+              >
+                Do menor para o maior
+              </button>
+              <button
+                type="button"
+                className="tk-btn-soft"
+                style={{ width: "100%", marginBottom: "0.45rem", fontSize: "0.72rem", padding: "0.32rem" }}
+                onClick={() => onApplySort(colKey, "desc")}
+              >
+                Do maior para o menor
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="tk-btn-soft"
+                style={{ width: "100%", marginBottom: "0.3rem", fontSize: "0.72rem", padding: "0.32rem" }}
+                onClick={() => onApplySort(colKey, "asc")}
+              >
+                De A a Z
+              </button>
+              <button
+                type="button"
+                className="tk-btn-soft"
+                style={{ width: "100%", marginBottom: "0.45rem", fontSize: "0.72rem", padding: "0.32rem" }}
+                onClick={() => onApplySort(colKey, "desc")}
+              >
+                De Z a A
+              </button>
+            </>
+          )}
+          <div style={{ fontSize: "0.68rem", fontWeight: 600, opacity: 0.88, margin: "0.35rem 0" }}>Filtrar</div>
+          {filterMode === "text" || filterMode === "category" ? (
+            <>
+              <input
+                type="search"
+                placeholder="Pesquisar na lista…"
+                autoComplete="off"
+                value={listNeedle}
+                onChange={(e) => setListNeedle(e.target.value)}
+                style={{ ...oppFilterInputStyle, width: "100%", maxWidth: "100%", marginBottom: "0.35rem" }}
+              />
+              <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="tk-btn-soft"
+                  style={{ fontSize: "0.68rem", padding: "0.22rem 0.4rem", flex: "1 1 auto" }}
+                  onClick={() => setColFilters((prev) => ({ ...prev, [colKey]: null }))}
+                >
+                  Marcar todas
+                </button>
+                <button
+                  type="button"
+                  className="tk-btn-soft"
+                  style={{ fontSize: "0.68rem", padding: "0.22rem 0.4rem", flex: "1 1 auto" }}
+                  onClick={() =>
+                    setColFilters((prev) => ({ ...prev, [colKey]: [] }))
+                  }
+                >
+                  Desmarcar todas
+                </button>
+              </div>
+              <div
+                style={{
+                  maxHeight: "11rem",
+                  overflowY: "auto",
+                  marginBottom: "0.35rem",
+                  borderRadius: "var(--tk-radius-sm)",
+                  border: "1px solid var(--tk-border-soft)",
+                  background: "var(--tk-surface-inset)",
+                  padding: "0.25rem 0.35rem"
+                }}
+              >
+                {distinctValues.length === 0 ? (
+                  <div style={{ fontSize: "0.72rem", opacity: 0.75, padding: "0.25rem 0" }}>
+                    Sem valores (outros filtros podem ter escondido todas as linhas).
+                  </div>
+                ) : filteredDistinct.length === 0 ? (
+                  <div style={{ fontSize: "0.72rem", opacity: 0.75, padding: "0.25rem 0" }}>Nada corresponde à pesquisa.</div>
+                ) : (
+                  filteredDistinct.map((opt) => {
+                    const display = filterMode === "category" ? translateCategoryPathEnToPt(opt) : opt;
+                    return (
+                      <label
+                        key={opt}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "0.4rem",
+                          fontSize: "0.72rem",
+                          lineHeight: 1.35,
+                          padding: "0.2rem 0",
+                          cursor: "pointer",
+                          color: "var(--tk-text)"
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={optionChecked(opt)}
+                          onChange={() => toggleDistinctValue(opt)}
+                          style={{ marginTop: "0.12rem", flex: "0 0 auto" }}
+                        />
+                        <span style={{ wordBreak: "break-word", minWidth: 0 }} title={filterMode === "category" ? opt : undefined}>
+                          {display}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", marginBottom: "0.35rem" }}>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Mín."
+                aria-label={`${label} mínimo`}
+                value={colFilters[rangeMinKey] ?? ""}
+                onChange={(e) => setColFilters((prev) => ({ ...prev, [rangeMinKey]: e.target.value }))}
+                style={{ ...oppFilterInputStyle, flex: 1, width: "auto", minWidth: 0 }}
+              />
+              <span style={{ opacity: 0.5, fontSize: "0.7rem" }}>—</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Máx."
+                aria-label={`${label} máximo`}
+                value={colFilters[rangeMaxKey] ?? ""}
+                onChange={(e) => setColFilters((prev) => ({ ...prev, [rangeMaxKey]: e.target.value }))}
+                style={{ ...oppFilterInputStyle, flex: 1, width: "auto", minWidth: 0 }}
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            className="tk-btn-soft"
+            style={{ width: "100%", fontSize: "0.7rem", padding: "0.28rem", marginBottom: "0.35rem" }}
+            onClick={() => {
+              if (filterMode === "range" && rangeMinKey && rangeMaxKey) {
+                setColFilters((prev) => ({ ...prev, [rangeMinKey]: "", [rangeMaxKey]: "" }));
+              } else {
+                setColFilters((prev) => ({ ...prev, [colKey]: null }));
+              }
+            }}
+          >
+            Limpar filtro desta coluna
+          </button>
+          <button
+            type="button"
+            style={{
+              width: "100%",
+              fontSize: "0.68rem",
+              padding: "0.28rem",
+              cursor: "pointer",
+              border: "1px dashed var(--tk-border)",
+              borderRadius: "var(--tk-radius-sm)",
+              background: "var(--tk-surface-inset)",
+              color: "var(--tk-text-muted)"
+            }}
+            onClick={() => onApplySort("avalMed", "desc")}
+          >
+            Ordenação da lista (rating ↓)
+          </button>
+        </div>
+      ) : null}
     </th>
   );
 }
@@ -237,6 +629,147 @@ const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
 
 /** Opportunities: igual padrão — API pode trazer até `OPPORTUNITIES_UI_FETCH_LIMIT`. */
 const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
+
+/** Filtros por coluna na aba Opportunities (`null` em texto/categoria = «todas» como no Excel). */
+const OPP_COL_TEXT_KEYS = /** @type {const} */ (["nome", "categoriaPrincipal", "subcategoria", "loja", "motivo"]);
+
+const OPP_COL_FILTERS_INITIAL = {
+  nome: null,
+  categoriaPrincipal: null,
+  subcategoria: null,
+  loja: null,
+  motivo: null,
+  precoMin: "",
+  precoMax: "",
+  vendasMin: "",
+  vendasMax: "",
+  avalMedMin: "",
+  avalMedMax: ""
+};
+
+/**
+ * Copia filtros sem restricções na coluna indicada — para lista de valores do menu ▾ (como no Excel).
+ * @param {typeof OPP_COL_FILTERS_INITIAL} f
+ * @param {string} omitColKey
+ * @param {'text' | 'category' | 'range'} omitMode
+ * @param {string} [rkMin]
+ * @param {string} [rkMax]
+ */
+function oppFiltersRelaxColumn(f, omitColKey, omitMode, rkMin, rkMax) {
+  const o = { ...f };
+  if (omitMode === "text" || omitMode === "category") {
+    const k = omitColKey;
+    o[k] = null;
+  } else if (omitMode === "range" && rkMin && rkMax) {
+    o[rkMin] = "";
+    o[rkMax] = "";
+  }
+  return o;
+}
+
+/**
+ * @param {readonly Record<string, unknown>[]} rows
+ * @param {string} columnKey campo no objeto linha API
+ */
+function oppDistinctSortedForColumn(rows, columnKey) {
+  const set = new Set();
+  for (const row of rows) {
+    const v = String(row[columnKey] ?? "").trim();
+    if (v) set.add(v);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+}
+
+/**
+ * @param {unknown} cellRaw valor da célula
+ * @param {readonly string[] | null | undefined} allow allowlist inclusiva; [] = nunca passa (tudo desmarcado)
+ */
+function oppMatchTextAllowlist(cellRaw, allow) {
+  if (allow == null) return true;
+  const v = String(cellRaw ?? "").trim();
+  return allow.includes(v);
+}
+
+/** @param {unknown} cell */
+function oppNumericCell(cell) {
+  if (cell == null || cell === "") return NaN;
+  const n = Number(String(cell).replace(",", ".").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/**
+ * Limite numérico a partir do input (vazio = sem filtro).
+ * @param {string} s
+ */
+function oppParseBoundInput(s) {
+  const t = String(s ?? "").trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ * @param {typeof OPP_COL_FILTERS_INITIAL} f
+ */
+function oppRowMatchesColFilters(row, f) {
+  if (!oppMatchTextAllowlist(row.nome, f.nome == null ? null : f.nome)) return false;
+  if (!oppMatchTextAllowlist(row.categoriaPrincipal, f.categoriaPrincipal == null ? null : f.categoriaPrincipal))
+    return false;
+  if (!oppMatchTextAllowlist(row.subcategoria, f.subcategoria == null ? null : f.subcategoria)) return false;
+  if (!oppMatchTextAllowlist(row.loja, f.loja == null ? null : f.loja)) return false;
+  if (!oppMatchTextAllowlist(row.motivo, f.motivo == null ? null : f.motivo)) return false;
+
+  const preco = oppNumericCell(row.preco);
+  const pmn = oppParseBoundInput(f.precoMin);
+  const pmx = oppParseBoundInput(f.precoMax);
+  if (pmn != null && (Number.isNaN(preco) || preco < pmn)) return false;
+  if (pmx != null && (Number.isNaN(preco) || preco > pmx)) return false;
+
+  const vendas = oppNumericCell(row.vendas);
+  const vmn = oppParseBoundInput(f.vendasMin);
+  const vmx = oppParseBoundInput(f.vendasMax);
+  if (vmn != null && (Number.isNaN(vendas) || vendas < vmn)) return false;
+  if (vmx != null && (Number.isNaN(vendas) || vendas > vmx)) return false;
+
+  const rating = oppNumericCell(row.avalMed);
+  const rmn = oppParseBoundInput(f.avalMedMin);
+  const rmx = oppParseBoundInput(f.avalMedMax);
+  if (rmn != null && (Number.isNaN(rating) || rating < rmn)) return false;
+  if (rmx != null && (Number.isNaN(rating) || rating > rmx)) return false;
+
+  return true;
+}
+
+/**
+ * Algum filtro de coluna activo na tabela Opportunities (checkboxes/lista ou intervalo numérico).
+ * @param {typeof OPP_COL_FILTERS_INITIAL} f
+ */
+function oppAnyOppColumnFiltersActive(f) {
+  if (OPP_COL_TEXT_KEYS.some((k) => Array.isArray(f[k]))) return true;
+  if (
+    String(f.precoMin ?? "").trim() !== "" ||
+    String(f.precoMax ?? "").trim() !== "" ||
+    String(f.vendasMin ?? "").trim() !== "" ||
+    String(f.vendasMax ?? "").trim() !== "" ||
+    String(f.avalMedMin ?? "").trim() !== "" ||
+    String(f.avalMedMax ?? "").trim() !== ""
+  )
+    return true;
+  return false;
+}
+
+const oppFilterInputStyle = {
+  width: "5.25rem",
+  minWidth: "3.75rem",
+  padding: "0.32rem 0.4rem",
+  fontSize: "0.76rem",
+  borderRadius: "var(--tk-radius-sm)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface-inset)",
+  color: "var(--tk-text)",
+  boxSizing: "border-box"
+};
 
 function asArray(x) {
   return Array.isArray(x) ? x : [];
@@ -539,9 +1072,15 @@ function TableOpp({ data }) {
   const colW = useColumnWidths(CW_OPP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const [expanded, setExpanded] = useState(false);
+  /** Filtros por coluna (subset dos dados já carregados). */
+  const [oppColFilters, setOppColFilters] = useState(() => ({ ...OPP_COL_FILTERS_INITIAL }));
+  /** Qual coluna tem o menu ▾ aberto (um de cada vez). */
+  const [oppMenuKey, setOppMenuKey] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
     setExpanded(false);
+    setOppColFilters({ ...OPP_COL_FILTERS_INITIAL });
+    setOppMenuKey(null);
   }, [data?.scrapeRun?.id]);
 
   const oppIntro = (
@@ -571,6 +1110,10 @@ function TableOpp({ data }) {
             carregadas.
           </li>
           <li>
+            No cabeçalho de cada coluna: clique no <strong>nome da coluna</strong> para ordenar; o ícone{" "}
+            <strong>▾</strong> abre <strong>lista de valores e A–Z</strong> por coluna (tipo Excel), só nas linhas já carregadas.
+          </li>
+          <li>
             Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces (credenciais só no servidor — como
             nos outros relatórios com produtos).
           </li>
@@ -578,7 +1121,7 @@ function TableOpp({ data }) {
       </div>
       <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
         Por defeito <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> linhas; use <strong>Ver mais produtos</strong> para o restante na mesma
-        ordem (ordenado inicialmente por média de rating; cabeçalhos alteram a ordem já carregada). Dados do snapshot — não são tempo real do TikTok.
+        ordem. <strong>▾</strong> no cabeçalho ordena em A–Z ou filtra só essa coluna. Dados do snapshot — não são tempo real do TikTok.
       </div>
       <div style={introWarn}>⚠️ É um filtro exploratório — não garante resultado.</div>
     </IntroCard>
@@ -587,10 +1130,19 @@ function TableOpp({ data }) {
   /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
   const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
 
-  const items = useMemo(() => {
+  const filteredRaw = useMemo(() => {
     if (rawItems.length === 0) return [];
-    return sortOppItemsByColumn(rawItems, sort.key, sort.dir);
-  }, [rawItems, sort]);
+    return rawItems.filter((row) =>
+      oppRowMatchesColFilters(/** @type {Record<string, unknown>} */ (row), oppColFilters)
+    );
+  }, [rawItems, oppColFilters]);
+
+  const filtersActive = useMemo(() => oppAnyOppColumnFiltersActive(oppColFilters), [oppColFilters]);
+
+  const items = useMemo(() => {
+    if (filteredRaw.length === 0) return [];
+    return sortOppItemsByColumn(filteredRaw, sort.key, sort.dir);
+  }, [filteredRaw, sort]);
 
   const displayRows = useMemo(() => {
     if (items.length <= OPPORTUNITIES_VISIBLE_DEFAULT || expanded) {
@@ -599,14 +1151,19 @@ function TableOpp({ data }) {
     return items.slice(0, OPPORTUNITIES_VISIBLE_DEFAULT);
   }, [items, expanded]);
 
-  const rankingTotal =
+  const rankingTotalServer =
     typeof data?.rankingTotal === "number" && Number.isFinite(data.rankingTotal)
       ? data.rankingTotal
-      : items.length;
+      : rawItems.length;
   const hasMoreLocally = items.length > OPPORTUNITIES_VISIBLE_DEFAULT;
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_OPP_DESC));
+  }, []);
+
+  const onApplySort = useCallback((key, dir) => {
+    setSort({ key, dir });
+    setOppMenuKey(null);
   }, []);
 
   if (data == null) {
@@ -614,8 +1171,9 @@ function TableOpp({ data }) {
       <>
         {oppIntro}
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-          <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> quando houver dados.
-          Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.
+          <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong>. No cabeçalho das colunas da
+          tabela use <strong>▾</strong> para filtrar ou A–Z, como no Excel. Não ordenamos <strong>link</strong> nem{" "}
+          <strong>Ações</strong>.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -642,15 +1200,21 @@ function TableOpp({ data }) {
     <>
       {oppIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-        <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong> (critério principal aqui).
-        Altere clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong>
-        abre a <strong>página de trabalho</strong> (<code>/produto/…</code>) quando há <code>productId</code>.{" "}
-        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
+        Clique no <strong>título da coluna</strong> para ordenar; o triângulo <strong>▾</strong> mostra lista de valores da coluna com
+        caixas de selecção, como no Excel, e ordenação A–Z. Não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong> abre a página
+        de trabalho (<code>/produto/…</code>).{" "}
+        <span style={{ opacity: 0.85 }}>Arraste a borda nos cabeçalhos para ajustar larguras.</span>
       </p>
-      {rankingTotal > OPPORTUNITIES_VISIBLE_DEFAULT ? (
+      {filtersActive && rawItems.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+          Após filtros locais: <strong>{filteredRaw.length}</strong> de {rawItems.length} linha
+          {rawItems.length !== 1 ? "s" : ""}.
+        </p>
+      ) : null}
+      {rankingTotalServer > OPPORTUNITIES_VISIBLE_DEFAULT ? (
         <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
-          <strong>Candidatos ao filtro v1 nesta vista:</strong> {rankingTotal.toLocaleString("pt-BR")} produto
-          {rankingTotal !== 1 ? "s" : ""}
+          <strong>Candidatos ao filtro v1 nesta vista:</strong> {rankingTotalServer.toLocaleString("pt-BR")} produto
+          {rankingTotalServer !== 1 ? "s" : ""}
           {!hasMoreLocally && data?.truncated !== true ? " (todos listados)." : null}
           {hasMoreLocally
             ? ` Carregamos a lista até o limite do painel (${OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} máx.).`
@@ -662,162 +1226,243 @@ function TableOpp({ data }) {
         </p>
       ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
-        <colgroup>{colW.colElements}</colgroup>
-        <thead>
-          <tr>
-            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
-            <SortTh
-              label="nome"
-              colKey="nome"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={1}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="categoria"
-              colKey="categoriaPrincipal"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={2}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="sub"
-              colKey="subcategoria"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={3}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="loja"
-              colKey="loja"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={4}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="preço"
-              colKey="preco"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={5}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="vendas"
-              colKey="vendas"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={6}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="rating"
-              colKey="avalMed"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={7}
-              onGrip={colW.onGripMouseDown}
-            />
-            <SortTh
-              label="motivo"
-              colKey="motivo"
-              sortKey={sort.key}
-              sortDir={sort.dir}
-              onSort={onSort}
-              resizeColIdx={8}
-              onGrip={colW.onGripMouseDown}
-            />
-            <PlainTh
-              label="Ações"
-              title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={9}
-              onGrip={colW.onGripMouseDown}
-            />
-            <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
-          </tr>
-        </thead>
-        <tbody>
-          {displayRows.map((row) => {
-            const pos = items.indexOf(row) + 1;
-            const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
-            const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
-            const pid = row.productId;
-            const hasProductId = pid != null && String(pid).trim() !== "";
-            return (
-              <tr key={`${row.productId}-${pos}`}>
-                <td style={tdPosStyle}>{pos}</td>
-                <td>
-                  {hasProductId ? (
-                    <Link
-                      to={`/produto/${encodeURIComponent(String(pid).trim())}`}
-                      title={nomeTitle ?? "Abrir página de trabalho deste produto"}
-                      style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
-                    >
-                      {row.nome ?? "—"}
-                    </Link>
-                  ) : (
-                    <span title={nomeTitle}>{row.nome ?? "—"}</span>
-                  )}
-                </td>
-                <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                  {catCellPt(row.categoriaPrincipal)}
-                </td>
-                <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                  {catCellPt(row.subcategoria)}
-                </td>
-                <td>{row.loja}</td>
-                <td>{row.preco ?? "—"}</td>
-                <td>{row.vendas ?? "—"}</td>
-                <td>
-                  {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
-                </td>
-                <td>{row.motivo ?? "—"}</td>
-                <SpacesExportActionCell
-                  productId={row.productId}
-                  nome={row.nome}
-                  exportingProductId={exportingProductId}
-                  exportToSpace={exportToSpace}
+      <>
+        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+          <colgroup>{colW.colElements}</colgroup>
+          <thead>
+            <tr>
+              <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+                <OppExcelSortTh
+                  label="nome"
+                  colKey="nome"
+                  filterMode="text"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={1}
+                  onGrip={colW.onGripMouseDown}
                 />
-                <td>
-                  {row.link ? (
-                    <a href={row.link} target="_blank" rel="noopener noreferrer">
-                      abrir
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
+                <OppExcelSortTh
+                  label="categoria"
+                  colKey="categoriaPrincipal"
+                  filterMode="category"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={2}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="sub"
+                  colKey="subcategoria"
+                  filterMode="category"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={3}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="loja"
+                  colKey="loja"
+                  filterMode="text"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={4}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="preço"
+                  colKey="preco"
+                  filterMode="range"
+                  rangeMinKey="precoMin"
+                  rangeMaxKey="precoMax"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={5}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="vendas"
+                  colKey="vendas"
+                  filterMode="range"
+                  rangeMinKey="vendasMin"
+                  rangeMaxKey="vendasMax"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={6}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="rating"
+                  colKey="avalMed"
+                  filterMode="range"
+                  rangeMinKey="avalMedMin"
+                  rangeMaxKey="avalMedMax"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={7}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <OppExcelSortTh
+                  label="motivo"
+                  colKey="motivo"
+                  filterMode="text"
+                  sortKey={sort.key}
+                  sortDir={sort.dir}
+                  onSortLabel={onSort}
+                  colFilters={oppColFilters}
+                  setColFilters={setOppColFilters}
+                  menuOpenKey={oppMenuKey}
+                  setMenuOpenKey={setOppMenuKey}
+                  onApplySort={onApplySort}
+                  datasetRows={rawItems}
+                  resizeColIdx={8}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <PlainTh
+                  label="Ações"
+                  title="Exportar ao DigitalOcean Spaces"
+                  resizeColIdx={9}
+                  onGrip={colW.onGripMouseDown}
+                />
+                <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {hasMoreLocally ? (
-        <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-          <button
-            type="button"
-            className="tk-btn-soft"
-            onClick={() => setExpanded((ex) => !ex)}
-          >
-            {expanded
-              ? `Mostrar só os primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT}`
-              : `Ver mais produtos (${(items.length - OPPORTUNITIES_VISIBLE_DEFAULT).toLocaleString("pt-BR")} seguintes pela ordem atual)`}
-          </button>
-        </div>
-      ) : null}
-      {data?.truncated === true && rankingTotal > items.length ? (
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={11}
+                    style={{
+                      padding: "0.75rem 0.65rem",
+                      fontSize: "0.82rem",
+                      opacity: 0.9,
+                      textAlign: "left",
+                      borderTop: "1px solid var(--tk-border-soft)"
+                    }}
+                  >
+                    Nenhuma linha com os filtros actuais. Ajuste o menu <strong>▾</strong> de cada coluna ou{" "}
+                    <button type="button" className="tk-btn-soft" onClick={() => setOppColFilters({ ...OPP_COL_FILTERS_INITIAL })}>
+                      limpar todos os filtros
+                    </button>
+                    .
+                  </td>
+                </tr>
+              ) : (
+                displayRows.map((row) => {
+                const pos = items.indexOf(row) + 1;
+                const nomeStr = typeof row.nome === "string" ? row.nome : row.nome != null ? String(row.nome) : "";
+                const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
+                const pid = row.productId;
+                const hasProductId = pid != null && String(pid).trim() !== "";
+                return (
+                  <tr key={`${row.productId}-${pos}`}>
+                    <td style={tdPosStyle}>{pos}</td>
+                    <td>
+                      {hasProductId ? (
+                        <Link
+                          to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                          title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                          style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                        >
+                          {row.nome ?? "—"}
+                        </Link>
+                      ) : (
+                        <span title={nomeTitle}>{row.nome ?? "—"}</span>
+                      )}
+                    </td>
+                    <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                      {catCellPt(row.categoriaPrincipal)}
+                    </td>
+                    <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                      {catCellPt(row.subcategoria)}
+                    </td>
+                    <td>{row.loja}</td>
+                    <td>{row.preco ?? "—"}</td>
+                    <td>{row.vendas ?? "—"}</td>
+                    <td>
+                      {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
+                    </td>
+                    <td>{row.motivo ?? "—"}</td>
+                    <SpacesExportActionCell
+                      productId={row.productId}
+                      nome={row.nome}
+                      exportingProductId={exportingProductId}
+                      exportToSpace={exportToSpace}
+                    />
+                    <td>
+                      {row.link ? (
+                        <a href={row.link} target="_blank" rel="noopener noreferrer">
+                          abrir
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+                })
+              )}
+            </tbody>
+          </table>
+          {hasMoreLocally ? (
+            <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+              <button type="button" className="tk-btn-soft" onClick={() => setExpanded((ex) => !ex)}>
+                {expanded
+                  ? `Mostrar só os primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT}`
+                  : `Ver mais produtos (${(items.length - OPPORTUNITIES_VISIBLE_DEFAULT).toLocaleString("pt-BR")} seguintes pela ordem atual)`}
+              </button>
+            </div>
+          ) : null}
+      </>
+      {data?.truncated === true && rankingTotalServer > rawItems.length ? (
         <p
           style={{
             fontSize: "0.72rem",
@@ -828,7 +1473,7 @@ function TableOpp({ data }) {
           }}
         >
           O servidor devolve até <strong>{OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas; há pelo menos{" "}
-          <strong>{rankingTotal.toLocaleString("pt-BR")}</strong> candidatos ao filtro v1 —
+          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong> candidatos ao filtro v1 —
           aumente <code>OPPORTUNITIES_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisares de lista
           completa no browser.
         </p>
