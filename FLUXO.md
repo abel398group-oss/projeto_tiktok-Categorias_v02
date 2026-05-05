@@ -1,27 +1,70 @@
 # Fluxo do projeto
 
-## Comandos
+## Execução rápida
 
-1. `npm install` (deps, raiz uma vez)
-2. `npm run setup:local` (`.env` + `frontend/.env` a partir dos exemplos — primeira vez)
-3. `npm run coleta:completa:db` (coleta completa → Postgres)
-4. `npm run prisma:studio` (ver BD no browser)
-5. `npm run dev:all` (API + painel mesmo terminal)
-6. `npm run db:import:output` (só importar JSON já gerado)
-7. `npm run coleta:db` (grelha rápida → Postgres)
-8. `npm run coleta:completa` (JSON com PDP, sem import)
-9. `npm run coleta:completa:login:db` (completa com browser/login)
-10. `npm run analytics:product-score` (relatório score no terminal)
-11. `npm run analytics:api` (só servidor API)
-12. `cd frontend && npm run dev` (só Vite — API noutro terminal)
-13. `npm test` (testes scrape)
-14. `npm run validate:schemas` (validar JSON vs schema)
-15. `npm run validate:db-vs-json` (comparar BD vs JSON)
-16. `npm start` (completa + score no fim)
+Na **raiz do repo** (onde está `package.json`). Postgres **local** usa Docker na porta host **5433** (scripts `db:docker:*`). Se usas **Postgres remoto**, mete só `DATABASE_URL` no `.env` e ignora os passos Docker.
+
+### 1) Primeira vez (PC)
+
+```bash
+npm install
+(cd frontend && npm install)
+npm run setup:local
+npm run db:docker:bootstrap
+npm run db:check
+```
+
+### 2) Painel + API no dia a dia
+
+```bash
+npm run dev:all
+```
+
+Painel: **http://localhost:5173/** · API: **http://127.0.0.1:3333/** (proxy do Vite encaminha `/analytics` para a API).
+
+### 3) Coletar TikTok Shop e gravar no Postgres
+
+```bash
+npm run coleta:db
+```
+
+Duas categorias, grelha rápida. **Com PDP** (mais lento): `npm run coleta:completa:db`. **Uma categoria:** `npm run coleta:uma:db` ou `npm run scrape:category`. **Login visível:** `npm run coleta:completa:login:db`.
+
+### 4) Só importar JSON que já existe em `output/`
+
+```bash
+npm run db:import:output
+```
+
+### 5) Ver dados na base (browser)
+
+```bash
+npm run prisma:studio
+```
+
+Típico **http://localhost:5555**.
+
+### 6) Qualidade
+
+```bash
+npm test
+npm run validate:schemas
+npm run validate:db-vs-json
+```
+
+### 7) Produção (Docker no servidor)
+
+Com `.env` na raiz do clone (ver `.env.example`):
+
+```bash
+docker compose up -d --build
+```
+
+Painel no host por defeito em **`http://<IP-do-servidor>:8080/`** (ver §10).
 
 ---
 
-Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser.
+Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser — detalhe nas tabelas abaixo.
 
 ## Guia rápido — comandos `npm run`
 

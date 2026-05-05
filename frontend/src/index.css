@@ -346,12 +346,6 @@ a.tk-category-card:hover .tk-category-card__cta {
   word-break: break-word;
 }
 
-.tk-category-card__run {
-  font-size: 0.68rem;
-  opacity: 0.75;
-  margin-top: 0.18rem;
-}
-
 .tk-category-card__footer {
   margin-top: auto;
   padding: 0.72rem 1.05rem;

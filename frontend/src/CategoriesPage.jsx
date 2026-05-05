@@ -195,15 +195,8 @@ export default function CategoriesPage() {
                         <dd>{formatDateTime(row.lastImportedAt)}</dd>
                       </div>
                       <div>
-                        <dt>Run</dt>
-                        <dd>
-                          {formatDateTime(row.lastScrapeRunCreatedAt)}
-                          {row.lastScrapeRunId != null ? (
-                            <div className="tk-category-card__run" title={String(row.lastScrapeRunId)}>
-                              {String(row.lastScrapeRunId)}
-                            </div>
-                          ) : null}
-                        </dd>
+                        <dt>Criação do run na BD</dt>
+                        <dd>{formatDateTime(row.lastScrapeRunCreatedAt)}</dd>
                       </div>
                     </dl>
                   </div>
