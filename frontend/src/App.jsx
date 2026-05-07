@@ -551,9 +551,24 @@ const tdEllipsis = {
   whiteSpace: "nowrap",
   verticalAlign: "middle"
 };
-const positionThTitle = "Posição na ordenação atual (1, 2, 3…)";
-/** Caixa introdutória (mesmo padrão visual da aba Escalar). */
-function IntroCard({ title, children }) {
+const positionThTitle = "Posição na ordenação actual (1, 2, 3…)";
+/**
+ * Balão ao pairar (?); orientação ao humano sem ocupar espaço fixo na página.
+ */
+function HoverHelpTooltip({ ariaLabel, children }) {
+  return (
+    <span className="tk-help-hover">
+      <button type="button" className="tk-help-hover__btn" aria-label={ariaLabel} tabIndex={0}>
+        ?
+      </button>
+      <div className="tk-help-hover__panel" role="tooltip">
+        {children}
+      </div>
+    </span>
+  );
+}
+/** Caixa introdutória (mesmo padrão visual da aba Escalar). Opcional elemento ao lado do título (ex.: ajuda). */
+function IntroCard({ title, titleAside, children }) {
   return (
     <section
       style={{
@@ -571,10 +586,15 @@ function IntroCard({ title, children }) {
           fontWeight: 600,
           margin: "0 0 0.55rem 0",
           letterSpacing: "-0.02em",
-          color: "var(--tk-text)"
+          color: "var(--tk-text)",
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "0.4rem"
         }}
       >
-        {title}
+        <span>{title}</span>
+        {titleAside != null ? titleAside : null}
       </h2>
       <div style={{ fontSize: "0.8rem", color: "var(--tk-text-muted)", lineHeight: 1.58 }}>{children}</div>
     </section>
@@ -660,12 +680,29 @@ const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
 /** Opportunities: igual padrão — API pode trazer até `OPPORTUNITIES_UI_FETCH_LIMIT`. */
 const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
 
-/** Modos API `GET /analytics/opportunities?mode=` — etiquetas curtas na UI (ver docs/ANALYTICS.md). */
+/** Modos API `GET /analytics/opportunities?mode=` — `label` curto no botão; `titleTip` no pairar. */
 const OPP_MODE_OPTIONS = /** @type {const} */ ([
-  { id: "classic", label: "Classic (10–300)" },
-  { id: "low_sales", label: "Baixas (1–99)" },
-  { id: "no_sales", label: "Sem vendas (0 ou n/d)" },
-  { id: "below_median", label: "Abaixo da mediana (categoria)" }
+  {
+    id: "classic",
+    label: "Classic",
+    titleTip: "Vendas 10–300 com valor na BD. Em todos os modos: preço definido, média ≥4,5, ≥5 avaliações."
+  },
+  {
+    id: "low_sales",
+    label: "Baixas",
+    titleTip: "Vendas 1–99. Mesma base de qualidade (preço, rating, mín. avaliações)."
+  },
+  {
+    id: "no_sales",
+    label: "Sem vendas",
+    titleTip: "Vendas 0 ou campo vazio no snapshot. Mesma base de qualidade."
+  },
+  {
+    id: "below_median",
+    label: "Mediana",
+    titleTip:
+      "Pelo menos 1 venda e valor abaixo da mediana de vendas da categoria (mestre) no último import. Mesma base de qualidade."
+  }
 ]);
 /** Filtros por coluna na aba Opportunities (`null` em texto/categoria = «todas» como no Excel). */
 const OPP_COL_TEXT_KEYS = /** @type {const} */ (["nome", "categoriaPrincipal", "subcategoria", "loja", "motivo"]);
@@ -1107,26 +1144,43 @@ function TableTop({ data }) {
   const topIntro = (
     <IntroCard title="Top Products">
       <p style={introLead}>
-        Mostra os produtos com mais vendas na <strong>última importação</strong>. Use para entender o que já tem demanda,
-        mas lembre-se: produtos muito vendidos também podem ter mais concorrência.
+        A análise na base faz um ranking por volume declarado: a API ordena apenas por{" "}
+        <strong>número de vendas</strong> (<code>sales_count</code>), do maior para o menor —{" "}
+        <strong>não</strong> mistura avaliação nem preço nessa ordem inicial. Só entram produtos em que esse campo{" "}
+        <strong>tem valor</strong> na lista devolvida; quem ficou sem vendas gravadas na BD não aparece neste relatório.
+      </p>
+      <p style={{ ...introLead, marginTop: "0.35rem" }}>
+        <strong>Origem das linhas:</strong> vista <strong>global</strong> usa snapshots do <strong>último import</strong> já na
+        base que tenham vendas registadas; vista <strong>por categoria</strong> (filtro TikTok na API) faz com que, por cada
+        produto da pasta, o servidor escolha <strong>um snapshot com vendas</strong> ligado ao run com{" "}
+        <strong>data de coleta mais recente</strong> entre os imports daquele produto, e volte a ordenar por vendas a descer. O{" "}
+        <strong>limit</strong> alto do painel só define quantas linhas vêm na resposta — rating e preço servem para{" "}
+        <strong>interpretar</strong>, não para o ranque servidor.
       </p>
       <div style={introLogicBox}>
-        <div style={introLogicLabel}>Complemento ao ecrã (como Product Score)</div>
+        <div style={introLogicLabel}>Neste painel (dados já carregados)</div>
         <ul style={introLogicUl}>
           <li>
-            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces — credenciais{" "}
-            <code>SPACES_*</code> só no servidor; mesmo POST que Product Score.
+            Clicar no cabeçalho ou <strong>▾</strong> altera apenas <strong>ordenação e filtros locais</strong> no browser; para
+            voltar ao ranking da API, carrega dados outra vez ou volta à ordem por vendas.
           </li>
           <li>
-            O <strong>nome</strong> abre a <strong>página de trabalho</strong> (<code>/produto/…</code>); a coluna{" "}
-            <strong>link</strong> abre o PDP no TikTok.
+            <strong>Ações</strong> → Exportar pelo servidor (<code>SPACES_*</code>). <strong>nome</strong> → trabalho{" "}
+            <code>/produto/…</code>. <strong>link</strong> → TikTok.
           </li>
         </ul>
       </div>
-      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
-        Por defeito <strong>{TOP_PRODUCTS_VISIBLE_DEFAULT}</strong> linhas; use <strong>Ver mais produtos</strong> para o
-        restante na mesma ordem (ordenada inicialmente por vendas; cabeçalhos alteram a ordem das linhas já carregadas).
-        Dados do snapshot na base — não são tempo real do TikTok.
+      <div
+        style={{
+          ...introWarn,
+          marginTop: "0.5rem",
+          borderLeftColor: "rgb(148 163 184 / 0.35)",
+          background: "var(--tk-surface-inset)",
+          fontSize: "0.76rem",
+          padding: "0.4rem 0.55rem"
+        }}
+      >
+        Por defeito <strong>{TOP_PRODUCTS_VISIBLE_DEFAULT}</strong> linhas · <strong>Ver mais produtos</strong> para o restante na mesma ordem atual. Valores são snapshot na base (não tempo real TikTok).
       </div>
     </IntroCard>
   );
@@ -1175,9 +1229,9 @@ function TableTop({ data }) {
     return (
       <>
         {topIntro}
-        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-          <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como quando a API responde). Altere
-          clicando nos cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>.
+        <p style={{ fontSize: "0.72rem", opacity: 0.7, marginBottom: "0.45rem" }}>
+          Ordem inicial: <strong>vendas</strong> maior→menor (API). Cabeçalhos e <strong>▾</strong> só mudam a lista no ecrã. Não
+          ordenamos <strong>link</strong>/<strong>Ações</strong>. Carregue dados acima.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -1203,11 +1257,10 @@ function TableTop({ data }) {
   return (
     <>
       {topIntro}
-      <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-        <strong>Ordem inicial:</strong> vendas do <strong>maior para o menor</strong> (como na API). Altere clicando nos
-        cabeçalhos — não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong> abre a{" "}
-        <strong>página de trabalho</strong> (<code>/produto/…</code>) quando o produto tem <code>productId</code>.{" "}
-        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
+      <p style={{ fontSize: "0.72rem", opacity: 0.7, marginBottom: "0.45rem" }}>
+        Ordem inicial: <strong>vendas</strong> maior→menor (API). Cabeçalhos e <strong>▾</strong> só reordenam ou filtram no ecrã.{" "}
+        Não ordenamos <strong>link</strong>/<strong>Ações</strong>. <strong>nome</strong> → trabalho quando houver{" "}
+        <code>productId</code>. Resize na beira das colunas.
       </p>
       {filtersActiveTopExcel && rawItems.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
@@ -1502,15 +1555,17 @@ function TableOpp({ data }) {
     <div
       role="radiogroup"
       aria-label="Modo do relatório Opportunities"
-      style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginBottom: "0.85rem", alignItems: "center" }}
+      style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginBottom: "0.55rem", alignItems: "center" }}
     >
       <span style={{ fontSize: "0.76rem", opacity: 0.78, marginRight: "0.25rem", fontWeight: 600 }}>Modo:</span>
-      {OPP_MODE_OPTIONS.map(({ id, label }) => (
+      {OPP_MODE_OPTIONS.map(({ id, label, titleTip }) => (
         <button
           key={id}
           type="button"
           role="radio"
           aria-checked={opportunityMode === id}
+          aria-label={`${label}. ${titleTip}`}
+          title={titleTip}
           onClick={() => setOpportunityMode(id)}
           style={{
             padding: "0.36rem 0.65rem",
@@ -1531,53 +1586,33 @@ function TableOpp({ data }) {
     </div>
   );
 
-  const oppIntro = (
-    <IntroCard title="Opportunities">
-      <p style={introLead}>
-        <strong>Produtos bem avaliados segundo o modo seleccionado.</strong> Critérios de qualidade mantêm-se{" "}
-        <strong>média e total de avaliações altos</strong> e <strong>preço definido</strong>; a variante é só a{" "}
-        <strong>regra de vendas</strong> (classic, baixas, sem vendas, ou abaixo da mediana por categoria mestre). O painel pode
-        carregar milhares de linhas da API — por defeito mostramos <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> até expandir
-        (Analytics v1 nos docs).
+  const oppHoverHelpBody = (
+    <div>
+      <p style={{ margin: "0 0 0.4rem", fontWeight: 600, color: "var(--tk-text)" }}>Resumo</p>
+      <p style={{ margin: 0, color: "var(--tk-text-muted)", lineHeight: 1.45 }}>
+        Último import na base (ou por categoria na vista filtrada).{" "}
+        <strong style={{ color: "var(--tk-text)" }}>Pairar em cada Modo</strong> vê a regra de vendas; a qualidade (preço, média
+        ≥4,5, ≥5 aval) é igual em todos.
       </p>
-      <div style={introLabel}>👉 Use para:</div>
-      <ul style={introBullet}>
-        <li>encontrar produtos com boa aceitação</li>
-        <li>entrar antes de ficarem saturados</li>
-      </ul>
-      <div style={introLogicBox}>
-        <div style={introLogicLabel}>Como funciona (por dentro)</div>
-        <ul style={introLogicUl}>
-          <li>último scrape (modo global) ou último snapshot por produto por categoria;</li>
-          <li>
-            critérios comuns à base em todos os modos: <strong>preço</strong> definido; média de avaliação <strong>≥ 4,5</strong>;
-            total de avaliações <strong>≥ 5</strong>;
-          </li>
-          <li>
-            modos de vendas: <strong>Classic</strong> — 10 a 300; <strong>Baixas</strong> — 1 a 99;{" "}
-            <strong>Sem vendas</strong> — 0 ou campo ausente; <strong>Abaixo da mediana</strong> — pelo menos 1 venda e valor
-            estritamente abaixo da mediana de vendas da <strong>categoria mestre</strong> no mesmo import;
-          </li>
-          <li>
-            ordenação principal: melhor média de avaliação (desempate por vendas); o servidor pode devolver até o limite do
-            pedido (<code>limit</code>), o quadro usa <strong>Ver mais produtos</strong> para revelar linhas seguintes já
-            carregadas.
-          </li>
-          <li>
-            No cabeçalho de cada coluna: clique no <strong>nome da coluna</strong> para ordenar; o ícone{" "}
-            <strong>▾</strong> abre <strong>lista de valores e A–Z</strong> por coluna (tipo Excel), só nas linhas já carregadas.
-          </li>
-          <li>
-            Coluna <strong>Ações</strong>: <strong>Exportar</strong> ao DigitalOcean Spaces (credenciais só no servidor — como
-            nos outros relatórios com produtos).
-          </li>
-        </ul>
-      </div>
-      <div style={{ ...introWarn, marginTop: "0.65rem", borderLeftColor: "rgb(148 163 184 / 0.35)", background: "var(--tk-surface-inset)" }}>
-        Por defeito <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> linhas; use <strong>Ver mais produtos</strong> para o restante na mesma
-        ordem. <strong>▾</strong> no cabeçalho ordena em A–Z ou filtra só essa coluna. Dados do snapshot — não são tempo real do TikTok.
-      </div>
-      <div style={introWarn}>⚠️ É um filtro exploratório — não garante resultado.</div>
+      <p style={{ margin: "0.45rem 0 0", color: "var(--tk-text-muted)", lineHeight: 1.45 }}>
+        Tabela: clique no cabeçalho ordena · <strong>▾</strong> filtra (só linhas carregadas) · nome abre o produto ·{" "}
+        <strong>Ações</strong> exporta (servidor). Não é tempo real — ver <code>docs/ANALYTICS.md</code>.
+      </p>
+    </div>
+  );
+
+  const oppIntro = (
+    <IntroCard
+      title="Opportunities"
+      titleAside={
+        <HoverHelpTooltip ariaLabel="Resumo do relatório; detalhes de cada modo ao pairar nos botões Modo">{oppHoverHelpBody}</HoverHelpTooltip>
+      }
+    >
+      <p style={{ ...introLead, marginBottom: 0 }}>
+        Escolha o <strong>Modo</strong> · lista compacta = primeiras{" "}
+        <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> linhas (<strong>Ver mais produtos</strong> até{" "}
+        {OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} pedidas à API).
+      </p>
     </IntroCard>
   );
 
@@ -1625,10 +1660,8 @@ function TableOpp({ data }) {
       <>
         {oppModeToolbar}
         {oppIntro}
-        <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-          <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong>. No cabeçalho das colunas da
-          tabela use <strong>▾</strong> para filtrar ou A–Z, como no Excel. Não ordenamos <strong>link</strong> nem{" "}
-          <strong>Ações</strong>.
+        <p style={{ fontSize: "0.72rem", opacity: 0.72, marginBottom: "0.45rem" }}>
+          Ordem inicial: rating ↓ · cabeçalho <strong>▾</strong> = filtros · carregue dados acima.
         </p>
         <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
       </>
@@ -1672,12 +1705,6 @@ function TableOpp({ data }) {
         </p>
       ) : null}
       {oppIntro}
-      <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-        Clique no <strong>título da coluna</strong> para ordenar; o triângulo <strong>▾</strong> mostra lista de valores da coluna com
-        caixas de selecção, como no Excel, e ordenação A–Z. Não ordenamos <strong>link</strong> nem <strong>Ações</strong>. O <strong>nome</strong> abre a página
-        de trabalho (<code>/produto/…</code>).{" "}
-        <span style={{ opacity: 0.85 }}>Arraste a borda nos cabeçalhos para ajustar larguras.</span>
-      </p>
       {filtersActive && rawItems.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
           Após filtros locais: <strong>{filteredRaw.length}</strong> de {rawItems.length} linha
@@ -1685,17 +1712,17 @@ function TableOpp({ data }) {
         </p>
       ) : null}
       {rankingTotalServer > OPPORTUNITIES_VISIBLE_DEFAULT ? (
-        <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
-          <strong>Candidatos ao modo actual nesta vista:</strong> {rankingTotalServer.toLocaleString("pt-BR")} produto
-          {rankingTotalServer !== 1 ? "s" : ""}
-          {!hasMoreLocally && data?.truncated !== true ? " (todos listados)." : null}
-          {hasMoreLocally
-            ? ` Carregamos a lista até o limite do painel (${OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} máx.).`
-            : null}
-          {expanded || !hasMoreLocally ? ` A mostrar ${items.length.toLocaleString("pt-BR")} na tabela (${expanded ? "expandida" : "compacta"}).` : null}
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem", lineHeight: 1.4 }}>
+          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong> candidatos
+          {!hasMoreLocally && data?.truncated !== true ? " (todos na lista)." : null}
+          {hasMoreLocally ? ` · até ${OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} linhas pedidas à API` : null}
+          {expanded || !hasMoreLocally
+            ? ` · vista ${expanded ? "expandida" : "compacta"} (${items.length.toLocaleString("pt-BR")} linhas)`
+            : ""}
           {!expanded && hasMoreLocally
-            ? ` A vista compacta mostra os primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT} pela ordenação atual.`
-            : null}
+            ? ` · compacta = primeiros ${OPPORTUNITIES_VISIBLE_DEFAULT} pela ordem actual`
+            : ""}
+          .
         </p>
       ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
@@ -1945,10 +1972,10 @@ function TableOpp({ data }) {
             lineHeight: 1.45
           }}
         >
-          O servidor devolve até <strong>{OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas; há pelo menos{" "}
-          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong> candidatos ao modo actual —
-          aumente <code>OPPORTUNITIES_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisares de lista
-          completa no browser.
+          Lista truncada:&nbsp;
+          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong>+ candidatos; pedido até{" "}
+          <strong>{OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas —
+          aumente <code>OPPORTUNITIES_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisar de mais linhas na página.
         </p>
       ) : null}
     </>
@@ -3946,7 +3973,8 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
             Métricas em GET pelo Fastify · export Space e página por produto (ver doc). Proxy do Vite em dev para evitar CORS.
           </p>
           <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
-            <strong>Resumo:</strong> Top = maior volume · Opportunities = boa aceitação antes de grandes volumes · Product Score =
+            <strong>Resumo:</strong> Top = ranque servidor só por vendas registadas (<code>sales_count</code>) no último import (ver secção Top) ·
+            Opportunities = regras de “oportunidade” por modo · Product Score =
             ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
             dados importados.
           </p>
