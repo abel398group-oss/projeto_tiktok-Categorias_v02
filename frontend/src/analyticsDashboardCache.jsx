@@ -37,6 +37,7 @@ export const ANALYTICS_REPORT_TABS = [
   { id: "top", label: "Top Products", path: "/analytics/top-products", key: "top" },
   { id: "opp", label: "Opportunities", path: "/analytics/opportunities", key: "opp" },
   { id: "score", label: "Product Score", path: "/analytics/product-score", key: "score" },
+  { id: "growth", label: "📈 Em Ascensão", path: "/analytics/growth", key: "growth" },
   { id: "scale", label: "🔥 Escalar", path: "/analytics/scalable-products", key: "scale" },
   { id: "map", label: "🧭 Mapa", path: "/analytics/category-map", key: "map" }
 ];
@@ -53,6 +54,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     top: null,
     opp: null,
     score: null,
+    growth: null,
     scale: null,
     map: null
   });
@@ -68,6 +70,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
       top: null,
       opp: null,
       score: null,
+      growth: null,
       scale: null,
       map: null
     });

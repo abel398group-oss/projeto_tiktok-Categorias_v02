@@ -26,6 +26,8 @@ import {
 } from "./sortUtils.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { SpacesExportActionCell, SpacesExportFeedback, useSpacesExport } from "./spacesExport.jsx";
+import { deriveProductLabels } from "./productLabels.js";
+import { getTicketLabel, rowMatchesTicketFilter } from "./ticketLabel.js";
 
 const CategoryAnalyticsPage = lazy(() => import("./CategoryAnalyticsPage.jsx"));
 
@@ -551,6 +553,131 @@ const tdEllipsis = {
   whiteSpace: "nowrap",
   verticalAlign: "middle"
 };
+
+const productLabelsChipWrap = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.28rem",
+  marginTop: "0.22rem",
+  alignItems: "center",
+  maxWidth: "100%"
+};
+const productLabelChipStyle = {
+  fontSize: "0.68rem",
+  lineHeight: 1.35,
+  padding: "0.12rem 0.42rem",
+  borderRadius: "var(--tk-radius-sm)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface-inset)",
+  color: "var(--tk-text-muted)",
+  fontWeight: 500,
+  whiteSpace: "nowrap"
+};
+
+/**
+ * Chips só de cliente (derivam de dados já na linha; não alteram API).
+ * @param {{ row: Record<string, unknown> }} props
+ */
+function ProductLabelsChips({ row }) {
+  const labels = deriveProductLabels(row);
+  if (!labels.length) return null;
+  const titleStr = labels.map((l) => `${l.emoji} ${l.label}`).join(", ");
+  return (
+    <span style={productLabelsChipWrap} title={titleStr} aria-label={titleStr}>
+      {labels.map((l) => (
+        <span key={l.id} style={productLabelChipStyle}>
+          <span aria-hidden>{l.emoji}</span>&nbsp;{l.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const TICKET_TIER_BADGE = {
+  baixo: { background: "rgb(220 252 231 / 0.65)", borderColor: "rgb(134 239 172 / 0.55)", color: "rgb(20 83 45)" },
+  medio: { background: "rgb(254 249 195 / 0.75)", borderColor: "rgb(250 204 21 / 0.45)", color: "rgb(113 63 18)" },
+  alto: { background: "rgb(254 226 226 / 0.65)", borderColor: "rgb(252 165 165 / 0.55)", color: "rgb(127 29 29)" }
+};
+
+const TICKET_FILTER_OPTIONS = /** @type {const} */ ([
+  { id: "all", label: "Todos" },
+  { id: "alto", label: "Ticket alto" },
+  { id: "medio", label: "Ticket médio" },
+  { id: "baixo", label: "Ticket baixo" }
+]);
+
+/**
+ * Filtro só no browser sobre as linhas já carregadas na aba.
+ * @param {{ value: 'all' | 'baixo' | 'medio' | 'alto', onChange: (v: 'all' | 'baixo' | 'medio' | 'alto') => void }} props
+ */
+function TicketFilterBar({ value, onChange }) {
+  return (
+    <div
+      role="group"
+      aria-label="Filtro rápido por faixa de preço (lista já carregada nesta vista)"
+      style={{ display: "flex", flexWrap: "wrap", gap: "0.38rem", alignItems: "center", marginBottom: "0.55rem" }}
+    >
+      <span style={{ fontSize: "0.74rem", opacity: 0.78, fontWeight: 600, marginRight: "0.2rem" }}>Ticket:</span>
+      {TICKET_FILTER_OPTIONS.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ (opt.id))}
+            style={{
+              padding: "0.32rem 0.62rem",
+              cursor: "pointer",
+              borderRadius: "var(--tk-radius-md)",
+              border: active ? "1px solid var(--tk-accent-ring)" : "1px solid var(--tk-border)",
+              background: active ? "var(--tk-accent-soft)" : "var(--tk-surface)",
+              color: "var(--tk-text)",
+              fontWeight: active ? 600 : 500,
+              fontSize: "0.76rem"
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** @param {{ row: Record<string, unknown>, tdExtra?: import("react").CSSProperties }} props */
+function TicketBadgeCell({ row, tdExtra = {} }) {
+  const t = getTicketLabel(row);
+  if (!t.tier) {
+    return (
+      <td
+        style={{ fontSize: "0.74rem", verticalAlign: "middle", color: "var(--tk-text-muted)", ...tdExtra }}
+        title={t.label}
+      >
+        —
+      </td>
+    );
+  }
+  const st = TICKET_TIER_BADGE[t.tier];
+  return (
+    <td style={{ fontSize: "0.74rem", verticalAlign: "middle", ...tdExtra }} title={t.label}>
+      <span
+        style={{
+          display: "inline-block",
+          padding: "0.1rem 0.42rem",
+          borderRadius: "var(--tk-radius-sm)",
+          border: `1px solid ${st.borderColor}`,
+          background: st.background,
+          color: st.color,
+          fontWeight: 600,
+          fontSize: "0.72rem"
+        }}
+      >
+        {t.shortLabel}
+      </span>
+    </td>
+  );
+}
+
 const positionThTitle = "Posição na ordenação actual (1, 2, 3…)";
 /**
  * Balão ao pairar (?); orientação ao humano sem ocupar espaço fixo na página.
@@ -667,12 +794,12 @@ const SORT_MAP_SUB_DESC = ["score", "totalSales", "avgRating", "avgPrice", "tota
 const SORT_MAP_TOP_DESC = ["score", "vendas", "rating", "preco", "delta"];
 
 /** Larguras iniciais (px): mesma ordem que `<colgroup>` por tabela — redimensionável no cabeçalho */
-const CW_TOP = [52, 175, 88, 88, 105, 68, 74, 78, 82, 76];
-const CW_OPP = [52, 155, 80, 80, 95, 64, 70, 74, 84, 74, 62];
-const CW_SCORE = [52, 58, 100, 140, 76, 76, 112, 72, 78, 74, 72, 88, 94, 66];
+const CW_TOP = [52, 168, 86, 86, 100, 64, 54, 72, 76, 80, 74, 72];
+const CW_OPP = [52, 148, 76, 76, 90, 60, 52, 66, 70, 72, 78, 72, 58];
+const CW_SCORE = [52, 56, 96, 128, 72, 72, 100, 50, 64, 70, 68, 66, 82, 86, 60];
 const CW_MAP_SUB = [52, 120, 200, 64, 120, 80, 90, 80, 80, 76];
 const CW_MAP_TOP = [48, 92, 138, 138, 76, 76, 52, 68, 62, 62, 52, 82, 56];
-const CW_SCALE = [48, 132, 74, 74, 52, 68, 76, 74, 54];
+const CW_SCALE = [48, 124, 70, 70, 50, 64, 66, 52, 68, 66, 50];
 
 /** Top Products: linhas compactas até expandir (API pode trazer até `TOP_PRODUCTS_UI_FETCH_LIMIT`). */
 const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
@@ -680,28 +807,33 @@ const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
 /** Opportunities: igual padrão — API pode trazer até `OPPORTUNITIES_UI_FETCH_LIMIT`. */
 const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
 
-/** Modos API `GET /analytics/opportunities?mode=` — `label` curto no botão; `titleTip` no pairar. */
+/** Modos API `GET /analytics/opportunities?mode=` — rótulos PT; `description` visível na aba; `titleTip` no pairar. */
 const OPP_MODE_OPTIONS = /** @type {const} */ ([
   {
     id: "classic",
-    label: "Classic",
-    titleTip: "Vendas 10–300 com valor na BD. Em todos os modos: preço definido, média ≥4,5, ≥5 avaliações."
+    label: "Clássico",
+    description:
+      "Produtos com bom rating, avaliações mínimas e vendas em faixa de oportunidade.",
+    titleTip: "API: mode=classic — faixa de vendas com sinais de qualidade (ver docs)."
   },
   {
     id: "low_sales",
-    label: "Baixas",
-    titleTip: "Vendas 1–99. Mesma base de qualidade (preço, rating, mín. avaliações)."
+    label: "Pouca venda",
+    description: "Produtos com poucas vendas, mas sinais positivos de avaliação.",
+    titleTip: "API: mode=low_sales — volume de vendas reduzido na regra do servidor."
   },
   {
     id: "no_sales",
     label: "Sem vendas",
-    titleTip: "Vendas 0 ou campo vazio no snapshot. Mesma base de qualidade."
+    description:
+      "Produtos ainda sem vendas registradas, úteis para encontrar itens novos ou pouco explorados.",
+    titleTip: "API: mode=no_sales — sem vendas no snapshot segundo a regra do servidor."
   },
   {
     id: "below_median",
-    label: "Mediana",
-    titleTip:
-      "Pelo menos 1 venda e valor abaixo da mediana de vendas da categoria (mestre) no último import. Mesma base de qualidade."
+    label: "Abaixo da mediana",
+    description: "Produtos abaixo da mediana de vendas da categoria, mas com bons sinais.",
+    titleTip: "API: mode=below_median — abaixo da mediana de vendas da categoria (servidor)."
   }
 ]);
 /** Filtros por coluna na aba Opportunities (`null` em texto/categoria = «todas» como no Excel). */
@@ -1134,11 +1266,13 @@ function TableTop({ data }) {
   const [topColFilters, setTopColFilters] = useState(() => ({ ...TOP_FILTERS_INITIAL }));
   /** Qual coluna tem o menu ▾ aberto. */
   const [topMenuKey, setTopMenuKey] = useState(/** @type {string | null} */ (null));
+  const [topTicketTier, setTopTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setExpanded(false);
     setTopColFilters({ ...TOP_FILTERS_INITIAL });
     setTopMenuKey(null);
+    setTopTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const topIntro = (
@@ -1195,12 +1329,20 @@ function TableTop({ data }) {
     );
   }, [rawItems, topColFilters]);
 
+  const topAfterTicket = useMemo(
+    () =>
+      filteredRawTop.filter((row) =>
+        rowMatchesTicketFilter(topTicketTier, /** @type {Record<string, unknown>} */ (row))
+      ),
+    [filteredRawTop, topTicketTier]
+  );
+
   const filtersActiveTopExcel = useMemo(() => topAnyColumnFiltersExcelActive(topColFilters), [topColFilters]);
 
   const items = useMemo(() => {
-    if (filteredRawTop.length === 0) return [];
-    return sortTopItemsByColumn(filteredRawTop, sort.key, sort.dir);
-  }, [filteredRawTop, sort]);
+    if (topAfterTicket.length === 0) return [];
+    return sortTopItemsByColumn(topAfterTicket, sort.key, sort.dir);
+  }, [topAfterTicket, sort]);
 
   const displayRows = useMemo(() => {
     if (items.length <= TOP_PRODUCTS_VISIBLE_DEFAULT || expanded) {
@@ -1212,7 +1354,7 @@ function TableTop({ data }) {
   const rankingTotal =
     typeof data?.rankingTotal === "number" && Number.isFinite(data.rankingTotal)
       ? data.rankingTotal
-      : items.length;
+      : topAfterTicket.length;
 
   const onSort = useCallback((k) => {
     setSort((s) => toggleSort(s.key, s.dir, k, SORT_TOP_DESC));
@@ -1266,6 +1408,12 @@ function TableTop({ data }) {
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
           Depois dos filtros do ▾ nas colunas: <strong>{filteredRawTop.length}</strong> de {rawItems.length} linha
           {rawItems.length !== 1 ? "s" : ""}.
+        </p>
+      ) : null}
+      <TicketFilterBar value={topTicketTier} onChange={setTopTicketTier} />
+      {topTicketTier !== "all" && rawItems.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
+          Após filtro Ticket: <strong>{topAfterTicket.length}</strong> de {filteredRawTop.length} linha(s) (após ▾ quando activo).
         </p>
       ) : null}
       {rankingTotal > TOP_PRODUCTS_VISIBLE_DEFAULT ? (
@@ -1379,6 +1527,12 @@ function TableTop({ data }) {
               resizeColIdx={5}
               onGrip={colW.onGripMouseDown}
             />
+            <PlainTh
+              label="Ticket"
+              title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
+              resizeColIdx={6}
+              onGrip={colW.onGripMouseDown}
+            />
             <ExcelSortTh
               label="vendas"
               colKey="vendas"
@@ -1396,7 +1550,7 @@ function TableTop({ data }) {
               datasetRows={rawItems}
               rowMatches={topRowMatchesColFilters}
               quickSortShortcut={null}
-              resizeColIdx={6}
+              resizeColIdx={7}
               onGrip={colW.onGripMouseDown}
             />
             <ExcelSortTh
@@ -1416,22 +1570,22 @@ function TableTop({ data }) {
               datasetRows={rawItems}
               rowMatches={topRowMatchesColFilters}
               quickSortShortcut={null}
-              resizeColIdx={7}
+              resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={8}
+              resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={10} style={{ padding: "0.75rem 0.65rem", fontSize: "0.82rem", opacity: 0.9 }}>
+              <td colSpan={11} style={{ padding: "0.75rem 0.65rem", fontSize: "0.82rem", opacity: 0.9 }}>
                 Nenhuma linha com os filtros ▾ actuais.{" "}
                 <button type="button" className="tk-btn-soft" onClick={() => setTopColFilters({ ...TOP_FILTERS_INITIAL })}>
                   Limpar filtros de coluna
@@ -1471,6 +1625,7 @@ function TableTop({ data }) {
                   {row.loja ?? "—"}
                 </td>
                 <td>{row.preco ?? "—"}</td>
+                <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
                 <td>{row.vendas ?? "—"}</td>
                 <td>
                   {typeof row.avaliacao === "number" && Number.isFinite(row.avaliacao)
@@ -1544,27 +1699,33 @@ function TableOpp({ data }) {
   const [oppColFilters, setOppColFilters] = useState(() => ({ ...OPP_COL_FILTERS_INITIAL }));
   /** Qual coluna tem o menu ▾ aberto (um de cada vez). */
   const [oppMenuKey, setOppMenuKey] = useState(/** @type {string | null} */ (null));
+  const [oppTicketTier, setOppTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
+  /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
+  const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
 
   useEffect(() => {
     setExpanded(false);
     setOppColFilters({ ...OPP_COL_FILTERS_INITIAL });
     setOppMenuKey(null);
+    setOppTicketTier("all");
   }, [data?.scrapeRun?.id, opportunityMode]);
+
+  const activeOppMode = OPP_MODE_OPTIONS.find((o) => o.id === opportunityMode) ?? OPP_MODE_OPTIONS[0];
 
   const oppModeToolbar = (
     <div
       role="radiogroup"
       aria-label="Modo do relatório Opportunities"
-      style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginBottom: "0.55rem", alignItems: "center" }}
+      style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginBottom: "0.45rem", alignItems: "center" }}
     >
-      <span style={{ fontSize: "0.76rem", opacity: 0.78, marginRight: "0.25rem", fontWeight: 600 }}>Modo:</span>
-      {OPP_MODE_OPTIONS.map(({ id, label, titleTip }) => (
+      <span style={{ fontSize: "0.76rem", opacity: 0.78, marginRight: "0.25rem", fontWeight: 600 }}>Modo de análise:</span>
+      {OPP_MODE_OPTIONS.map(({ id, label, description, titleTip }) => (
         <button
           key={id}
           type="button"
           role="radio"
           aria-checked={opportunityMode === id}
-          aria-label={`${label}. ${titleTip}`}
+          aria-label={`${label}. ${description}`}
           title={titleTip}
           onClick={() => setOpportunityMode(id)}
           style={{
@@ -1586,13 +1747,36 @@ function TableOpp({ data }) {
     </div>
   );
 
+  const oppModeDescriptionBlock = (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        marginBottom: "0.6rem",
+        maxWidth: "48rem",
+        padding: "0.55rem 0.72rem",
+        borderRadius: "var(--tk-radius-md)",
+        border: "1px solid var(--tk-border)",
+        background: "var(--tk-surface-raised)",
+        fontSize: "0.82rem",
+        lineHeight: 1.55,
+        color: "var(--tk-text)"
+      }}
+    >
+      <strong>{activeOppMode.label}</strong>
+      <span style={{ opacity: 0.45, margin: "0 0.35rem" }}>—</span>
+      <span style={{ color: "var(--tk-text-muted)" }}>{activeOppMode.description}</span>
+    </div>
+  );
+
   const oppHoverHelpBody = (
     <div>
       <p style={{ margin: "0 0 0.4rem", fontWeight: 600, color: "var(--tk-text)" }}>Resumo</p>
       <p style={{ margin: 0, color: "var(--tk-text-muted)", lineHeight: 1.45 }}>
-        Último import na base (ou por categoria na vista filtrada).{" "}
-        <strong style={{ color: "var(--tk-text)" }}>Pairar em cada Modo</strong> vê a regra de vendas; a qualidade (preço, média
-        ≥4,5, ≥5 aval) é igual em todos.
+        Último import na base (ou por categoria na vista filtrada). Cada <strong style={{ color: "var(--tk-text)" }}>modo</strong>{" "}
+        chama{" "}
+        <code style={{ fontSize: "0.74rem" }}>/analytics/opportunities?mode=…</code> (com <code>categoryUrl</code> na vista por
+        categoria); o significado operacional de cada modo está no texto sob os botões.
       </p>
       <p style={{ margin: "0.45rem 0 0", color: "var(--tk-text-muted)", lineHeight: 1.45 }}>
         Tabela: clique no cabeçalho ordena · <strong>▾</strong> filtra (só linhas carregadas) · nome abre o produto ·{" "}
@@ -1605,19 +1789,16 @@ function TableOpp({ data }) {
     <IntroCard
       title="Opportunities"
       titleAside={
-        <HoverHelpTooltip ariaLabel="Resumo do relatório; detalhes de cada modo ao pairar nos botões Modo">{oppHoverHelpBody}</HoverHelpTooltip>
+        <HoverHelpTooltip ariaLabel="Resumo do relatório Opportunities e comportamento da tabela">{oppHoverHelpBody}</HoverHelpTooltip>
       }
     >
       <p style={{ ...introLead, marginBottom: 0 }}>
-        Escolha o <strong>Modo</strong> · lista compacta = primeiras{" "}
+        Use os botões para alternar o <strong>modo da API</strong> · lista compacta = primeiras{" "}
         <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> linhas (<strong>Ver mais produtos</strong> até{" "}
         {OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")} pedidas à API).
       </p>
     </IntroCard>
   );
-
-  /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
-  const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
 
   const filteredRaw = useMemo(() => {
     if (rawItems.length === 0) return [];
@@ -1626,12 +1807,20 @@ function TableOpp({ data }) {
     );
   }, [rawItems, oppColFilters]);
 
+  const oppAfterTicket = useMemo(
+    () =>
+      filteredRaw.filter((row) =>
+        rowMatchesTicketFilter(oppTicketTier, /** @type {Record<string, unknown>} */ (row))
+      ),
+    [filteredRaw, oppTicketTier]
+  );
+
   const filtersActive = useMemo(() => oppAnyOppColumnFiltersActive(oppColFilters), [oppColFilters]);
 
   const items = useMemo(() => {
-    if (filteredRaw.length === 0) return [];
-    return sortOppItemsByColumn(filteredRaw, sort.key, sort.dir);
-  }, [filteredRaw, sort]);
+    if (oppAfterTicket.length === 0) return [];
+    return sortOppItemsByColumn(oppAfterTicket, sort.key, sort.dir);
+  }, [oppAfterTicket, sort]);
 
   const displayRows = useMemo(() => {
     if (items.length <= OPPORTUNITIES_VISIBLE_DEFAULT || expanded) {
@@ -1659,6 +1848,7 @@ function TableOpp({ data }) {
     return (
       <>
         {oppModeToolbar}
+        {oppModeDescriptionBlock}
         {oppIntro}
         <p style={{ fontSize: "0.72rem", opacity: 0.72, marginBottom: "0.45rem" }}>
           Ordem inicial: rating ↓ · cabeçalho <strong>▾</strong> = filtros · carregue dados acima.
@@ -1672,6 +1862,7 @@ function TableOpp({ data }) {
     return (
       <>
         {oppModeToolbar}
+        {oppModeDescriptionBlock}
         {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
           <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
             {data.ruleNote}
@@ -1686,6 +1877,7 @@ function TableOpp({ data }) {
     return (
       <>
         {oppModeToolbar}
+        {oppModeDescriptionBlock}
         {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
           <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
             {data.ruleNote}
@@ -1699,6 +1891,7 @@ function TableOpp({ data }) {
   return (
     <>
       {oppModeToolbar}
+      {oppModeDescriptionBlock}
       {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
           {data.ruleNote}
@@ -1709,6 +1902,12 @@ function TableOpp({ data }) {
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
           Após filtros locais: <strong>{filteredRaw.length}</strong> de {rawItems.length} linha
           {rawItems.length !== 1 ? "s" : ""}.
+        </p>
+      ) : null}
+      <TicketFilterBar value={oppTicketTier} onChange={setOppTicketTier} />
+      {oppTicketTier !== "all" && rawItems.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
+          Após filtro Ticket: <strong>{oppAfterTicket.length}</strong> de {filteredRaw.length} linha(s) (após ▾ quando activo).
         </p>
       ) : null}
       {rankingTotalServer > OPPORTUNITIES_VISIBLE_DEFAULT ? (
@@ -1814,6 +2013,12 @@ function TableOpp({ data }) {
                   resizeColIdx={5}
                   onGrip={colW.onGripMouseDown}
                 />
+                <PlainTh
+                  label="Ticket"
+                  title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
+                  resizeColIdx={6}
+                  onGrip={colW.onGripMouseDown}
+                />
                 <OppExcelSortTh
                   label="vendas"
                   colKey="vendas"
@@ -1829,7 +2034,7 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={6}
+                  resizeColIdx={7}
                   onGrip={colW.onGripMouseDown}
                 />
                 <OppExcelSortTh
@@ -1847,7 +2052,7 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={7}
+                  resizeColIdx={8}
                   onGrip={colW.onGripMouseDown}
                 />
                 <OppExcelSortTh
@@ -1863,23 +2068,23 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={8}
+                  resizeColIdx={9}
                   onGrip={colW.onGripMouseDown}
                 />
                 <PlainTh
                   label="Ações"
                   title="Exportar ao DigitalOcean Spaces"
-                  resizeColIdx={9}
+                  resizeColIdx={10}
                   onGrip={colW.onGripMouseDown}
                 />
-                <PlainTh label="link" resizeColIdx={10} onGrip={colW.onGripMouseDown} />
+                <PlainTh label="link" resizeColIdx={11} onGrip={colW.onGripMouseDown} />
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     style={{
                       padding: "0.75rem 0.65rem",
                       fontSize: "0.82rem",
@@ -1905,18 +2110,21 @@ function TableOpp({ data }) {
                 return (
                   <tr key={`${row.productId}-${pos}`}>
                     <td style={tdPosStyle}>{pos}</td>
-                    <td>
-                      {hasProductId ? (
-                        <Link
-                          to={`/produto/${encodeURIComponent(String(pid).trim())}`}
-                          title={nomeTitle ?? "Abrir página de trabalho deste produto"}
-                          style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
-                        >
-                          {row.nome ?? "—"}
-                        </Link>
-                      ) : (
-                        <span title={nomeTitle}>{row.nome ?? "—"}</span>
-                      )}
+                    <td style={{ verticalAlign: "middle" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                        {hasProductId ? (
+                          <Link
+                            to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                            title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                            style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                          >
+                            {row.nome ?? "—"}
+                          </Link>
+                        ) : (
+                          <span title={nomeTitle}>{row.nome ?? "—"}</span>
+                        )}
+                        <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
+                      </div>
                     </td>
                     <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
                       {catCellPt(row.categoriaPrincipal)}
@@ -1926,6 +2134,7 @@ function TableOpp({ data }) {
                     </td>
                     <td>{row.loja}</td>
                     <td>{row.preco ?? "—"}</td>
+                    <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
                     <td>{row.vendas ?? "—"}</td>
                     <td>
                       {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
@@ -2170,20 +2379,30 @@ function TableScore({ data }) {
   /** Filtros cabeçalho tipo Excel (a jusante do painel de presetes). */
   const [scoreExcelColFilters, setScoreExcelColFilters] = useState(() => ({ ...SCORE_EXCEL_FILTERS_INITIAL }));
   const [scoreExcelMenuKey, setScoreExcelMenuKey] = useState(/** @type {string | null} */ (null));
+  const [scoreTicketTier, setScoreTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setScoreExcelColFilters({ ...SCORE_EXCEL_FILTERS_INITIAL });
     setScoreExcelMenuKey(null);
+    setScoreTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const filteredRows = useMemo(() => applyProductFilters(rawRows, filterApplied), [rawRows, filterApplied]);
 
-  const scoreExcelFiltered = useMemo(
+  const scoreTicketFiltered = useMemo(
     () =>
       filteredRows.filter((r) =>
+        rowMatchesTicketFilter(scoreTicketTier, /** @type {Record<string, unknown>} */ (r))
+      ),
+    [filteredRows, scoreTicketTier]
+  );
+
+  const scoreExcelFiltered = useMemo(
+    () =>
+      scoreTicketFiltered.filter((r) =>
         scoreExcelRowMatchesColFilters(/** @type {Record<string, unknown>} */ (r), scoreExcelColFilters)
       ),
-    [filteredRows, scoreExcelColFilters]
+    [scoreTicketFiltered, scoreExcelColFilters]
   );
 
   const filtersScoreExcelActive = useMemo(
@@ -2255,6 +2474,12 @@ function TableScore({ data }) {
         filteredCount={filteredRows.length}
         appliedInactive={filtersAreInactive(filterApplied)}
       />
+      <TicketFilterBar value={scoreTicketTier} onChange={setScoreTicketTier} />
+      {scoreTicketTier !== "all" && filteredRows.length > 0 ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
+          Após filtro Ticket: <strong>{scoreTicketFiltered.length}</strong> de {filteredRows.length} linha(s) após presets.
+        </p>
+      ) : null}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
         Métricas numéricas fazem primeiro clique maior→menor; nome, categoria, sub e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
@@ -2262,10 +2487,10 @@ function TableScore({ data }) {
         que ainda passam pelo painel de cima.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
       </p>
-      {filtersScoreExcelActive && filteredRows.length > 0 ? (
+      {filtersScoreExcelActive && scoreTicketFiltered.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
-          Filtros de coluna ▾: <strong>{scoreExcelFiltered.length}</strong> de {filteredRows.length} linha
-          {filteredRows.length !== 1 ? "s" : ""} após o painel de presets.
+          Filtros de coluna ▾: <strong>{scoreExcelFiltered.length}</strong> de {scoreTicketFiltered.length} linha
+          {scoreTicketFiltered.length !== 1 ? "s" : ""} após presets e Ticket.
         </p>
       ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
@@ -2298,7 +2523,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={{ key: "score", dir: "desc", label: "Ordenação (score ↓)" }}
               resizeColIdx={1}
@@ -2316,7 +2541,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={2}
@@ -2334,7 +2559,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={3}
@@ -2352,7 +2577,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={4}
@@ -2370,7 +2595,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={5}
@@ -2388,7 +2613,7 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={6}
@@ -2408,10 +2633,16 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
               resizeColIdx={7}
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh
+              label="Ticket"
+              title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
+              resizeColIdx={8}
               onGrip={colW.onGripMouseDown}
             />
             <ExcelSortTh
@@ -2428,10 +2659,10 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
-              resizeColIdx={8}
+              resizeColIdx={9}
               onGrip={colW.onGripMouseDown}
             />
             <ExcelSortTh
@@ -2448,10 +2679,10 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
-              resizeColIdx={9}
+              resizeColIdx={10}
               onGrip={colW.onGripMouseDown}
             />
             <ExcelSortTh
@@ -2468,25 +2699,25 @@ function TableScore({ data }) {
               menuOpenKey={scoreExcelMenuKey}
               setMenuOpenKey={setScoreExcelMenuKey}
               onApplySort={onScoreExcelApplySort}
-              datasetRows={filteredRows}
+              datasetRows={scoreTicketFiltered}
               rowMatches={scoreExcelRowMatchesColFilters}
               quickSortShortcut={null}
-              resizeColIdx={10}
+              resizeColIdx={11}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="PDP"
               title="Enriquecer PDP no servidor (npm run pdp:enrich)"
-              resizeColIdx={11}
+              resizeColIdx={12}
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
               label="Ações"
               title="Exportar ao DigitalOcean Spaces"
-              resizeColIdx={12}
+              resizeColIdx={13}
               onGrip={colW.onGripMouseDown}
             />
-            <PlainTh label="link" resizeColIdx={13} onGrip={colW.onGripMouseDown} />
+            <PlainTh label="link" resizeColIdx={14} onGrip={colW.onGripMouseDown} />
           </tr>
         </thead>
         <tbody>
@@ -2495,14 +2726,17 @@ function TableScore({ data }) {
               <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.score}</td>
               <td>{row.classific}</td>
-              <td>
-                <Link
-                  to={`/produto/${encodeURIComponent(row.productId)}`}
-                  title="Abrir página de trabalho deste produto"
-                  style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
-                >
-                  {row.nome}
-                </Link>
+              <td style={{ verticalAlign: "middle" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                  <Link
+                    to={`/produto/${encodeURIComponent(row.productId)}`}
+                    title="Abrir página de trabalho deste produto"
+                    style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                  >
+                    {row.nome}
+                  </Link>
+                  <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
+                </div>
               </td>
               <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
                 {catCellPt(row.categoriaPrincipal)}
@@ -2512,6 +2746,7 @@ function TableScore({ data }) {
               </td>
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
+              <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
               <td>{row.vendas ?? "—"}</td>
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
@@ -2538,6 +2773,154 @@ function TableScore({ data }) {
         </tbody>
       </table>
       )}
+    </>
+  );
+}
+
+const GROWTH_EMPTY_MSG =
+  "Ainda não há dados suficientes para calcular crescimento. Rode pelo menos duas coletas/importações comparáveis.";
+
+/** @param {{ data: Record<string, unknown> | null }} props */
+function TableGrowth({ data }) {
+  const allRows = asArray(data?.items);
+  const [growthTicketTier, setGrowthTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
+  const growthRunKey =
+    data != null && typeof data === "object" && data.latestRun != null && typeof data.latestRun === "object"
+      ? String((/** @type {Record<string, unknown>} */ (data.latestRun)).id ?? "")
+      : "";
+
+  useEffect(() => {
+    setGrowthTicketTier("all");
+  }, [growthRunKey]);
+
+  const growthRowsTicket = useMemo(
+    () =>
+      allRows.filter((r) =>
+        rowMatchesTicketFilter(growthTicketTier, /** @type {Record<string, unknown>} */ (r))
+      ),
+    [allRows, growthTicketTier]
+  );
+
+  const growthIntro = (
+    <IntroCard title="Em Ascensão">
+      <p style={introLead}>
+        <strong>Variação de vendas</strong> entre o <strong>último</strong> e o <strong>penúltimo</strong> import na base — o
+        servidor compara pares de snapshots com vendas registadas e ordena por maior <strong>delta</strong> (sem recalcular no
+        browser). Vista global ou filtrada por <code>categoryUrl</code> na API.
+      </p>
+      <div style={introWarn}>
+        Métricas derivadas dos imports — não são números em tempo real do TikTok.
+      </div>
+    </IntroCard>
+  );
+
+  if (data == null) {
+    return (
+      <>
+        {growthIntro}
+        <p style={{ opacity: 0.82 }}>Carregue os dados com o botão acima para preencher a tabela.</p>
+      </>
+    );
+  }
+
+  if (allRows.length === 0) {
+    return (
+      <>
+        {growthIntro}
+        <p style={{ opacity: 0.9, marginBottom: "0.45rem", maxWidth: "42rem", lineHeight: 1.5 }}>{GROWTH_EMPTY_MSG}</p>
+        {data.message ? (
+          <p style={{ fontSize: "0.8rem", opacity: 0.72, maxWidth: "42rem" }}>{String(data.message)}</p>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {growthIntro}
+      {data.latestRun && data.previousRun ? (
+        <p style={{ fontSize: "0.74rem", opacity: 0.78, marginBottom: "0.5rem" }}>
+          Runs: último <code>{String((/** @type {Record<string, unknown>} */ (data.latestRun)).id ?? "")}</code> vs anterior{" "}
+          <code>{String((/** @type {Record<string, unknown>} */ (data.previousRun)).id ?? "")}</code>
+          {data.sortNote ? (
+            <>
+              {" "}
+              · {String(data.sortNote)}
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      <TicketFilterBar value={growthTicketTier} onChange={setGrowthTicketTier} />
+      {growthTicketTier !== "all" ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
+          Após filtro Ticket: <strong>{growthRowsTicket.length}</strong> de {allRows.length} linha(s).
+        </p>
+      ) : null}
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--tk-border)", textAlign: "left" }}>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>#</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>nome</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>loja</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>preço</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>Ticket</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>vendas ant.</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>vendas atual</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>delta</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>% cresc.</th>
+            <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {growthRowsTicket.map((raw, i) => {
+            const row = /** @type {Record<string, unknown>} */ (raw);
+            const preco = row.preco;
+            const precoStr =
+              preco != null && Number.isFinite(Number(preco))
+                ? Number(preco).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : preco != null && String(preco).trim() !== ""
+                  ? String(preco)
+                  : "—";
+            const link = row.link != null ? String(row.link) : "";
+            const key = row.productId != null ? String(row.productId) : link || `g-${i}`;
+            return (
+              <tr key={key} style={{ borderBottom: "1px solid var(--tk-border)" }}>
+                <td style={{ padding: "0.35rem 0.45rem", opacity: 0.85 }}>{i + 1}</td>
+                <td style={{ padding: "0.35rem 0.45rem", verticalAlign: "middle" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                    <span>{row.nome != null ? String(row.nome) : "—"}</span>
+                    <ProductLabelsChips row={row} />
+                  </div>
+                </td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>{row.loja != null ? String(row.loja) : "—"}</td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>{precoStr}</td>
+                <TicketBadgeCell row={row} tdExtra={{ padding: "0.35rem 0.45rem" }} />
+                <td style={{ padding: "0.35rem 0.45rem" }}>
+                  {row.vendasAnt != null ? Number(row.vendasAnt).toLocaleString("pt-BR") : "—"}
+                </td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>
+                  {row.vendasAtual != null ? Number(row.vendasAtual).toLocaleString("pt-BR") : "—"}
+                </td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>
+                  {row.delta != null ? Number(row.delta).toLocaleString("pt-BR") : "—"}
+                </td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>
+                  {row.deltaPct != null && String(row.deltaPct).trim() !== "" ? String(row.deltaPct) : "—"}
+                </td>
+                <td style={{ padding: "0.35rem 0.45rem" }}>
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer">
+                      abrir
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </>
   );
 }
@@ -3306,12 +3689,14 @@ function TableScalableSections({ data }) {
   const [scalePotColFilters, setScalePotColFilters] = useState(() => ({ ...SCALE_FILTERS_INITIAL }));
   const [scaleValMenuKey, setScaleValMenuKey] = useState(/** @type {string | null} */ (null));
   const [scalePotMenuKey, setScalePotMenuKey] = useState(/** @type {string | null} */ (null));
+  const [scaleTicketTier, setScaleTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setScaleValColFilters({ ...SCALE_FILTERS_INITIAL });
     setScalePotColFilters({ ...SCALE_FILTERS_INITIAL });
     setScaleValMenuKey(null);
     setScalePotMenuKey(null);
+    setScaleTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const [sortVal, setSortVal] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
@@ -3333,15 +3718,31 @@ function TableScalableSections({ data }) {
     [rawP, scalePotColFilters]
   );
 
+  const rawVTicket = useMemo(
+    () =>
+      rawVFiltered.filter((r) =>
+        rowMatchesTicketFilter(scaleTicketTier, /** @type {Record<string, unknown>} */ (r))
+      ),
+    [rawVFiltered, scaleTicketTier]
+  );
+
+  const rawPTicket = useMemo(
+    () =>
+      rawPFiltered.filter((r) =>
+        rowMatchesTicketFilter(scaleTicketTier, /** @type {Record<string, unknown>} */ (r))
+      ),
+    [rawPFiltered, scaleTicketTier]
+  );
+
   const v = useMemo(() => {
-    if (rawVFiltered.length === 0) return [];
-    return sortScalableRowsByColumn(rawVFiltered, sortVal.key, sortVal.dir);
-  }, [rawVFiltered, sortVal]);
+    if (rawVTicket.length === 0) return [];
+    return sortScalableRowsByColumn(rawVTicket, sortVal.key, sortVal.dir);
+  }, [rawVTicket, sortVal]);
 
   const p = useMemo(() => {
-    if (rawPFiltered.length === 0) return [];
-    return sortScalableRowsByColumn(rawPFiltered, sortPot.key, sortPot.dir);
-  }, [rawPFiltered, sortPot]);
+    if (rawPTicket.length === 0) return [];
+    return sortScalableRowsByColumn(rawPTicket, sortPot.key, sortPot.dir);
+  }, [rawPTicket, sortPot]);
 
   const scaleValFiltersExcelActive = useMemo(
     () => scaleAnyColumnFiltersExcelActive(scaleValColFilters),
@@ -3492,6 +3893,7 @@ function TableScalableSections({ data }) {
         <td>{row.score}</td>
         <td>{row.vendas ?? "—"}</td>
         <td>{row.rating ?? "—"}</td>
+        <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
         <SpacesExportActionCell
           productId={row.productId}
           nome={row.nome}
@@ -3514,6 +3916,13 @@ function TableScalableSections({ data }) {
     <>
       {escalarIntro}
       {escalarOrdemP}
+      <TicketFilterBar value={scaleTicketTier} onChange={setScaleTicketTier} />
+      {scaleTicketTier !== "all" && (rawV.length > 0 || rawP.length > 0) ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
+          Filtro Ticket aplica-se às duas listas carregadas (Validados: <strong>{rawVTicket.length}</strong> de{" "}
+          {rawVFiltered.length} após ▾ · Potencial: <strong>{rawPTicket.length}</strong> de {rawPFiltered.length} após ▾).
+        </p>
+      ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
@@ -3672,18 +4081,24 @@ function TableScalableSections({ data }) {
                     onGrip={colW.onGripMouseDown}
                   />
                   <PlainTh
-                    label="Ações"
-                    title="Exportar ao DigitalOcean Spaces"
+                    label="Ticket"
+                    title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
                     resizeColIdx={7}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
+                  <PlainTh
+                    label="Ações"
+                    title="Exportar ao DigitalOcean Spaces"
+                    resizeColIdx={8}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>
                 {v.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
+                    <td colSpan={10} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
                       Nenhuma linha com os filtros ▾.{" "}
                       <button type="button" className="tk-btn-soft" onClick={() => setScaleValColFilters({ ...SCALE_FILTERS_INITIAL })}>
                         Limpar filtros desta lista
@@ -3847,18 +4262,24 @@ function TableScalableSections({ data }) {
                     onGrip={colW.onGripMouseDown}
                   />
                   <PlainTh
-                    label="Ações"
-                    title="Exportar ao DigitalOcean Spaces"
+                    label="Ticket"
+                    title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
                     resizeColIdx={7}
                     onGrip={colW.onGripMouseDown}
                   />
-                  <PlainTh label="link" resizeColIdx={8} onGrip={colW.onGripMouseDown} />
+                  <PlainTh
+                    label="Ações"
+                    title="Exportar ao DigitalOcean Spaces"
+                    resizeColIdx={8}
+                    onGrip={colW.onGripMouseDown}
+                  />
+                  <PlainTh label="link" resizeColIdx={9} onGrip={colW.onGripMouseDown} />
                 </tr>
               </thead>
               <tbody>
                 {p.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
+                    <td colSpan={10} style={{ padding: "0.65rem 0.5rem", fontSize: "0.82rem", opacity: 0.9 }}>
                       Nenhuma linha com os filtros ▾.{" "}
                       <button type="button" className="tk-btn-soft" onClick={() => setScalePotColFilters({ ...SCALE_FILTERS_INITIAL })}>
                         Limpar filtros desta lista
@@ -3975,7 +4396,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
           <p style={{ fontSize: "0.72rem", opacity: 0.68, marginTop: "0.35rem", lineHeight: 1.48, maxWidth: "46rem" }}>
             <strong>Resumo:</strong> Top = ranque servidor só por vendas registadas (<code>sales_count</code>) no último import (ver secção Top) ·
             Opportunities = regras de “oportunidade” por modo · Product Score =
-            ranking interno (0–100) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
+            ranking interno (0–100) · Em Ascensão = comparativo vendas último vs penúltimo run (API Growth) · Escalar = dois grupos de foco sobre tudo o que já tem score · Mapa = força das categorias nos
             dados importados.
           </p>
           <p style={{ fontSize: "0.72rem", opacity: 0.66, marginTop: "0.35rem", lineHeight: 1.45, maxWidth: "46rem" }}>
@@ -4047,6 +4468,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
       {!loading && tab === "top" && <TableTop data={data} />}
       {!loading && tab === "opp" && <TableOpp data={data} />}
       {!loading && tab === "score" && <TableScore data={data} />}
+      {!loading && tab === "growth" && <TableGrowth data={data} />}
       {!loading && tab === "scale" && <TableScalableSections data={data} />}
       {!loading && tab === "map" && <TableCategoryMap data={data} />}
       </div>

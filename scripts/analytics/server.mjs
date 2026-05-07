@@ -140,7 +140,16 @@ fastify.get("/analytics/product-score", async (req) => {
 
 fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma));
 
-fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
+fastify.get("/analytics/growth", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getGrowthReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
 
 async function scalableProductsFromQuery(req) {
   const raw = req.query?.categoryUrl;
