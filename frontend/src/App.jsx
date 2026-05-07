@@ -660,6 +660,13 @@ const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
 /** Opportunities: igual padrão — API pode trazer até `OPPORTUNITIES_UI_FETCH_LIMIT`. */
 const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
 
+/** Modos API `GET /analytics/opportunities?mode=` — etiquetas curtas na UI (ver docs/ANALYTICS.md). */
+const OPP_MODE_OPTIONS = /** @type {const} */ ([
+  { id: "classic", label: "Classic (10–300)" },
+  { id: "low_sales", label: "Baixas (1–99)" },
+  { id: "no_sales", label: "Sem vendas (0 ou n/d)" },
+  { id: "below_median", label: "Abaixo da mediana (categoria)" }
+]);
 /** Filtros por coluna na aba Opportunities (`null` em texto/categoria = «todas» como no Excel). */
 const OPP_COL_TEXT_KEYS = /** @type {const} */ (["nome", "categoriaPrincipal", "subcategoria", "loja", "motivo"]);
 
@@ -1478,6 +1485,7 @@ function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const { opportunityMode, setOpportunityMode } = useAnalyticsDashboardCache();
   const [expanded, setExpanded] = useState(false);
   /** Filtros por coluna (subset dos dados já carregados). */
   const [oppColFilters, setOppColFilters] = useState(() => ({ ...OPP_COL_FILTERS_INITIAL }));
@@ -1488,15 +1496,49 @@ function TableOpp({ data }) {
     setExpanded(false);
     setOppColFilters({ ...OPP_COL_FILTERS_INITIAL });
     setOppMenuKey(null);
-  }, [data?.scrapeRun?.id]);
+  }, [data?.scrapeRun?.id, opportunityMode]);
+
+  const oppModeToolbar = (
+    <div
+      role="radiogroup"
+      aria-label="Modo do relatório Opportunities"
+      style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginBottom: "0.85rem", alignItems: "center" }}
+    >
+      <span style={{ fontSize: "0.76rem", opacity: 0.78, marginRight: "0.25rem", fontWeight: 600 }}>Modo:</span>
+      {OPP_MODE_OPTIONS.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          role="radio"
+          aria-checked={opportunityMode === id}
+          onClick={() => setOpportunityMode(id)}
+          style={{
+            padding: "0.36rem 0.65rem",
+            cursor: "pointer",
+            borderRadius: "var(--tk-radius-md)",
+            border:
+              opportunityMode === id ? "1px solid var(--tk-accent-ring)" : "1px solid var(--tk-border)",
+            background: opportunityMode === id ? "var(--tk-accent-soft)" : "var(--tk-surface)",
+            color: "var(--tk-text)",
+            fontWeight: opportunityMode === id ? 600 : 500,
+            fontSize: "0.78rem",
+            boxShadow: opportunityMode === id ? "var(--tk-shadow-sm)" : "none"
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 
   const oppIntro = (
     <IntroCard title="Opportunities">
       <p style={introLead}>
-        <strong>Produtos bem avaliados que ainda não são grandes volumes.</strong> Seleccionados automaticamente na última
-        importação com regras simples: <strong>avaliação média alta</strong>, <strong>mínimo de avaliações</strong>, vendas na{" "}
-        <strong>faixa intermediária</strong> e <strong>preço definido</strong> — o painel pode carregar bem mais linhas; por
-        defeito mostramos só as primeiras <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> até expandir (detalhes em Analytics v1 nos docs).
+        <strong>Produtos bem avaliados segundo o modo seleccionado.</strong> Critérios de qualidade mantêm-se{" "}
+        <strong>média e total de avaliações altos</strong> e <strong>preço definido</strong>; a variante é só a{" "}
+        <strong>regra de vendas</strong> (classic, baixas, sem vendas, ou abaixo da mediana por categoria mestre). O painel pode
+        carregar milhares de linhas da API — por defeito mostramos <strong>{OPPORTUNITIES_VISIBLE_DEFAULT}</strong> até expandir
+        (Analytics v1 nos docs).
       </p>
       <div style={introLabel}>👉 Use para:</div>
       <ul style={introBullet}>
@@ -1508,8 +1550,13 @@ function TableOpp({ data }) {
         <ul style={introLogicUl}>
           <li>último scrape (modo global) ou último snapshot por produto por categoria;</li>
           <li>
-            filtros na base: <strong>preço</strong> definido; média de avaliação <strong>≥ 4,5</strong>; total de avaliações{" "}
-            <strong>≥ 5</strong>; vendas entre <strong>10 e 300</strong>;
+            critérios comuns à base em todos os modos: <strong>preço</strong> definido; média de avaliação <strong>≥ 4,5</strong>;
+            total de avaliações <strong>≥ 5</strong>;
+          </li>
+          <li>
+            modos de vendas: <strong>Classic</strong> — 10 a 300; <strong>Baixas</strong> — 1 a 99;{" "}
+            <strong>Sem vendas</strong> — 0 ou campo ausente; <strong>Abaixo da mediana</strong> — pelo menos 1 venda e valor
+            estritamente abaixo da mediana de vendas da <strong>categoria mestre</strong> no mesmo import;
           </li>
           <li>
             ordenação principal: melhor média de avaliação (desempate por vendas); o servidor pode devolver até o limite do
@@ -1576,6 +1623,7 @@ function TableOpp({ data }) {
   if (data == null) {
     return (
       <>
+        {oppModeToolbar}
         {oppIntro}
         <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
           <strong>Ordem inicial:</strong> média de avaliação do <strong>maior para o menor</strong>. No cabeçalho das colunas da
@@ -1590,6 +1638,12 @@ function TableOpp({ data }) {
   if (data?.message && rawItems.length === 0) {
     return (
       <>
+        {oppModeToolbar}
+        {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
+          <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
+            {data.ruleNote}
+          </p>
+        ) : null}
         {oppIntro}
         <p style={{ opacity: 0.85 }}>{data.message}</p>
       </>
@@ -1598,6 +1652,12 @@ function TableOpp({ data }) {
   if (rawItems.length === 0) {
     return (
       <>
+        {oppModeToolbar}
+        {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
+          <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
+            {data.ruleNote}
+          </p>
+        ) : null}
         {oppIntro}
         <p>Sem linhas.</p>
       </>
@@ -1605,6 +1665,12 @@ function TableOpp({ data }) {
   }
   return (
     <>
+      {oppModeToolbar}
+      {typeof data?.ruleNote === "string" && data.ruleNote.trim() !== "" ? (
+        <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.55rem", maxWidth: "48rem", lineHeight: 1.45 }}>
+          {data.ruleNote}
+        </p>
+      ) : null}
       {oppIntro}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         Clique no <strong>título da coluna</strong> para ordenar; o triângulo <strong>▾</strong> mostra lista de valores da coluna com
@@ -1620,7 +1686,7 @@ function TableOpp({ data }) {
       ) : null}
       {rankingTotalServer > OPPORTUNITIES_VISIBLE_DEFAULT ? (
         <p style={{ fontSize: "0.75rem", opacity: 0.78, marginBottom: "0.55rem" }}>
-          <strong>Candidatos ao filtro v1 nesta vista:</strong> {rankingTotalServer.toLocaleString("pt-BR")} produto
+          <strong>Candidatos ao modo actual nesta vista:</strong> {rankingTotalServer.toLocaleString("pt-BR")} produto
           {rankingTotalServer !== 1 ? "s" : ""}
           {!hasMoreLocally && data?.truncated !== true ? " (todos listados)." : null}
           {hasMoreLocally
@@ -1880,7 +1946,7 @@ function TableOpp({ data }) {
           }}
         >
           O servidor devolve até <strong>{OPPORTUNITIES_UI_FETCH_LIMIT.toLocaleString("pt-BR")}</strong> linhas; há pelo menos{" "}
-          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong> candidatos ao filtro v1 —
+          <strong>{rankingTotalServer.toLocaleString("pt-BR")}</strong> candidatos ao modo actual —
           aumente <code>OPPORTUNITIES_UI_FETCH_LIMIT</code> em <code>analyticsDashboardCache.jsx</code> se precisares de lista
           completa no browser.
         </p>

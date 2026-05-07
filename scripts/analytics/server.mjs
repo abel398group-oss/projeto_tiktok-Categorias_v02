@@ -12,7 +12,11 @@ import Fastify from "fastify";
 import { requireDatabaseUrl } from "./_common.mjs";
 import { getGrowthReport } from "./lib/growth.mjs";
 import { getNewProductsReport } from "./lib/new-products.mjs";
-import { clampOpportunitiesLimit, getOpportunitiesReport } from "./lib/opportunities.mjs";
+import {
+  clampOpportunitiesLimit,
+  getOpportunitiesReport,
+  parseOpportunityMode
+} from "./lib/opportunities.mjs";
 import { getProductScoreReport } from "./lib/product-score.mjs";
 import { clampTopProductsLimit, getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
@@ -107,9 +111,18 @@ fastify.get("/analytics/opportunities", async (req) => {
         ? limRaw[0]
         : undefined
   );
+  const modeRaw = req.query?.mode;
+  const mode = parseOpportunityMode(
+    typeof modeRaw === "string"
+      ? modeRaw
+      : Array.isArray(modeRaw) && modeRaw.length > 0 && typeof modeRaw[0] === "string"
+        ? modeRaw[0]
+        : ""
+  );
   return getOpportunitiesReport(prisma, {
     ...(categoryUrl !== "" ? { categoryUrl } : {}),
-    limit
+    limit,
+    mode
   });
 });
 

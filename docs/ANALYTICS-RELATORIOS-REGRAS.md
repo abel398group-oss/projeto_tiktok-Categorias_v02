@@ -36,18 +36,26 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |--|--|
 | Fonte | `scripts/analytics/lib/opportunities.mjs` |
 
-**Filtro v1** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente, depois mesmo filtro):
+**Filtros comuns** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente; depois aplica-se o modo de vendas):
 
 - `price` não nulo  
 - `rating_average >= 4.5`  
-- `rating_total >= 5`  
-- `sales_count >= 10` e `<= 300`
+- `rating_total >= 5`
+
+**Parâmetro `mode`** (`parseOpportunityMode` em código; omitido ⇒ `classic`):
+
+| Modo | Vendas (`sales_count`) |
+|------|---------------------------|
+| `classic` | `>= 10` e `<= 300` |
+| `low_sales` | `>= 1` e `<= 99` |
+| `no_sales` | `IS NULL` ou `= 0` |
+| `below_median` | `>= 1` e `< mediana` da categoria **mestre** (ver `computeMedianSalesByMasterCategory` — mediana só com valores não nulos no mesmo último run) |
 
 **Ordem servidor:** média descendente → vendas descendente; até **`limit`** linhas na resposta (**defeito 20**, máx. **10000**; omitido ou inválido na query → defeito CLI).
 
-Meta-resposta quando há dados: **`rankingTotal`** (quantos snapshots/candidatos passam ao filtro antes do `take`), **`listed`**, **`limit`**, **`truncated`** (true se há mais candidatos do que **`items`**), **`maxRows`** (= `limit`, compatível com clientes).
+Meta-resposta quando há dados: **`rankingTotal`**, **`listed`**, **`limit`**, **`truncated`**, **`maxRows`**, **`ruleNote`**, **`opportunityMode`**.
 
-O painel web pede `limit` alto (ex.: 5000) via `analyticsDashboardCache.jsx`; ajustável com **`OPPORTUNITIES_UI_FETCH_LIMIT`**.
+O painel web pede `limit` alto (ex.: 5000), `mode` conforme chips na aba Opportunities, via `analyticsDashboardCache.jsx`; ajustável com **`OPPORTUNITIES_UI_FETCH_LIMIT`**.
 
 **Não há** filtro HTTP por desconto nem por loja; opcionalmente **`categoryUrl`** como em Top Products.
 

@@ -40,7 +40,7 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 |--------|---------|-------|
 | GET | `/health` | Estado do serviço (sem chave, sem base). |
 | GET | `/analytics/top-products` | Query opcional: `categoryUrl`, `limit` (1–10000, defeito 20). Equiv. CLI sem query. |
-| GET | `/analytics/opportunities` | Idem: `categoryUrl`, `limit` (1–10000, defeito 20). |
+| GET | `/analytics/opportunities` | `categoryUrl`, `limit` (1–10000, defeito 20), **`mode`** opcional: `classic` \| `low_sales` \| `no_sales` \| `below_median` (defeito `classic`). Meta no JSON: `ruleNote`, `opportunityMode`. |
 | GET | `/analytics/product-score` | Equiv. `npm run analytics:product-score` |
 | GET | `/analytics/new-products` | Equiv. `npm run analytics:new-products` |
 | GET | `/analytics/growth` | Equiv. `npm run analytics:growth` |

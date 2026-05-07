@@ -10,11 +10,14 @@ export const TOP_PRODUCTS_UI_FETCH_LIMIT = 5000;
 /** Idem para Opportunities (`clampOpportunitiesLimit`). */
 export const OPPORTUNITIES_UI_FETCH_LIMIT = 5000;
 
+/** @typedef {"classic" | "low_sales" | "no_sales" | "below_median"} OpportunityMode */
+
 /**
  * @param {string} path
  * @param {string} filterKey
+ * @param {OpportunityMode} opportunityMode
  */
-function buildAnalyticsQuery(path, filterKey) {
+function buildAnalyticsQuery(path, filterKey, opportunityMode) {
   const p = new URLSearchParams();
   if (filterKey !== "") {
     p.set("categoryUrl", filterKey);
@@ -24,6 +27,7 @@ function buildAnalyticsQuery(path, filterKey) {
   }
   if (path === "/analytics/opportunities") {
     p.set("limit", String(OPPORTUNITIES_UI_FETCH_LIMIT));
+    p.set("mode", opportunityMode ?? "classic");
   }
   const qs = p.toString();
   return qs ? `?${qs}` : "";
@@ -54,6 +58,8 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
+  /** Heurísticas do relatório Opportunities — enviado como `mode` na query. */
+  const [opportunityMode, setOpportunityMode] = useState(/** @type {OpportunityMode} */ ("classic"));
 
   const filterKey = categoryUrl != null ? String(categoryUrl).trim() : "";
 
@@ -65,6 +71,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
       scale: null,
       map: null
     });
+    setOpportunityMode("classic");
     setError(null);
     setLoading(false);
   }, [filterKey]);
@@ -76,7 +83,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     setLoading(true);
     setError(null);
     try {
-      const q = buildAnalyticsQuery(current.path, filterKey);
+      const q = buildAnalyticsQuery(current.path, filterKey, opportunityMode);
       const json = await apiFetch(`${current.path}${q}`);
       setCache((c) => ({ ...c, [current.key]: json }));
     } catch (e) {
@@ -84,7 +91,9 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     } finally {
       setLoading(false);
     }
-  }, [current, filterKey]);
+  }, [current, filterKey, opportunityMode]);
+
+  const oppModeDep = tab === "opp" ? opportunityMode : "";
 
   /**
    * Carrega o separador activo ao abrir a vista ou ao mudar de separador (global e por categoria).
@@ -97,7 +106,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     setError(null);
     const path = current.path;
     const cacheKey = current.key;
-    const q = buildAnalyticsQuery(path, filterKey);
+    const q = buildAnalyticsQuery(path, filterKey, opportunityMode);
     void (async () => {
       try {
         const json = await apiFetch(`${path}${q}`);
@@ -117,7 +126,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
     return () => {
       cancelled = true;
     };
-  }, [filterKey, tab, current?.key, current?.path]);
+  }, [filterKey, tab, current?.key, current?.path, oppModeDep]);
 
   const value = useMemo(
     () => ({
@@ -129,9 +138,11 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
       error,
       setError,
       load,
-      tabs: ANALYTICS_REPORT_TABS
+      tabs: ANALYTICS_REPORT_TABS,
+      opportunityMode,
+      setOpportunityMode
     }),
-    [tab, cache, loading, error, load, setError]
+    [tab, cache, loading, error, load, setError, opportunityMode]
   );
 
   return (

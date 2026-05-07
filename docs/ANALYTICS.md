@@ -32,14 +32,19 @@ Une os dois conjuntos (sem duplicar). Lista dados do snapshot do **último** run
 
 ### `analytics:opportunities`
 
-Heurística **simples v1** no **último** run apenas:
+Heurística no **último** run apenas. **Critérios comuns** a todos os modos: `rating_average ≥ 4.5`, `rating_total ≥ 5`, `price` não nulo.
 
-- `rating_average ≥ 4.5`
-- `rating_total ≥ 5`
-- `sales_count` entre **10** e **300**
-- `price` não nulo
+**Modo `classic` (defeito no CLI e na API sem `mode`):** `sales_count` entre **10** e **300**.
 
-Ordenação: média desc., depois vendas desc. **CLI** e **GET** sem query usam **20** linhas por defeito; o **GET** aceita **`limit`** até **10000** (painel web pede milhares com um único pedido). O campo “motivo” descreve a regra; **não** é garantia comercial nem score oficial.
+**Outros modos** (API e painel com query `mode=`; ver `docs/ANALYTICS-API.md`):
+
+| `mode` | Regra extra de vendas |
+|--------|------------------------|
+| `low_sales` | `sales_count` entre **1** e **99** (valor registado) |
+| `no_sales` | `sales_count` **nulo** ou **0** |
+| `below_median` | `sales_count ≥ 1` e **estritamente abaixo** da **mediana** de `sales_count` na mesma **categoria mestre** (derivada da URL TikTok gravada em `product`), calculada só com snapshots que têm vendas não nulas no **mesmo** último run |
+
+Ordenação: média desc., depois vendas desc. **CLI** e **GET** sem `limit` usam **20** linhas por defeito; o **GET** aceita **`limit`** até **10000** (painel web pede milhares). O campo “motivo” descreve o modo; **`ruleNote`** e **`opportunityMode`** no JSON detalham a regra. **Não** é garantia comercial nem score oficial.
 
 ### `analytics:product-score`
 
