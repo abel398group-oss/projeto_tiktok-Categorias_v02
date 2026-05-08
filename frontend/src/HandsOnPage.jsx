@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import {
+  badgeTextForProductStatus,
   getProductStatuses,
-  labelForProductStatus,
   PRODUCT_STATUS_OPTIONS,
   PRODUCT_STATUS_DEFAULT,
   normalizeProductStatusKey,
@@ -58,17 +58,35 @@ const btnExport = {
 function badgeStyleForStatus(key) {
   const k = normalizeProductStatusKey(key);
   switch (k) {
-    case "exportado":
+    case "descoberto":
+      return {
+        background: "#1e2a38",
+        color: "#a8c4dc",
+        border: "1px solid #3d556d"
+      };
+    case "em_analise":
+      return {
+        background: "#2a3038",
+        color: "#9ca3af",
+        border: "1px solid #4b5563"
+      };
+    case "em_teste":
+      return {
+        background: "#422006",
+        color: "#fcd34d",
+        border: "1px solid #d97706"
+      };
+    case "conteudo_produzido":
       return {
         background: "#1e3a5f",
         color: "#93c5fd",
         border: "1px solid #2563eb"
       };
-    case "testar":
+    case "publicado":
       return {
-        background: "#422006",
-        color: "#fcd34d",
-        border: "1px solid #d97706"
+        background: "#14532d",
+        color: "#bbf7d0",
+        border: "1px solid #22c55e"
       };
     case "descartado":
       return {
@@ -76,12 +94,11 @@ function badgeStyleForStatus(key) {
         color: "#fca5a5",
         border: "1px solid #dc2626"
       };
-    case "em_analise":
     default:
       return {
-        background: "#2a3038",
-        color: "#9ca3af",
-        border: "1px solid #4b5563"
+        background: "#1e2a38",
+        color: "#a8c4dc",
+        border: "1px solid #3d556d"
       };
   }
 }
@@ -196,7 +213,7 @@ export default function HandsOnPage() {
       const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
       const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
       const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
-      setProductStatus(productId, "exportado");
+      setProductStatus(productId, "conteudo_produzido");
       setStatusMap(getProductStatuses());
       setExportFlash({
         kind: "ok",
@@ -358,7 +375,7 @@ export default function HandsOnPage() {
                           ...bs
                         }}
                       >
-                        {labelForProductStatus(rowStatus)}
+                        {badgeTextForProductStatus(rowStatus)}
                       </span>
                     </div>
                     <div
@@ -390,9 +407,9 @@ export default function HandsOnPage() {
                         alignItems: "center"
                       }}
                       role="group"
-                      aria-label="Estado da análise"
+                      aria-label="Pipeline do produto"
                     >
-                      <span style={{ fontSize: "0.62rem", opacity: 0.65, marginRight: "0.15rem", width: "100%" }}>Estado:</span>
+                      <span style={{ fontSize: "0.62rem", opacity: 0.65, marginRight: "0.15rem", width: "100%" }}>Pipeline:</span>
                       {PRODUCT_STATUS_OPTIONS.map((opt) => {
                         const active = rowStatus === opt.key;
                         return (
@@ -411,7 +428,7 @@ export default function HandsOnPage() {
                               color: active ? "#e7f4ff" : "#b8cad8"
                             }}
                           >
-                            {opt.label}
+                            <span aria-hidden>{opt.emoji}</span> {opt.label}
                           </button>
                         );
                       })}

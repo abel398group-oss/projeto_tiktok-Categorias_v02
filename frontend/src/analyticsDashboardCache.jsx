@@ -62,6 +62,8 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** Heurísticas do relatório Opportunities — enviado como `mode` na query. */
   const [opportunityMode, setOpportunityMode] = useState(/** @type {OpportunityMode} */ ("classic"));
+  /** Filtro rápido Ticket (client-side) partilhado — Creator Presets e barras por aba. */
+  const [ticketTier, setTicketTier] = useState(/** @type {TicketFilterMode} */ ("all"));
 
   const filterKey = categoryUrl != null ? String(categoryUrl).trim() : "";
 
@@ -75,6 +77,7 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
       map: null
     });
     setOpportunityMode("classic");
+    setTicketTier("all");
     setError(null);
     setLoading(false);
   }, [filterKey]);
@@ -143,9 +146,11 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
       load,
       tabs: ANALYTICS_REPORT_TABS,
       opportunityMode,
-      setOpportunityMode
+      setOpportunityMode,
+      ticketTier,
+      setTicketTier
     }),
-    [tab, cache, loading, error, load, setError, opportunityMode]
+    [tab, cache, loading, error, load, setError, opportunityMode, ticketTier]
   );
 
   return (

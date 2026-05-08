@@ -5,6 +5,7 @@ import AppShell from "./AppShell.jsx";
 import CategoriesPage from "./CategoriesPage.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
 import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
+import ShortlistPage from "./ShortlistPage.jsx";
 import {
   INITIAL_FILTER_STATE,
   PRODUCT_SCORE_PRESETS,
@@ -603,12 +604,14 @@ const TICKET_FILTER_OPTIONS = /** @type {const} */ ([
   { id: "all", label: "Todos" },
   { id: "alto", label: "Ticket alto" },
   { id: "medio", label: "Ticket médio" },
-  { id: "baixo", label: "Ticket baixo" }
+  { id: "baixo", label: "Ticket baixo" },
+  { id: "medio_alto", label: "Médio+Alto" },
+  { id: "baixo_medio", label: "Baixo+Médio" }
 ]);
 
 /**
  * Filtro só no browser sobre as linhas já carregadas na aba.
- * @param {{ value: 'all' | 'baixo' | 'medio' | 'alto', onChange: (v: 'all' | 'baixo' | 'medio' | 'alto') => void }} props
+ * @param {{ value: 'all' | 'baixo' | 'medio' | 'alto' | 'medio_alto' | 'baixo_medio', onChange: (v: 'all' | 'baixo' | 'medio' | 'alto' | 'medio_alto' | 'baixo_medio') => void }} props
  */
 function TicketFilterBar({ value, onChange }) {
   return (
@@ -624,7 +627,9 @@ function TicketFilterBar({ value, onChange }) {
           <button
             key={opt.id}
             type="button"
-            onClick={() => onChange(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ (opt.id))}
+            onClick={() =>
+              onChange(/** @type {'all' | 'baixo' | 'medio' | 'alto' | 'medio_alto' | 'baixo_medio'} */ (opt.id))
+            }
             style={{
               padding: "0.32rem 0.62rem",
               cursor: "pointer",
@@ -1261,18 +1266,17 @@ function TableTop({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
   const [expanded, setExpanded] = useState(false);
   /** Filtros por coluna (linhas já carregadas no painel). */
   const [topColFilters, setTopColFilters] = useState(() => ({ ...TOP_FILTERS_INITIAL }));
   /** Qual coluna tem o menu ▾ aberto. */
   const [topMenuKey, setTopMenuKey] = useState(/** @type {string | null} */ (null));
-  const [topTicketTier, setTopTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setExpanded(false);
     setTopColFilters({ ...TOP_FILTERS_INITIAL });
     setTopMenuKey(null);
-    setTopTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const topIntro = (
@@ -1332,9 +1336,9 @@ function TableTop({ data }) {
   const topAfterTicket = useMemo(
     () =>
       filteredRawTop.filter((row) =>
-        rowMatchesTicketFilter(topTicketTier, /** @type {Record<string, unknown>} */ (row))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (row))
       ),
-    [filteredRawTop, topTicketTier]
+    [filteredRawTop, ticketTier]
   );
 
   const filtersActiveTopExcel = useMemo(() => topAnyColumnFiltersExcelActive(topColFilters), [topColFilters]);
@@ -1410,8 +1414,8 @@ function TableTop({ data }) {
           {rawItems.length !== 1 ? "s" : ""}.
         </p>
       ) : null}
-      <TicketFilterBar value={topTicketTier} onChange={setTopTicketTier} />
-      {topTicketTier !== "all" && rawItems.length > 0 ? (
+      <TicketFilterBar value={ticketTier} onChange={setTicketTier} />
+      {ticketTier !== "all" && rawItems.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
           Após filtro Ticket: <strong>{topAfterTicket.length}</strong> de {filteredRawTop.length} linha(s) (após ▾ quando activo).
         </p>
@@ -1693,13 +1697,12 @@ function TableOpp({ data }) {
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
-  const { opportunityMode, setOpportunityMode } = useAnalyticsDashboardCache();
+  const { opportunityMode, setOpportunityMode, ticketTier, setTicketTier } = useAnalyticsDashboardCache();
   const [expanded, setExpanded] = useState(false);
   /** Filtros por coluna (subset dos dados já carregados). */
   const [oppColFilters, setOppColFilters] = useState(() => ({ ...OPP_COL_FILTERS_INITIAL }));
   /** Qual coluna tem o menu ▾ aberto (um de cada vez). */
   const [oppMenuKey, setOppMenuKey] = useState(/** @type {string | null} */ (null));
-  const [oppTicketTier, setOppTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
   /** Oportunidades: métrica forte = média alta; servidor usa média desc. */
   const [sort, setSort] = useState(() => ({ key: "avalMed", dir: /** @type {SortDir} */ ("desc") }));
 
@@ -1707,7 +1710,6 @@ function TableOpp({ data }) {
     setExpanded(false);
     setOppColFilters({ ...OPP_COL_FILTERS_INITIAL });
     setOppMenuKey(null);
-    setOppTicketTier("all");
   }, [data?.scrapeRun?.id, opportunityMode]);
 
   const activeOppMode = OPP_MODE_OPTIONS.find((o) => o.id === opportunityMode) ?? OPP_MODE_OPTIONS[0];
@@ -1810,9 +1812,9 @@ function TableOpp({ data }) {
   const oppAfterTicket = useMemo(
     () =>
       filteredRaw.filter((row) =>
-        rowMatchesTicketFilter(oppTicketTier, /** @type {Record<string, unknown>} */ (row))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (row))
       ),
-    [filteredRaw, oppTicketTier]
+    [filteredRaw, ticketTier]
   );
 
   const filtersActive = useMemo(() => oppAnyOppColumnFiltersActive(oppColFilters), [oppColFilters]);
@@ -1904,8 +1906,8 @@ function TableOpp({ data }) {
           {rawItems.length !== 1 ? "s" : ""}.
         </p>
       ) : null}
-      <TicketFilterBar value={oppTicketTier} onChange={setOppTicketTier} />
-      {oppTicketTier !== "all" && rawItems.length > 0 ? (
+      <TicketFilterBar value={ticketTier} onChange={setTicketTier} />
+      {ticketTier !== "all" && rawItems.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
           Após filtro Ticket: <strong>{oppAfterTicket.length}</strong> de {filteredRaw.length} linha(s) (após ▾ quando activo).
         </p>
@@ -2335,6 +2337,7 @@ function TableScore({ data }) {
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
   const scoreIntro = (
     <IntroCard title="Product Score">
@@ -2379,12 +2382,10 @@ function TableScore({ data }) {
   /** Filtros cabeçalho tipo Excel (a jusante do painel de presetes). */
   const [scoreExcelColFilters, setScoreExcelColFilters] = useState(() => ({ ...SCORE_EXCEL_FILTERS_INITIAL }));
   const [scoreExcelMenuKey, setScoreExcelMenuKey] = useState(/** @type {string | null} */ (null));
-  const [scoreTicketTier, setScoreTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setScoreExcelColFilters({ ...SCORE_EXCEL_FILTERS_INITIAL });
     setScoreExcelMenuKey(null);
-    setScoreTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const filteredRows = useMemo(() => applyProductFilters(rawRows, filterApplied), [rawRows, filterApplied]);
@@ -2392,9 +2393,9 @@ function TableScore({ data }) {
   const scoreTicketFiltered = useMemo(
     () =>
       filteredRows.filter((r) =>
-        rowMatchesTicketFilter(scoreTicketTier, /** @type {Record<string, unknown>} */ (r))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (r))
       ),
-    [filteredRows, scoreTicketTier]
+    [filteredRows, ticketTier]
   );
 
   const scoreExcelFiltered = useMemo(
@@ -2474,8 +2475,8 @@ function TableScore({ data }) {
         filteredCount={filteredRows.length}
         appliedInactive={filtersAreInactive(filterApplied)}
       />
-      <TicketFilterBar value={scoreTicketTier} onChange={setScoreTicketTier} />
-      {scoreTicketTier !== "all" && filteredRows.length > 0 ? (
+      <TicketFilterBar value={ticketTier} onChange={setTicketTier} />
+      {ticketTier !== "all" && filteredRows.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
           Após filtro Ticket: <strong>{scoreTicketFiltered.length}</strong> de {filteredRows.length} linha(s) após presets.
         </p>
@@ -2783,22 +2784,14 @@ const GROWTH_EMPTY_MSG =
 /** @param {{ data: Record<string, unknown> | null }} props */
 function TableGrowth({ data }) {
   const allRows = asArray(data?.items);
-  const [growthTicketTier, setGrowthTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
-  const growthRunKey =
-    data != null && typeof data === "object" && data.latestRun != null && typeof data.latestRun === "object"
-      ? String((/** @type {Record<string, unknown>} */ (data.latestRun)).id ?? "")
-      : "";
-
-  useEffect(() => {
-    setGrowthTicketTier("all");
-  }, [growthRunKey]);
+  const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
   const growthRowsTicket = useMemo(
     () =>
       allRows.filter((r) =>
-        rowMatchesTicketFilter(growthTicketTier, /** @type {Record<string, unknown>} */ (r))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (r))
       ),
-    [allRows, growthTicketTier]
+    [allRows, ticketTier]
   );
 
   const growthIntro = (
@@ -2850,8 +2843,8 @@ function TableGrowth({ data }) {
           ) : null}
         </p>
       ) : null}
-      <TicketFilterBar value={growthTicketTier} onChange={setGrowthTicketTier} />
-      {growthTicketTier !== "all" ? (
+      <TicketFilterBar value={ticketTier} onChange={setTicketTier} />
+      {ticketTier !== "all" ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
           Após filtro Ticket: <strong>{growthRowsTicket.length}</strong> de {allRows.length} linha(s).
         </p>
@@ -3682,6 +3675,7 @@ function TableScalableSections({ data }) {
   const rawP = asArray(data?.potentialBets);
   const colW = useColumnWidths(CW_SCALE);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
+  const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
   const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
 
@@ -3689,14 +3683,12 @@ function TableScalableSections({ data }) {
   const [scalePotColFilters, setScalePotColFilters] = useState(() => ({ ...SCALE_FILTERS_INITIAL }));
   const [scaleValMenuKey, setScaleValMenuKey] = useState(/** @type {string | null} */ (null));
   const [scalePotMenuKey, setScalePotMenuKey] = useState(/** @type {string | null} */ (null));
-  const [scaleTicketTier, setScaleTicketTier] = useState(/** @type {'all' | 'baixo' | 'medio' | 'alto'} */ ("all"));
 
   useEffect(() => {
     setScaleValColFilters({ ...SCALE_FILTERS_INITIAL });
     setScalePotColFilters({ ...SCALE_FILTERS_INITIAL });
     setScaleValMenuKey(null);
     setScalePotMenuKey(null);
-    setScaleTicketTier("all");
   }, [data?.scrapeRun?.id]);
 
   const [sortVal, setSortVal] = useState(() => ({ key: "score", dir: /** @type {SortDir} */ ("desc") }));
@@ -3721,17 +3713,17 @@ function TableScalableSections({ data }) {
   const rawVTicket = useMemo(
     () =>
       rawVFiltered.filter((r) =>
-        rowMatchesTicketFilter(scaleTicketTier, /** @type {Record<string, unknown>} */ (r))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (r))
       ),
-    [rawVFiltered, scaleTicketTier]
+    [rawVFiltered, ticketTier]
   );
 
   const rawPTicket = useMemo(
     () =>
       rawPFiltered.filter((r) =>
-        rowMatchesTicketFilter(scaleTicketTier, /** @type {Record<string, unknown>} */ (r))
+        rowMatchesTicketFilter(ticketTier, /** @type {Record<string, unknown>} */ (r))
       ),
-    [rawPFiltered, scaleTicketTier]
+    [rawPFiltered, ticketTier]
   );
 
   const v = useMemo(() => {
@@ -3916,8 +3908,8 @@ function TableScalableSections({ data }) {
     <>
       {escalarIntro}
       {escalarOrdemP}
-      <TicketFilterBar value={scaleTicketTier} onChange={setScaleTicketTier} />
-      {scaleTicketTier !== "all" && (rawV.length > 0 || rawP.length > 0) ? (
+      <TicketFilterBar value={ticketTier} onChange={setTicketTier} />
+      {ticketTier !== "all" && (rawV.length > 0 || rawP.length > 0) ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.76, marginBottom: "0.45rem" }}>
           Filtro Ticket aplica-se às duas listas carregadas (Validados: <strong>{rawVTicket.length}</strong> de{" "}
           {rawVFiltered.length} após ▾ · Potencial: <strong>{rawPTicket.length}</strong> de {rawPFiltered.length} após ▾).
@@ -4299,8 +4291,55 @@ function TableScalableSections({ data }) {
   );
 }
 
+/** Atalhos só de UI: mudam aba, `mode` da API (Opportunities) e filtro Ticket partilhado — sem novos endpoints. */
+const CREATOR_PRESETS = [
+  {
+    id: "starter",
+    emoji: "🔥",
+    label: "Creator Starter",
+    tabId: "opp",
+    opportunityMode: "low_sales",
+    ticket: "medio"
+  },
+  { id: "momentum", emoji: "📈", label: "Momentum", tabId: "growth", ticket: "medio_alto" },
+  {
+    id: "gems",
+    emoji: "💎",
+    label: "Hidden Gems",
+    tabId: "opp",
+    opportunityMode: "below_median",
+    ticket: "medio"
+  },
+  { id: "test", emoji: "🧪", label: "Produtos para Teste", tabId: "score", ticket: "baixo_medio" },
+  { id: "tickethigh", emoji: "💰", label: "Ticket Alto", tabId: "score", ticket: "alto" }
+];
+
 export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBread }) {
-  const { tab, setTab, cache, loading, error, load, tabs, setError } = useAnalyticsDashboardCache();
+  const {
+    tab,
+    setTab,
+    cache,
+    loading,
+    error,
+    load,
+    tabs,
+    setError,
+    setOpportunityMode,
+    setTicketTier
+  } = useAnalyticsDashboardCache();
+
+  const applyCreatorPreset = useCallback(
+    /** @param {(typeof CREATOR_PRESETS)[number]} p */
+    (p) => {
+      setError(null);
+      setTab(p.tabId);
+      if ("opportunityMode" in p && p.opportunityMode != null) {
+        setOpportunityMode(p.opportunityMode);
+      }
+      setTicketTier(p.ticket);
+    },
+    [setTab, setOpportunityMode, setTicketTier, setError]
+  );
 
   const current = tabs.find((t) => t.id === tab);
 
@@ -4408,6 +4447,48 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
         </>
       )}
 
+      <section
+        style={{
+          marginBottom: "1rem",
+          padding: "0.85rem 1rem",
+          borderRadius: "var(--tk-radius-lg)",
+          border: "1px solid var(--tk-border)",
+          background: "var(--tk-surface-raised)"
+        }}
+        aria-label="Creator Presets"
+      >
+        <h2 style={{ fontSize: "0.92rem", fontWeight: 600, margin: "0 0 0.55rem 0", color: "var(--tk-text)" }}>
+          🎯 Creator Presets
+        </h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", alignItems: "stretch" }}>
+          {CREATOR_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => applyCreatorPreset(p)}
+              style={{
+                padding: "0.42rem 0.75rem",
+                cursor: "pointer",
+                borderRadius: "var(--tk-radius-md)",
+                border: "1px solid var(--tk-border)",
+                background: "var(--tk-surface)",
+                color: "var(--tk-text)",
+                fontWeight: 500,
+                fontSize: "0.78rem",
+                lineHeight: 1.35,
+                textAlign: "left",
+                boxShadow: "var(--tk-shadow-sm)"
+              }}
+            >
+              {p.emoji} {p.label}
+            </button>
+          ))}
+        </div>
+        <p style={{ margin: "0.55rem 0 0", fontSize: "0.72rem", opacity: 0.78, lineHeight: 1.45, maxWidth: "48rem" }}>
+          Os presets apenas organizam filtros e relatórios já existentes para acelerar análise creator.
+        </p>
+      </section>
+
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
         {tabs.map((t) => (
           <button
@@ -4508,6 +4589,7 @@ export default function App() {
           }
         />
           <Route path="a-mao" element={<HandsOnPage />} />
+          <Route path="shortlist" element={<ShortlistPage />} />
           <Route path="produto/:productId" element={<ProductWorkspacePage />} />
         </Route>
       </Routes>

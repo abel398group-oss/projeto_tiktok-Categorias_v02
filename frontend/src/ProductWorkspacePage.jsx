@@ -3,7 +3,25 @@ import { Link, useParams } from "react-router-dom";
 import { apiFetch, apiPost, apiPostBlob } from "./api.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { buildProductBriefingFromWorkspace } from "./productBriefing.js";
+import { deriveProductLabels } from "./productLabels.js";
+import {
+  PRODUCT_STATUS_DEFAULT,
+  PRODUCT_STATUS_OPTIONS,
+  PRODUCT_STATUS_STORAGE_KEY,
+  badgeTextForProductStatus,
+  getProductStatusForProduct,
+  normalizeProductStatusKey,
+  productStatusMeta,
+  setProductStatus
+} from "./productStatusStorage.js";
+import {
+  CREATOR_SHORTLIST_STORAGE_KEY,
+  isProductInShortlist,
+  toggleCreatorShortlist
+} from "./productShortlistStorage.js";
 import { pushRecentWorkspace } from "./recentWorkspace.js";
+import { firstFloat, parseDelta } from "./sortUtils.js";
+import { getTicketLabel } from "./ticketLabel.js";
 
 const NOTES_LS_PREFIX = "tiktok-analytics-product-notes:";
 const NOTES_MAX = 20_000;
@@ -22,6 +40,8 @@ function notesStorageKey(productId) {
  * preco?: string | number,
  * vendas?: string | number,
  * rating?: string,
+ * ratingAverage?: number | null,
+ * ratingTotal?: number | null,
  * deltaVendas?: string,
  * motivos?: string,
  * link?: string,
@@ -129,6 +149,52 @@ function isWorkspace(workspace) {
   return workspace != null && typeof workspace === "object" && typeof workspace.productId === "string";
 }
 
+/** @param {unknown} x */
+function finiteNum(x) {
+  if (x == null || x === "") return null;
+  const n = typeof x === "number" ? x : Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** @param {Record<string, unknown>} row */
+function workspaceRatingNum(row) {
+  const direct = finiteNum(row.ratingAverage);
+  if (direct != null) return direct;
+  const r = row.rating;
+  if (typeof r === "number") return finiteNum(r);
+  if (typeof r === "string") {
+    const f = firstFloat(r);
+    return Number.isFinite(f) ? f : null;
+  }
+  return null;
+}
+
+const creatorSignalsChipWrap = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.35rem",
+  marginTop: "0.45rem",
+  alignItems: "center"
+};
+
+const creatorSignalsChip = {
+  fontSize: "0.72rem",
+  lineHeight: 1.35,
+  padding: "0.14rem 0.48rem",
+  borderRadius: "var(--tk-radius-sm)",
+  border: "1px solid var(--tk-border)",
+  background: "var(--tk-surface-inset)",
+  color: "var(--tk-text-muted)",
+  fontWeight: 600,
+  whiteSpace: "nowrap"
+};
+
+const operationalCardStyle = {
+  ...box,
+  borderColor: "rgb(56 68 77)",
+  background: "linear-gradient(165deg, rgb(25 39 52) 0%, rgb(22 32 42) 100%)"
+};
+
 export default function ProductWorkspacePage() {
   const { productId: paramId } = useParams();
 
@@ -152,10 +218,112 @@ export default function ProductWorkspacePage() {
   const decodedId =
     typeof paramId === "string" && paramId.trim() !== "" ? decodeURIComponent(paramId.trim()) : "";
 
+  /** @type {import("./productStatusStorage.js").ProductStatusKey} */
+  const [pipelineKey, setPipelineKey] = useState(
+    /** @type {import("./productStatusStorage.js").ProductStatusKey} */ (PRODUCT_STATUS_DEFAULT)
+  );
+
+  const pipelineMeta = useMemo(() => productStatusMeta(pipelineKey), [pipelineKey]);
+
+  useEffect(() => {
+    if (!decodedId) {
+      setPipelineKey(PRODUCT_STATUS_DEFAULT);
+      return undefined;
+    }
+    const sync = () => {
+      setPipelineKey(getProductStatusForProduct(decodedId));
+    };
+    sync();
+    /** @param {StorageEvent} e */
+    const onStorage = (e) => {
+      if (e.key === PRODUCT_STATUS_STORAGE_KEY || e.key === null) sync();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [decodedId]);
+
+  const onPipelineSelect = useCallback(
+    /** @param {import("react").ChangeEvent<HTMLSelectElement>} e */
+    (e) => {
+      if (!decodedId) return;
+      const v = e.target.value;
+      setProductStatus(decodedId, v);
+      setPipelineKey(normalizeProductStatusKey(v));
+    },
+    [decodedId]
+  );
+
+  const [shortlisted, setShortlisted] = useState(false);
+
+  useEffect(() => {
+    if (!decodedId) {
+      setShortlisted(false);
+      return undefined;
+    }
+    const sync = () => {
+      setShortlisted(isProductInShortlist(decodedId));
+    };
+    sync();
+    /** @param {StorageEvent} e */
+    const onStorage = (e) => {
+      if (e.key === CREATOR_SHORTLIST_STORAGE_KEY || e.key === null) sync();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [decodedId]);
+
+  const onToggleShortlist = useCallback(() => {
+    if (!decodedId || !isWorkspace(workspace)) return;
+    const nome = typeof workspace.nome === "string" ? workspace.nome.trim() : "";
+    const { inList } = toggleCreatorShortlist({ productId: decodedId, nome: nome || "—" });
+    setShortlisted(inList);
+  }, [decodedId, workspace]);
+
   const briefing = useMemo(
     () => (isWorkspace(workspace) ? buildProductBriefingFromWorkspace(/** @type {WorkspacePayload & Record<string, unknown>} */ (workspace)) : null),
     [workspace]
   );
+
+  /** Sinais comerciais rápidos: só heurísticas já usadas noutras vistas (labels + ticket + thresholds mínimos). */
+  const creatorSignals = useMemo(() => {
+    if (!isWorkspace(workspace)) return [];
+    const w = /** @type {Record<string, unknown>} */ ({ ...workspace });
+    const dv = w.deltaVendas;
+    if (w.deltaNumeric == null && dv != null && dv !== "—") {
+      const p = typeof dv === "string" ? parseDelta(String(dv)) : finiteNum(dv);
+      if (p != null && !Number.isNaN(p)) w.deltaNumeric = p;
+    }
+
+    /** @type {{ id: string, emoji: string, label: string }[]} */
+    const chips = [...deriveProductLabels(w)];
+
+    const ticket = getTicketLabel(w);
+    const hasDeriveTicketAlto = chips.some((c) => c.id === "ticket_alto");
+    if (ticket.tier && !hasDeriveTicketAlto) {
+      chips.push({
+        id: "creator_ticket_tier",
+        emoji: "💳",
+        label: `Ticket ${ticket.shortLabel}`
+      });
+    }
+
+    const sc = finiteNum(w.score);
+    if (sc != null && sc >= 70) {
+      chips.push({ id: "score_forte", emoji: "⭐", label: "Score forte" });
+    }
+
+    const rv = workspaceRatingNum(w);
+    if (rv != null && rv >= 4.5) {
+      chips.push({ id: "rating_alto", emoji: "🏅", label: "Rating alto" });
+    }
+
+    const sv = finiteNum(w.vendas);
+    if (sv != null && sv > 0 && sv <= 300) {
+      chips.push({ id: "poucas_vendas", emoji: "📉", label: "Poucas vendas" });
+    }
+
+    return chips;
+  }, [workspace]);
 
   const reloadWorkspace = useCallback(async () => {
     if (!decodedId) {
@@ -268,6 +436,8 @@ export default function ProductWorkspacePage() {
       const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
       const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
       const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
+      setProductStatus(decodedId, "conteudo_produzido");
+      setPipelineKey(normalizeProductStatusKey("conteudo_produzido"));
       setExportMsg({
         kind: "ok",
         text: `Exportado · ${prefix || "OK"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}`
@@ -399,6 +569,128 @@ export default function ProductWorkspacePage() {
               </p>
             ) : null}
           </header>
+
+          <div style={{ marginBottom: "0.55rem" }}>
+            <button
+              type="button"
+              onClick={() => {
+                onToggleShortlist();
+              }}
+              aria-pressed={shortlisted}
+              style={{
+                padding: "0.35rem 0.65rem",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                borderRadius: 8,
+                border: shortlisted ? "1px solid #b8860b" : "1px solid #45515c",
+                background: shortlisted ? "rgb(55 40 10 / 0.85)" : "#1a2630",
+                color: shortlisted ? "#fde68a" : "#e7e9ea"
+              }}
+            >
+              {shortlisted ? "★ Remover dos favoritos" : "⭐ Favoritar"}
+            </button>
+          </div>
+
+          <section style={operationalCardStyle}>
+            <h2
+              style={{
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                margin: "0 0 0.35rem",
+                letterSpacing: "0.02em",
+                color: "#dbe8f4"
+              }}
+            >
+              🎯 Pipeline do Produto
+            </h2>
+            <p style={{ margin: "0 0 0.55rem", fontSize: "0.74rem", lineHeight: 1.5, opacity: 0.88, color: "var(--tk-text)" }}>
+              Estágio operacional para creator (guardado neste browser). O mesmo estado aparece em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.5rem",
+                alignItems: "center",
+                marginBottom: pipelineMeta ? "0.45rem" : 0
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--tk-border)",
+                  background: "var(--tk-surface-inset)",
+                  color: "var(--tk-text)",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {badgeTextForProductStatus(pipelineKey)}
+              </span>
+              <label htmlFor="tk-workspace-pipeline" style={{ fontSize: "0.7rem", opacity: 0.75 }}>
+                Alterar:
+              </label>
+              <select
+                id="tk-workspace-pipeline"
+                value={pipelineKey}
+                onChange={onPipelineSelect}
+                aria-label="Estágio do pipeline do produto"
+                style={{
+                  flex: "1 1 12rem",
+                  minWidth: "10rem",
+                  maxWidth: "100%",
+                  fontSize: "0.78rem",
+                  padding: "0.32rem 0.45rem",
+                  borderRadius: 6,
+                  border: "1px solid #45515c",
+                  background: "#1a2630",
+                  color: "#e7e9ea",
+                  cursor: "pointer"
+                }}
+              >
+                {PRODUCT_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.emoji} {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {pipelineMeta ? (
+              <p style={{ margin: 0, fontSize: "0.72rem", lineHeight: 1.5, opacity: 0.82, color: "#9eb5c9" }}>{pipelineMeta.hint}</p>
+            ) : null}
+          </section>
+
+          <section style={operationalCardStyle}>
+            <h2
+              style={{
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                margin: "0 0 0.35rem",
+                letterSpacing: "0.02em",
+                color: "#dbe8f4"
+              }}
+            >
+              🎯 Creator Signals
+            </h2>
+            <p style={{ margin: "0 0 0.55rem", fontSize: "0.74rem", lineHeight: 1.5, opacity: 0.88, color: "var(--tk-text)" }}>
+              Signals são heurísticas rápidas para ajudar na seleção de produtos para creator e conteúdo.
+            </p>
+            {creatorSignals.length > 0 ? (
+              <div style={creatorSignalsChipWrap} aria-label="Sinais comerciais derivados dos dados do produto">
+                {creatorSignals.map((s) => (
+                  <span key={s.id} style={creatorSignalsChip} title={`${s.emoji} ${s.label}`}>
+                    <span aria-hidden>{s.emoji}</span>
+                    &nbsp;{s.label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "0.76rem", opacity: 0.72 }}>Sem sinais destacados com os dados actuais.</p>
+            )}
+          </section>
 
           {briefing ? (
             <section style={box}>

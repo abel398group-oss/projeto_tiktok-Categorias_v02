@@ -43,6 +43,9 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Painel — aba «Em Ascensão» (Growth):** GET `/analytics/growth` com `?categoryUrl=` quando filtrado; tabela só leitura do payload API — `frontend/src/analyticsDashboardCache.jsx`, `frontend/src/App.jsx`; filtro de categoria alinhado à API em `scripts/analytics/lib/growth.mjs`
 - [x] **Painel — filtros tipo Excel nos cabeçalhos (▾):** nas abas Opportunities, Top Products, Product Score, Mapa de categorias e Escalar (`frontend/src/App.jsx`; componente `ExcelSortTh`).
 - [x] **Opportunities — modos de análise (`mode`):** classic, vendas baixas (`low_sales`), sem vendas (`no_sales`), abaixo da mediana por categoria (`below_median`); API `GET ?mode=` e chips no painel; ver `scripts/analytics/lib/opportunities.mjs` e docs.
+- [x] **Painel — Creator Presets:** atalhos só no `frontend` (aba + `mode` Opportunities + filtro Ticket partilhado); sem novos endpoints — `frontend/src/App.jsx`, `frontend/src/analyticsDashboardCache.jsx`, `frontend/src/ticketLabel.js`
+- [x] **Painel — Pipeline creator no workspace:** estados locais (`descoberto` … `descartado`), migração de valores legados (`exportado`→`conteudo_produzido`, `testar`→`em_teste`), UI no `ProductWorkspacePage.jsx`; `HandsOnPage` e chave `productStatus` mantidos — `frontend/src/productStatusStorage.js`
+- [x] **Painel — Shortlist / favoritos:** `frontend/src/productShortlistStorage.js`, botão no workspace, rota **`/shortlist`** (`ShortlistPage.jsx`, nav em `AppShell.jsx`) — só `localStorage`, sem API.
 - [x] **Grelha categoria:** cliques opcionais (default ligado) em **View more** / **Ver mais** após o scroll (`VIEW_MORE_MAX_CLICKS`, `VIEW_MORE`, `VIEW_MORE_DRAIN_MS` em `src/scrapeCategory.mjs`; ver `docs/ARCHITECTURE.md`) — sem alterar merge, XHR nem `normalizeItem`.
 
 **Futuro — evoluções (não bloqueadores da v1):**

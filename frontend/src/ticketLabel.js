@@ -6,6 +6,11 @@ import { firstFloat } from "./sortUtils.js";
 /** @typedef {'baixo' | 'medio' | 'alto'} TicketTier */
 
 /**
+ * Filtro client-side: faixas simples ou combinações usadas pelos Creator Presets.
+ * @typedef {'all' | TicketTier | 'medio_alto' | 'baixo_medio'} TicketFilterMode
+ */
+
+/**
  * @typedef {{ tier: TicketTier | null, label: string, shortLabel: string }} TicketLabelResult
  */
 
@@ -52,10 +57,13 @@ export function getTicketLabel(item) {
 }
 
 /**
- * @param {'all' | TicketTier} filter
+ * @param {TicketFilterMode} filter
  * @param {unknown} row
  */
 export function rowMatchesTicketFilter(filter, row) {
   if (filter === "all") return true;
-  return getTicketLabel(row).tier === filter;
+  const tier = getTicketLabel(row).tier;
+  if (filter === "medio_alto") return tier === "medio" || tier === "alto";
+  if (filter === "baixo_medio") return tier === "baixo" || tier === "medio";
+  return tier === filter;
 }
