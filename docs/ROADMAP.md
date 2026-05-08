@@ -46,6 +46,7 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Painel — Creator Presets:** atalhos só no `frontend` (aba + `mode` Opportunities + filtro Ticket partilhado); sem novos endpoints — `frontend/src/App.jsx`, `frontend/src/analyticsDashboardCache.jsx`, `frontend/src/ticketLabel.js`
 - [x] **Painel — Pipeline creator no workspace:** estados locais (`descoberto` … `descartado`), migração de valores legados (`exportado`→`conteudo_produzido`, `testar`→`em_teste`), UI no `ProductWorkspacePage.jsx`; `HandsOnPage` e chave `productStatus` mantidos — `frontend/src/productStatusStorage.js`
 - [x] **Painel — Shortlist / favoritos:** `frontend/src/productShortlistStorage.js`, botão no workspace, rota **`/shortlist`** (`ShortlistPage.jsx`, nav em `AppShell.jsx`) — só `localStorage`, sem API.
+- [x] **Painel — Hub `/a-mao`:** abas Recentes / Por estágio / Shortlist (resumo), prévia de notas locais, `HandsOnPage.jsx` — só frontend.
 - [x] **Grelha categoria:** cliques opcionais (default ligado) em **View more** / **Ver mais** após o scroll (`VIEW_MORE_MAX_CLICKS`, `VIEW_MORE`, `VIEW_MORE_DRAIN_MS` em `src/scrapeCategory.mjs`; ver `docs/ARCHITECTURE.md`) — sem alterar merge, XHR nem `normalizeItem`.
 
 **Futuro — evoluções (não bloqueadores da v1):**
