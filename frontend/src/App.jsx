@@ -3990,34 +3990,34 @@ function TableScalableSections({ data }) {
             void navigate(`/produto/${encodeURIComponent(pid)}`);
           }}
         >
-          <td style={tdPosStyle}>{i + 1}</td>
-          <td>{row.nome}</td>
-          <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-            {catCellPt(row.categoriaPrincipal)}
-          </td>
-          <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-            {catCellPt(row.subcategoria)}
-          </td>
-          <td>{row.score}</td>
-          <td>{row.vendas ?? "—"}</td>
-          <td>{row.rating ?? "—"}</td>
+        <td style={tdPosStyle}>{i + 1}</td>
+        <td>{row.nome}</td>
+        <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+          {catCellPt(row.categoriaPrincipal)}
+        </td>
+        <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+          {catCellPt(row.subcategoria)}
+        </td>
+        <td>{row.score}</td>
+        <td>{row.vendas ?? "—"}</td>
+        <td>{row.rating ?? "—"}</td>
           <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
-          <SpacesExportActionCell
-            productId={row.productId}
-            nome={row.nome}
-            exportingProductId={exportingProductId}
-            exportToSpace={exportToSpace}
-          />
-          <td>
-            {row.link ? (
-              <a href={row.link} target="_blank" rel="noopener noreferrer">
-                abrir
-              </a>
-            ) : (
-              "—"
-            )}
-          </td>
-        </tr>
+        <SpacesExportActionCell
+          productId={row.productId}
+          nome={row.nome}
+          exportingProductId={exportingProductId}
+          exportToSpace={exportToSpace}
+        />
+        <td>
+          {row.link ? (
+            <a href={row.link} target="_blank" rel="noopener noreferrer">
+              abrir
+            </a>
+          ) : (
+            "—"
+          )}
+        </td>
+      </tr>
       );
     });
 

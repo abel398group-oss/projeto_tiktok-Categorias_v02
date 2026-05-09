@@ -81,7 +81,7 @@ npm install
 npm run setup:local   # cria .env e frontend/.env a partir dos .env.example (se ainda não existirem)
 ```
 
-**Postgres:** o modelo actual do `.env.example` usa Postgres **Docker** local na porta **`5433`** (`tiktok_dev` / `tiktok_shop_dev`). Depois do `setup:local`, fluxo típico: **`npm run db:docker:bootstrap`**, **`npm run db:check`**. Para Postgres remoto (ex. DigitalOcean), comenta a `DATABASE_URL` local e põe a URI certa (**`sslmode=require`**, porta **25060**).
+**Postgres:** o `.env` na raiz tem dois blocos comentados (**LOCAL** vs **DigitalOcean**): deixa **exactamente uma** linha `DATABASE_URL=...` activa (ver instruções no topo do `.env`). Modelo local: Docker na porta **`5433`** (`tiktok_dev` / `tiktok_shop_dev`). Fluxo típico local: **`npm run db:docker:bootstrap`**, **`npm run db:check`**. Remoto DO: **`sslmode=require`**, porta **25060**, IP permitido em *Trusted sources*. **Prisma Studio** (`npm run prisma:studio` na raiz) liga sempre à BD da `DATABASE_URL` activa — local ou remota (`http://localhost:5555`).
 
 As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`frontend/.env`) vêm alinhadas nos exemplos (`uma-chave-local`). Se `.env` ainda tinha **`...@HOST:5432`** (modelo antigo), atualiza só a línea **`DATABASE_URL=`** conforme `.env.example` actual.
 
