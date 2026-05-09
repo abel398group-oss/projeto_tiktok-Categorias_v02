@@ -375,12 +375,11 @@ export default function HandsOnPage() {
     <main className="tk-page-body">
       <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
         <h1 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "0 0 0.35rem" }}>Produtos em análise</h1>
-        <p style={{ fontSize: "0.82rem", opacity: 0.88, margin: "0 0 0.45rem", maxWidth: "44rem", lineHeight: 1.55 }}>
-          <strong>Hub operacional</strong> do workflow creator neste browser. Use esta área para acompanhar produtos vistos, em análise, em teste e publicados.
+        <p style={{ fontSize: "0.82rem", opacity: 0.9, margin: "0 0 0.45rem", maxWidth: "44rem", lineHeight: 1.55 }}>
+          <strong>Hub operacional</strong> — use esta área para acompanhar produtos vistos, em análise, em teste e publicados. Tudo fica neste browser (sem servidor).
         </p>
         <p style={{ fontSize: "0.78rem", opacity: 0.78, margin: "0 0 1rem", maxWidth: "44rem", lineHeight: 1.5 }}>
-          <strong>Recentes</strong> vêm do histórico de workspaces abertos. <strong>Por estágio</strong> agrupa tudo o que tem pipeline, favoritos ou recente. Métricas (preço, vendas, rating) na aba Recentes vêm da API ao abrir ou ao{" "}
-          <strong>Atualizar lista</strong>.
+          <strong>Recentes</strong>: histórico de workspaces abertos. <strong>Por estágio</strong>: junta recentes, favoritos e o que tem pipeline guardado. Na lista recente, caixas <strong>azuladas</strong> são mensagens da <strong>API</strong>; o texto <strong>«Minhas notas»</strong> vem das suas notas no workspace.
         </p>
 
         {tabBar}
@@ -405,14 +404,14 @@ export default function HandsOnPage() {
           <section
             style={{
               marginBottom: "1rem",
-              padding: "0.65rem 0.75rem",
+              padding: "0.75rem 0.85rem",
               borderRadius: 8,
               border: "1px solid #2a3844",
               background: "#151e27"
             }}
           >
-            <div style={{ fontSize: "0.74rem", opacity: 0.88, marginBottom: "0.45rem" }}>
-              <strong>Recentes</strong> — mais recentes primeiro (histórico local neste browser).
+            <div style={{ fontSize: "0.76rem", opacity: 0.9, marginBottom: "0.5rem", lineHeight: 1.45 }}>
+              <strong>Recentes</strong> — do mais recente para o mais antigo.
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.38rem", alignItems: "center", marginBottom: "0.5rem" }}>
               <button
@@ -578,19 +577,34 @@ export default function HandsOnPage() {
                             );
                           })}
                         </div>
-                        {noteUser ? (
-                          <p style={{ margin: "0.35rem 0 0", fontSize: "0.63rem", opacity: 0.8, color: "#c4b5a0", lineHeight: 1.35, fontStyle: "italic" }}>
-                            Nota: {noteUser}
-                          </p>
-                        ) : null}
                         {d?.error ? (
                           <p style={{ margin: "0.35rem 0 0", fontSize: "0.65rem", opacity: 0.75, color: "#f0a08a", lineHeight: 1.35 }}>
-                            API: {d.error.length > 160 ? `${d.error.slice(0, 157)}…` : d.error}
+                            <span style={{ fontWeight: 700, opacity: 0.9 }}>Erro ao carregar · </span>
+                            {d.error.length > 160 ? `${d.error.slice(0, 157)}…` : d.error}
                           </p>
                         ) : null}
                         {!d?.error && d?.workspaceNote ? (
-                          <p style={{ margin: "0.35rem 0 0", fontSize: "0.63rem", opacity: 0.78, color: "#9db4c8", lineHeight: 1.35 }}>
-                            {d.workspaceNote.length > 200 ? `${d.workspaceNote.slice(0, 197)}…` : d.workspaceNote}
+                          <div
+                            style={{
+                              margin: "0.4rem 0 0",
+                              padding: "0.4rem 0.5rem",
+                              borderRadius: 6,
+                              border: "1px solid rgba(56, 189, 248, 0.22)",
+                              background: "rgba(14, 165, 233, 0.06)"
+                            }}
+                          >
+                            <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em", opacity: 0.88, color: "#7dd3fc", marginBottom: "0.2rem" }}>
+                              Contexto dos dados (API)
+                            </div>
+                            <p style={{ margin: 0, fontSize: "0.63rem", opacity: 0.82, color: "#b8d4e8", lineHeight: 1.42 }}>
+                              {d.workspaceNote.length > 200 ? `${d.workspaceNote.slice(0, 197)}…` : d.workspaceNote}
+                            </p>
+                          </div>
+                        ) : null}
+                        {noteUser ? (
+                          <p style={{ margin: "0.4rem 0 0", fontSize: "0.63rem", opacity: 0.88, color: "#e8dcc8", lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 700, opacity: 0.95 }}>Minhas notas · </span>
+                            <span style={{ fontStyle: "italic" }}>{noteUser}</span>
                           </p>
                         ) : null}
                       </div>
@@ -654,8 +668,8 @@ export default function HandsOnPage() {
               background: "#151e27"
             }}
           >
-            <div style={{ fontSize: "0.74rem", opacity: 0.88, marginBottom: "0.65rem" }}>
-              <strong>Por estágio</strong> — produtos que aparecem no histórico recente, na shortlist ou com pipeline guardado. Sem nome conhecido, mostra-se o <code>productId</code>.
+            <div style={{ fontSize: "0.74rem", opacity: 0.88, marginBottom: "0.65rem", lineHeight: 1.45 }}>
+              <strong>Por estágio</strong> — mesma união de fontes (recentes, shortlist, pipeline). Sem título guardado, vê-se o <code>productId</code>.
             </div>
             <button
               type="button"
@@ -709,8 +723,9 @@ export default function HandsOnPage() {
                                 {row.productId}
                               </p>
                               {noteUser ? (
-                                <p style={{ margin: "0.3rem 0 0", fontSize: "0.62rem", opacity: 0.78, fontStyle: "italic", color: "#c4b5a0" }}>
-                                  Nota: {noteUser}
+                                <p style={{ margin: "0.3rem 0 0", fontSize: "0.62rem", opacity: 0.85, color: "#e8dcc8", lineHeight: 1.4 }}>
+                                  <span style={{ fontWeight: 700 }}>Minhas notas · </span>
+                                  <span style={{ fontStyle: "italic" }}>{noteUser}</span>
                                 </p>
                               ) : null}
                               <div style={{ marginTop: "0.4rem", display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
@@ -778,7 +793,7 @@ export default function HandsOnPage() {
           >
             <h2 style={{ fontSize: "0.88rem", fontWeight: 700, margin: "0 0 0.35rem", color: "#dbe8f4" }}>Shortlist</h2>
             <p style={{ margin: "0 0 0.65rem", fontSize: "0.76rem", opacity: 0.85, lineHeight: 1.5 }}>
-              <strong>{shortlistSnapshot.length}</strong> produto{shortlistSnapshot.length === 1 ? "" : "s"} favorito{shortlistSnapshot.length === 1 ? "" : "s"}.
+              <strong>{shortlistSnapshot.length}</strong> favorito{shortlistSnapshot.length === 1 ? "" : "s"}. A lista completa está em <strong>Minha shortlist</strong>.
             </p>
             {shortlistSnapshot.length === 0 ? (
               <p style={{ fontSize: "0.78rem", opacity: 0.78, lineHeight: 1.55, margin: "0 0 0.65rem" }}>

@@ -116,8 +116,9 @@ export default function ShortlistPage() {
                         Pipeline: <strong>{badgeTextForProductStatus(statusKey)}</strong>
                       </p>
                       {note ? (
-                        <p style={{ margin: "0.4rem 0 0", fontSize: "0.7rem", opacity: 0.72, lineHeight: 1.45, fontStyle: "italic", color: "#9db4c8" }}>
-                          Nota: {note}
+                        <p style={{ margin: "0.4rem 0 0", fontSize: "0.7rem", opacity: 0.8, lineHeight: 1.45, color: "#e8dcc8" }}>
+                          <span style={{ fontWeight: 700 }}>Minhas notas · </span>
+                          <span style={{ fontStyle: "italic" }}>{note}</span>
                         </p>
                       ) : null}
                     </div>

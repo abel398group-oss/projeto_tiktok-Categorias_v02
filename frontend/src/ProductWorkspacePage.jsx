@@ -570,7 +570,7 @@ export default function ProductWorkspacePage() {
             ) : null}
           </header>
 
-          <div style={{ marginBottom: "0.55rem" }}>
+          <div style={{ marginBottom: "0.65rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
             <button
               type="button"
               onClick={() => {
@@ -590,6 +590,7 @@ export default function ProductWorkspacePage() {
             >
               {shortlisted ? "★ Remover dos favoritos" : "⭐ Favoritar"}
             </button>
+            <span style={{ fontSize: "0.68rem", opacity: 0.65, maxWidth: "20rem", lineHeight: 1.35 }}>Shortlist e pipeline sincronizam com «Produtos em análise».</span>
           </div>
 
           <section style={operationalCardStyle}>
@@ -605,7 +606,7 @@ export default function ProductWorkspacePage() {
               🎯 Pipeline do Produto
             </h2>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.74rem", lineHeight: 1.5, opacity: 0.88, color: "var(--tk-text)" }}>
-              Estágio operacional para creator (guardado neste browser). O mesmo estado aparece em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
+              Onde está o produto no fluxo creator (só neste browser). Igual em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
             </p>
             <div
               style={{
@@ -631,7 +632,7 @@ export default function ProductWorkspacePage() {
                 {badgeTextForProductStatus(pipelineKey)}
               </span>
               <label htmlFor="tk-workspace-pipeline" style={{ fontSize: "0.7rem", opacity: 0.75 }}>
-                Alterar:
+                Estágio:
               </label>
               <select
                 id="tk-workspace-pipeline"
@@ -676,7 +677,7 @@ export default function ProductWorkspacePage() {
               🎯 Creator Signals
             </h2>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.74rem", lineHeight: 1.5, opacity: 0.88, color: "var(--tk-text)" }}>
-              Signals são heurísticas rápidas para ajudar na seleção de produtos para creator e conteúdo.
+              Leitura rápida a partir dos mesmos números do painel — não altera score nem API.
             </p>
             {creatorSignals.length > 0 ? (
               <div style={creatorSignalsChipWrap} aria-label="Sinais comerciais derivados dos dados do produto">
@@ -688,7 +689,7 @@ export default function ProductWorkspacePage() {
                 ))}
               </div>
             ) : (
-              <p style={{ margin: 0, fontSize: "0.76rem", opacity: 0.72 }}>Sem sinais destacados com os dados actuais.</p>
+              <p style={{ margin: 0, fontSize: "0.76rem", opacity: 0.72 }}>Nenhum sinal automático para destacar — os números no resumo acima já ajudam.</p>
             )}
           </section>
 
@@ -774,20 +775,20 @@ export default function ProductWorkspacePage() {
                 </div>
               </div>
               {workspace.deltaHint ? (
-                <p
+                <div
                   style={{
-                    fontSize: "0.71rem",
-                    opacity: 0.78,
                     margin: "0.55rem 0 0",
-                    lineHeight: 1.48,
                     padding: "0.45rem 0.55rem",
-                    background: "rgba(255,190,92,0.07)",
+                    background: "rgba(14, 165, 233, 0.07)",
                     borderRadius: 6,
-                    border: "1px solid rgba(255,190,92,0.15)"
+                    border: "1px solid rgba(56, 189, 248, 0.2)"
                   }}
                 >
-                  {workspace.deltaHint}
-                </p>
+                  <div style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.03em", opacity: 0.88, color: "#7dd3fc", marginBottom: "0.28rem" }}>
+                    Contexto dos dados (API)
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.71rem", opacity: 0.82, color: "#b8d4e8", lineHeight: 1.48 }}>{workspace.deltaHint}</p>
+                </div>
               ) : null}
             </Subsection>
 
@@ -1283,19 +1284,18 @@ export default function ProductWorkspacePage() {
           )}
 
           <section style={{ ...box, marginTop: "1rem" }}>
-            <div style={{ ...labelMuted, marginBottom: "0.35rem" }}>
-              Notas (gravadas só neste browser)
+            <div style={{ ...labelMuted, marginBottom: "0.25rem", fontWeight: 600, opacity: 0.88, color: "#c4b8a8" }}>Minhas notas</div>
+            <p style={{ margin: "0 0 0.4rem", fontSize: "0.7rem", opacity: 0.68, lineHeight: 1.45 }}>
+              Gravadas só neste browser — não são enviadas ao servidor.
               {!notesLoaded ? null : (
-                <span style={{ opacity: 0.6, marginLeft: "0.35rem" }}>
-                  máx {NOTES_MAX.toLocaleString()} caracteres
-                </span>
+                <span style={{ opacity: 0.75, marginLeft: "0.35rem" }}>· máx. {NOTES_MAX.toLocaleString()} caracteres</span>
               )}
-            </div>
+            </p>
             <textarea
               value={notes}
               readOnly={!notesLoaded}
               onChange={onNotesChange}
-              placeholder="Lista de decisões, preço-alvo, fornecedor, próximos passos…"
+              placeholder="Decisões, preço-alvo, fornecedor, próximos passos…"
               rows={10}
               style={{
                 width: "100%",
