@@ -20,6 +20,7 @@ Não monorepo: um pacote **npm** (não pnpm workspaces). **Scraper:** `src/scrap
 - **`.cursor/rules/produto-fotos-json-e-bd.mdc`** — mapeamento **`fotos` / `fotos_pdp`** ↔ **`images` / `pdp_images`** na BD e anti‑regressões.
 - **`.cursor/rules/droplet-docker-prisma.mdc`** — SSH/Droplet, `git pull`, Docker Compose, Prisma Studio (túnel), migrações no *entrypoint* da API (**não regredir** para “migra obrigatório só para Studio” ou `npm` fora do clone).
 - **`.cursor/rules/analytics-esm-no-regress.mdc`** — **não partir** sintaxe ESM em `scripts/analytics/**/*.mjs` (evita **`Illegal return statement`** em libs importadas pela API → painel **`ECONNREFUSED :3333`**); usar **`node --check`** antes de fechar edição.
+- **`.cursor/rules/spaces-env-stable.mdc`** — **DigitalOcean Spaces**: `.env` na raiz, não mexer em `load-root-env.mjs` sem tarefa; Access Key **completa** (UI trunca); `npm run test:spaces`.
 
 ## Evolutivo e consistência
 

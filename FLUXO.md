@@ -216,7 +216,9 @@ npm run coleta
 
 - Arranque: **`npm run analytics:api`**.
 - Auth: **`Authorization: Bearer <ANALYTICS_API_KEY>`** (ou `x-api-key`). Endpoints em **`docs/ANALYTICS-API.md`**.
-- **POST** opcional **`/analytics/export-product-to-spaces`**: exporta produto ao DigitalOcean Spaces (credenciais `SPACES_*` no servidor). No painel **Product Score**, botão por linha na coluna **Space**.
+- **POST** opcional **`/analytics/export-product-to-spaces`**: exporta produto ao DigitalOcean Spaces (credenciais `SPACES_*` no **`.env` da raiz** — descomentadas e preenchidas; teste: `npm run test:spaces`). A API carrega só esse ficheiro via **`scripts/load-root-env.mjs`**. Se **503** «…em falta no .env»: confirma que o processo da API arrancou **a partir da raiz do clone** e que não há `SPACES_*` vazias no ambiente do sistema a bloquear o `dotenv` (comportamento por defeito: não sobrescreve variáveis já definidas).
+- **Regra estável (Spaces):** não alterar `load-root-env.mjs` nem o fluxo de credenciais sem tarefa no ROADMAP + `npm run test:spaces`. Copiar **Access Key ID completo** da DO (botão copiar — a tabela trunca e quebra o export). Ver **`.cursor/rules/spaces-env-stable.mdc`**.
+- No painel **Product Score**, botão por linha na coluna **Space**; no **workspace** do produto, **Exportar ao Space**.
 
 Relatórios equivalentes aos da tabela CLI; **Escalar** e **category-map** no painel espelham o mesmo universo que `analytics:scalable` e `analytics:category-map`.
 

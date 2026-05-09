@@ -4,15 +4,75 @@ Uso: abrir este ficheiro durante uma sessão de testes; ir tarefa a tarefa; marc
 
 Pré-requisitos habituais: `.env` com `DATABASE_URL`, `ANALYTICS_API_KEY`, chave no `frontend/.env` alinhada à API. Ver `FLUXO.md` para portas e dois terminais se não usar `dev:all`.
 
+**Como usar este ficheiro:** o **topo** (pendências) é o **backlog operacional** extraído das **Observações** da validação — actualizar após cada sessão. Abaixo fica o **checklist completo** tarefa a tarefa.
+
+**Sobre os checkboxes:** não basta olhar para `[x] Pendente` vs `[x] OK` — em alguns blocos o `[x]` ficou na linha errada. **Fonte de verdade para pendências:** texto em **Observações** + contexto da tarefa.
+
+---
+
+## Legenda (classificação das pendências)
+
+| Classificação | Quando usar |
+|---------------|-------------|
+| **Bug provável** | Comportamento inconsistente com o desejado; merece repro no código. |
+| **Investigação** | Pode ser dados vazios, regra de negócio ou bug — falta confirmar com dados/API. |
+| **UX** | Funciona, mas navegação ou feedback confundem o operador. |
+| **Clareza** | Checklist ou copy da UI pouco claros; melhorar texto/guia. |
+| **Falso alarme** | Provável comportamento correcto; só documentar ou alinhar expectativa. |
+| **Melhoria futura** | Nice-to-have; quando virar trabalho, copiar para **`docs/ROADMAP.md`**. |
+
+---
+
+# Pendências encontradas na validação
+
+*Síntese das observações da sessão exemplo (09/05/2026, dev). Ao fechar uma linha, removê-la daqui ou marcar «(feito)» e apontar PR/commit.*
+
+## Prioridade Alta
+
+- **[Investigação]** **Growth / Em ascensão** com filtro **ticket alto**: operador reportou lista sem dados — verificar universo de dados vs query/filtro na API e no `frontend` (aba Growth).
+- **[Investigação]** **Product Score** com **ticket alto**: idem — lista vazia; confirmar se critério exclui tudo ou bug.
+- **[Investigação]** **Opportunities** modo **sem vendas** (`low_sales` / sem vendas): não aparecem produtos — confirmar se não há itens no snapshot com essa condição ou se o filtro está demasiado restritivo.
+- **[Bug provável]** **Notas no workspace**: observação — nota vista no contexto de favoritos, após **refresh** a informação desapareceu — rever chaves `localStorage` (ex.: `productId` vs rota `/shortlist`) e persistência entre páginas.
+
+## Prioridade Média
+
+- **[UX]** **Scrape simultâneo:** ao bloquear scrape num cartão, o botão da toolbar **«Scrapear as duas categorias»** não mostra o mesmo feedback visual de bloqueio que os cartões — alinhar em `CategoriesPage.jsx` (ou mensagem global «ocupado»).
+- **[Investigação / UX]** **`/a-mao`** vs **`/shortlist`:** mudanças no hub não actualizam de imediato a vista de favoritos — decidir se é limitação esperada (`localStorage` + sem evento entre rotas), bug, ou falta de copy no `FLUXO.md`; documentar ou corrigir.
+
+## UX / Clareza
+
+- **[UX]** **Em Ascensão / Escalar / Mapa:** não há caminho óbvio para abrir **workspace** pelo produto (só nome ou sem link) — ideia do operador: **linha inteira clicável** ou coluna «Abrir».
+- **[UX]** **Enrich PDP** no workspace: fluxo «Enrich → esperar → Actualizar dados (import) → fotos» pouco claro; botão **Recarregar** sem explicação — melhorar texto de ajuda em `ProductWorkspacePage.jsx` / `FLUXO.md`.
+- **[Clareza]** **Creator Signals:** micro-explicação (uma linha) de que é leitura derivada dos mesmos números do painel, sem mudar score.
+- **[UX]** **Listas vazias** (ex. ticket alto): mensagem explícita («Nenhum produto neste filtro…») em vez de tabela vazia sem contexto.
+- **[Clareza]** Itens do checklist **«Detalhes técnicos do cartão»**, **«Alertas só quando aplicável»**, **«Resiliência (produto inexistente / API offline)»** — operador escreveu «não entendi o que fazer»: reescrever passos no próprio `.md` (exemplos de URL inválida; quando esperar badge «URLs misturadas»; como parar só a API).
+
+## Dúvidas operacionais
+
+- **[Falso alarme provável]** Cartão **«Roupas femininas e roupas íntimas…»** após scrape: números mudam (**+0 novos**, N **actualizados**) mas **total na base** pode não subir — esperado quando não entram **product_id** novos; reforçar copy no card ou nota no `FLUXO.md`.
+- **[Esperado]** **Import ignorado** (`input_hash` igual — «ScrapeRun existente») — comportamento correcto de idempotência; não é bug.
+- **[Dúvida]** **Consola** só avisos **amarelos** (ex. React Router future flags em dev) — aceitável até opt-in às flags; não bloqueia validação.
+- **[Melhoria futura]** **Filtros de ticket** e **Creator Presets** — operador pediu lista dedicada de cenários de teste; quando priorizar, virar tarefas no **`docs/ROADMAP.md`**.
+
+---
+
+## Checklist completo (tarefas detalhadas)
+
+A seguir: **registo da sessão** e cada bloco com passos, resultado esperado, status e observações.
+
 ## Registo desta sessão
 
 Preencher no **início** de cada corrida de validação (pode duplicar este bloco para uma nova sessão).
 
 | Campo | Valor |
 |-------|-------|
-| Data do teste: |09/05/2026
-| Ambiente: |dev
+| Data do teste: |09/05/2026 |
+| Ambiente: | dev |
+| Banco usado: | |
+| Categoria testada: | |
+| URL testada: | |
 
+*(Preencher as linhas vazias no início de cada sessão.)*
 
 ---
 
@@ -115,7 +175,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -133,10 +193,13 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:As duas estão funcionando. obs: Roupas femininas e roupas íntimas femininas testei mas ela nao atualizou os dados , acredito que seja que os produtos ja estão coletados ,  437 produtos na base Última coleta 210 colectados no total
+100 importados nesta categoria · 97 lojas +0 novos · 100 actualizados
+110 fora desta categoria / dedupe Última coleta: 09/05/2026, 11:46 (agora há pouco)
+URLs misturadas Detalhes técnicos Scrapear Abrir análise →
 -
 
 ---
@@ -151,7 +214,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -169,10 +232,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:se eu escrapear geral ele bloqueia os botoes do card e se executar o do card o outro bloqueia aparece o icone de blequio no outro card porem no botão geral nao aparece o icone de bloqueio.
 -
 
 ---
@@ -187,10 +250,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações: Importação ignorada: este output já foi importado.(ScrapeRun existente: cmoyhkhtr0000rizxpc6ohr5l | inputHash: a4127f6244b7888b336b098b4a32927e4e8f430ee8a4a35f4715e95d0f49901)
 -
 
 ---
@@ -205,7 +268,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -223,7 +286,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -241,7 +304,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -259,7 +322,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -277,10 +340,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:sem venda nao aparece o produto, nao sei dizer se não tem o o produto sem venda , temos que investigar 
 -
 
 ---
@@ -295,10 +358,11 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:Ticket alto nao aparece nehum dados temso que investigar.
+
 -
 
 ---
@@ -313,10 +377,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:Ticket alto nao tem produtos temos que investigar
 -
 
 ---
@@ -330,11 +394,11 @@ Resultado esperado:
 - Lista filtra ou volta ao estado completo; URL ou estado local coerente.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:Vamos fazer uma lista de tarefas para os filtros e ticket
 -
 
 ---
@@ -348,11 +412,11 @@ Resultado esperado:
 - Preset altera modo/filtros esperados sem erro.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:vamso criar depois uma lista pra ele para testarmos.
 -
 
 ---
@@ -366,11 +430,11 @@ Resultado esperado:
 - Página de workspace com dados do produto; fotos ou mensagem se não houver imagens.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações: 📈 Em Ascensão 🔥 Escalar🧭 Mapa esse ai nao tem a opção de clicar no nome e abrir o espaço do produto que acredito que seja o workspace, minha ideia ao inves de clicar no nome do produto pra abrir , colocar para clicar na linha e abre ele
 -
 
 ---
@@ -385,10 +449,12 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações: O que tem la  Creator Signal sLeitura rápida a partir dos mesmos números do painel — não altera score nem API.
+
+⚠️ Saturado💳 Ticket Médio🏅 Rating alto
 -
 
 ---
@@ -403,7 +469,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -421,7 +487,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -439,7 +505,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -457,7 +523,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -474,11 +540,11 @@ Resultado esperado:
 - Página carrega com abas ou secções previstas (Recentes, Por estágio, Shortlist).
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:  se eu alterar o a -mao ele nao atualiza dde imediato na pagina dos favoritos (Preciso entender melhor essa funcção pra que que serve e se faz sentido em nosso projeto, ) na minha concpçao tinha que ser automatico ou nao ter. 
 -
 
 ---
@@ -492,11 +558,11 @@ Resultado esperado:
 - Lista ou estado vazio coerente; navegação para workspace quando clicável.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:se eu alterar o a -mao ele nao atualiza dde imediato na pagina dos favoritos (Preciso entender melhor essa funcção pra que que serve e se faz sentido em nosso projeto, ) na minha concpçao tinha que ser automatico ou nao ter.
 -
 
 ---
@@ -511,7 +577,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -529,7 +595,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -547,7 +613,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -565,10 +631,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:a nota apareceu nos favoritos , atualizei a pagina e nao pedeu a informação
 -
 
 ---
@@ -583,7 +649,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -600,11 +666,11 @@ Resultado esperado:
 - Pedido aceite ou mensagem clara de indisponível; terminal/API sem crash.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações: Ao clicar no enriquecer o produto ele abre o cmd e eceuta , depois tenho que clicar no atualizar dados , ai aparece as fotos, uma duvidaé o que ele mais pega n ao enriquecer? depois de clicar no botão atualizar produto ai aparece as fotos que veio do pdp, tem um botão carregar que nao sei pra que serve.(Mas provalvel que vou mudar onde fazer o enriquecimento , deve ser automatico ao exportar mas esta em sandbay ainda)
 -
 
 ---
@@ -619,10 +685,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:Baixei as imagens no pc deu certo fiz com um produto so. 
 -
 
 ---
@@ -637,7 +703,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -655,10 +721,10 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:bom vermelho é erro neh, te amarelo so 
 -
 
 ---
@@ -673,7 +739,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -690,11 +756,11 @@ Resultado esperado:
 - Conteúdo presente e legível; fechado por defeito não oculta o resumo operacional.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações: nao entendi o que fazer
 -
 
 ---
@@ -708,11 +774,11 @@ Resultado esperado:
 - Sem alertas quando tudo OK; badge correspondente quando condição real se verifica.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:nao entendi o que fazer 
 -
 
 ---
@@ -726,11 +792,11 @@ Resultado esperado:
 - Mensagem de erro ou estado vazio claro; não página em branco sem feedback.
 
 Status:
-- [ ] Pendente
+- [x] Pendente
 - [ ] OK
 - [ ] Erro
 
-Observações:
+Observações:nao entendi o qu efazer
 -
 
 ---
@@ -745,7 +811,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -755,5 +821,6 @@ Observações:
 
 ## Notas finais
 
+- **Backlog operacional:** ver secção **«Pendências encontradas na validação»** no topo deste ficheiro (prioridades + UX + dúvidas); actualizar quando fechar itens.
 - Tarefas **37–39** (alertas) podem ficar **Pendente** se não houver dados de teste para forçar o estado; registar em **Observações**.
 - Para comandos e portas exactos, usar **`FLUXO.md`** como referência durante o checklist.

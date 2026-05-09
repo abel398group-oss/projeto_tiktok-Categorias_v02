@@ -4,6 +4,7 @@ dist/
 
 # env/local
 .env
+.env.local
 .env.*.local
 frontend/.env.production.local
 .chrome-tiktok-profile/
