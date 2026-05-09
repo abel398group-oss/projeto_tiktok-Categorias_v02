@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "./api.js";
+import { apiFetch, apiPost } from "./api.js";
 import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
 
 const EMPTY_LIST_MSG =
@@ -48,6 +48,16 @@ function formatDateTime(iso) {
   }
 }
 
+/** Alinhado à validação do POST `/scrape/run` na API (hostname exacto). */
+function isShopTikTokCategoryUrl(s) {
+  try {
+    const u = new URL(s.trim());
+    return u.protocol === "https:" && u.hostname === "shop.tiktok.com";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Página inicial — categorias em grelha de cartões (layout inspirado em dashboards tipo HiperTMS).
  * Dados: GET `/analytics/categories`.
@@ -56,6 +66,82 @@ export default function CategoriesPage() {
   const [status, setStatus] = useState(/** @type {'idle' | 'loading' | 'ok' | 'error'} */ ("idle"));
   const [categories, setCategories] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
   const [error, setError] = useState("");
+
+  /** `categoryKey` do cartão enquanto corre o scrape, ou `null`. */
+  const [scrapingKey, setScrapingKey] = useState(/** @type {string | null} */ (null));
+  /** Mesmo cartão enquanto corre import JSON → Postgres após scrape OK. */
+  const [importingKey, setImportingKey] = useState(/** @type {string | null} */ (null));
+  /** Mensagem global (sucesso / erro). */
+  const [scrapeFlash, setScrapeFlash] = useState(/** @type {{ kind: "ok" | "err"; text: string } | null} */ (null));
+  /** Cartão que acabou o fluxo completo (pulse curto no botão). */
+  const [doneKey, setDoneKey] = useState(/** @type {string | null} */ (null));
+
+  useEffect(() => {
+    if (!doneKey) return undefined;
+    const t = window.setTimeout(() => setDoneKey(null), 2800);
+    return () => window.clearTimeout(t);
+  }, [doneKey]);
+
+  const reloadCategories = useCallback(async () => {
+    const body = await apiFetch("/analytics/categories");
+    const list = Array.isArray(body?.categories) ? body.categories : [];
+    setCategories(list);
+  }, []);
+
+  /**
+   * @param {string} categoryUrl URL da categoria (ex.: `row.categoryUrl`).
+   * @param {string} rowKey `categoryKey` estável do cartão.
+   */
+  const runScrapeForUrl = useCallback(
+    async (categoryUrl, rowKey) => {
+      const u = String(categoryUrl ?? "").trim();
+      if (!isShopTikTokCategoryUrl(u)) {
+        setScrapeFlash({
+          kind: "err",
+          text: "Esta categoria não tem uma URL https://shop.tiktok.com/… válida na base — não é possível scrapear daqui."
+        });
+        return;
+      }
+      setScrapingKey(rowKey);
+      setImportingKey(null);
+      setScrapeFlash(null);
+      setDoneKey(null);
+      try {
+        const body = await apiPost("/scrape/run", { categoryUrl: u });
+        const hint =
+          typeof body?.message === "string" && body.message.trim() !== "" ? body.message.trim() : "Coleta concluída.";
+        setScrapeFlash({
+          kind: "ok",
+          text: `${hint} A sincronizar JSON → Postgres (import)…`
+        });
+      } catch (err) {
+        setScrapeFlash({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+        return;
+      } finally {
+        setScrapingKey(null);
+      }
+
+      setImportingKey(rowKey);
+      try {
+        await apiPost("/analytics/import-output", {});
+        await reloadCategories();
+        setScrapeFlash({
+          kind: "ok",
+          text: "Coleta gravada, base actualizada e lista de categorias recarregada."
+        });
+        setDoneKey(rowKey);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setScrapeFlash({
+          kind: "err",
+          text: `Coleta terminou, mas o import falhou: ${msg} Corra na raiz: npm run db:import:output`
+        });
+      } finally {
+        setImportingKey(null);
+      }
+    },
+    [reloadCategories]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +192,21 @@ export default function CategoriesPage() {
           </Link>
         </div>
 
+        {scrapeFlash ? (
+          <p
+            role={scrapeFlash.kind === "err" ? "alert" : "status"}
+            style={{
+              marginTop: "0.65rem",
+              fontSize: "0.86rem",
+              color: scrapeFlash.kind === "err" ? "var(--tk-danger)" : "var(--tk-accent)",
+              maxWidth: "52rem",
+              lineHeight: 1.45
+            }}
+          >
+            {scrapeFlash.text}
+          </p>
+        ) : null}
+
         {status === "loading" && <p style={{ color: "var(--tk-text-muted)" }}>Carregando categorias…</p>}
 
         {status === "error" && (
@@ -143,67 +244,91 @@ export default function CategoriesPage() {
                 categoryTitle: label
               };
 
+              const scrapeTargetUrl = String(row.categoryUrl ?? row.categoryKey ?? key).trim();
+
               return (
-                <Link
-                  key={key}
-                  to={to}
-                  state={statePayload}
-                  className="tk-category-card"
-                  aria-label={`Abrir análise da categoria ${label}`}
-                >
-                  <div className="tk-category-card__body">
-                    <p className="tk-category-card__eyebrow">Categoria</p>
-                    <h2 className="tk-category-card__title">{label}</h2>
-                    {showKey ? (
-                      <p className="tk-category-card__key" title={key}>
-                        {key.length > 120 ? `${key.slice(0, 117)}…` : key}
-                      </p>
-                    ) : null}
-                    <div className="tk-category-card__kpi">
-                      <span className="tk-category-card__kpi-val">{n}</span>
-                      <span className="tk-category-card__kpi-label">produtos únicos na base</span>
+                <div key={key} className="tk-category-card">
+                  <Link
+                    to={to}
+                    state={statePayload}
+                    className="tk-category-card__main"
+                    aria-label={`Abrir análise da categoria ${label}`}
+                  >
+                    <div className="tk-category-card__body">
+                      <p className="tk-category-card__eyebrow">Categoria</p>
+                      <h2 className="tk-category-card__title">{label}</h2>
+                      {showKey ? (
+                        <p className="tk-category-card__key" title={key}>
+                          {key.length > 120 ? `${key.slice(0, 117)}…` : key}
+                        </p>
+                      ) : null}
+                      <div className="tk-category-card__kpi">
+                        <span className="tk-category-card__kpi-val">{n}</span>
+                        <span className="tk-category-card__kpi-label">produtos únicos na base</span>
+                      </div>
+                      <dl className="tk-category-card__meta">
+                        <div>
+                          <dt title="Snapshots da última importação associados a esta categoria">
+                            Última importação
+                          </dt>
+                          <dd>
+                            {row.lastImportProductCount != null
+                              ? `${Number(row.lastImportProductCount).toLocaleString("pt-BR")} produtos nesta corrida`
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt title="Lojas distintas (produtos ligados à loja na BD) nesta mesma corrida/importação que acima">
+                            Lojas nesta corrida
+                          </dt>
+                          <dd>
+                            {row.lastImportSellerCount != null
+                              ? `${Number(row.lastImportSellerCount).toLocaleString(
+                                  "pt-BR"
+                                )} lojas distintas`
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Última coleta</dt>
+                          <dd>{formatDateTime(row.lastCollectedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Actualização</dt>
+                          <dd>{formatDateTime(row.lastImportedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Criação do run na BD</dt>
+                          <dd>{formatDateTime(row.lastScrapeRunCreatedAt)}</dd>
+                        </div>
+                      </dl>
                     </div>
-                    <dl className="tk-category-card__meta">
-                      <div>
-                        <dt title="Snapshots da última importação associados a esta categoria">
-                          Última importação
-                        </dt>
-                        <dd>
-                          {row.lastImportProductCount != null
-                            ? `${Number(row.lastImportProductCount).toLocaleString("pt-BR")} produtos nesta corrida`
-                            : "—"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt title="Lojas distintas (produtos ligados à loja na BD) nesta mesma corrida/importação que acima">
-                          Lojas nesta corrida
-                        </dt>
-                        <dd>
-                          {row.lastImportSellerCount != null
-                            ? `${Number(row.lastImportSellerCount).toLocaleString(
-                                "pt-BR"
-                              )} lojas distintas`
-                            : "—"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Última coleta</dt>
-                        <dd>{formatDateTime(row.lastCollectedAt)}</dd>
-                      </div>
-                      <div>
-                        <dt>Actualização</dt>
-                        <dd>{formatDateTime(row.lastImportedAt)}</dd>
-                      </div>
-                      <div>
-                        <dt>Criação do run na BD</dt>
-                        <dd>{formatDateTime(row.lastScrapeRunCreatedAt)}</dd>
-                      </div>
-                    </dl>
-                  </div>
+                  </Link>
                   <footer className="tk-category-card__footer">
-                    <span className="tk-category-card__cta">Abrir análise →</span>
+                    <button
+                      type="button"
+                      className="tk-category-card__scrape"
+                      disabled={scrapingKey !== null || importingKey !== null}
+                      title="Scrape (JSON) + import para Postgres; pode demorar vários minutos"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void runScrapeForUrl(scrapeTargetUrl, key);
+                      }}
+                    >
+                      {scrapingKey === key
+                        ? "A scrapear…"
+                        : importingKey === key
+                          ? "A importar…"
+                          : doneKey === key
+                            ? "Concluído ✓"
+                            : "Scrapear"}
+                    </button>
+                    <Link to={to} state={statePayload} className="tk-category-card__cta">
+                      Abrir análise →
+                    </Link>
                   </footer>
-                </Link>
+                </div>
               );
             })}
           </section>

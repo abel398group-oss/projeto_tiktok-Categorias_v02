@@ -258,8 +258,9 @@ tbody td {
   align-items: stretch;
 }
 
-/* Link React Router no lugar de <article>: cartão inteiro clicável */
-a.tk-category-card {
+/* Cartão: `a` legado (inteiro clicável) ou `div` com área de link + botão scrape no rodapé */
+a.tk-category-card,
+div.tk-category-card {
   display: flex;
   flex-direction: column;
   border-radius: var(--tk-radius-lg);
@@ -268,7 +269,6 @@ a.tk-category-card {
   box-shadow: var(--tk-shadow-sm);
   min-height: 220px;
   overflow: hidden;
-  text-decoration: none;
   color: inherit;
   transition:
     border-color 0.16s ease,
@@ -276,7 +276,16 @@ a.tk-category-card {
     transform 0.16s ease;
 }
 
-a.tk-category-card:hover .tk-category-card__cta {
+a.tk-category-card__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tk-category-card:hover .tk-category-card__cta {
   color: #7dd3fc;
 }
 
@@ -372,6 +381,33 @@ a.tk-category-card:hover .tk-category-card__cta {
   border-top: 1px solid var(--tk-border);
   background: rgb(0 0 0 / 0.18);
   text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.85rem;
+}
+
+.tk-category-card__scrape {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--tk-radius-sm);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+}
+
+.tk-category-card__scrape:hover:not(:disabled) {
+  border-color: var(--tk-accent-ring);
+  color: var(--tk-accent);
+}
+
+.tk-category-card__scrape:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .tk-category-card__cta {

@@ -20,7 +20,13 @@ npm run db:check
 npm run dev:all
 ```
 
-Painel: **http://localhost:5173/** · API: **http://127.0.0.1:3333/** (proxy do Vite encaminha `/analytics` para a API).
+Sobe **Postgres local em Docker** (ficheiro `docker-compose.postgres-local.yml`: `up -d` + espera na porta **5433**) e, em seguida, **API Fastify** + **Vite** em paralelo. Se já usas **Postgres remoto** (sem Docker local), usa só API + painel:
+
+```bash
+npm run dev:app
+```
+
+Painel: **http://localhost:5173/** · API: **http://127.0.0.1:3333/** (proxy do Vite encaminha `/analytics` e `/scrape` para a API).
 
 ### 3) Coletar TikTok Shop e gravar no Postgres
 
@@ -147,7 +153,8 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 |---------|---------|
 | Só API Fastify (`127.0.0.1:3333` por defeito). Env: `DATABASE_URL`, **`ANALYTICS_API_KEY`** | `npm run analytics:api` |
 | Só Vite (precisa `cd frontend` + `npm install` na primeira vez) | `cd frontend` → `npm run dev` |
-| **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). A parte **API** usa `node --watch` e reinicia ao alterar `server.mjs`. | `npm run dev:all` |
+| **Postgres Docker local** (up + espera **5433**) + **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). API com `node --watch`. | `npm run dev:all` |
+| **Só API + Vite** (sem subir Docker; ex.: `DATABASE_URL` remoto) | `npm run dev:app` |
 
 - Chave no browser: `frontend/.env` → **`VITE_ANALYTICS_API_KEY`** igual a **`ANALYTICS_API_KEY`** na raiz. Ver `frontend/README.md`, `.env.example` na raiz e `frontend/.env.example`.
 - Rota **`/produto/<id TikTok>`** para a página de trabalho do produto (link no nome do Product Score).
@@ -245,7 +252,7 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 
 ### 9. Painel web — comportamento actual (rápido)
 
-- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). Contagem grande = **produtos únicos na base**; **Última importação** = produtos snapshots na última run da pasta; **Lojas nesta corrida** = lojas distintas só nesses mesmos snapshots (quantidade nesta volta, sem lista de nomes). O cartão inteiro é cliclável (`/categoria/...` com estado `categoryUrl`).
+- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). Contagem grande = **produtos únicos na base**; **Última importação** = produtos snapshots na última run da pasta; **Lojas nesta corrida** = lojas distintas só nesses mesmos snapshots (quantidade nesta volta, sem lista de nomes). Cada cartão tem **Scrapear** ( **POST `/scrape/run`** com a `categoryUrl` do cartão, depois **POST `/analytics/import-output`** para sincronizar JSON → Postgres e **recarregar** a lista) e **Abrir análise** → `/categoria/...` com estado `categoryUrl`. Se o import falhar, o painel mostra o erro e podes correr **`npm run db:import:output`** na raiz.
 - **`/analytics`** — Analytics **global**. Os separadores (Top Products, Opportunities, …) **pedem dados à API ao abrir e ao mudar de separador**. O botão **Carregar dados** **actualiza** só o separador activo (útil depois de novo import ou para forçar refresh). **Top Products** e **Opportunities**: o painel pede um `limit` alto à API e mostra primeiro **20** linhas; use **Ver mais produtos** para ver o resto já carregado (mesma ordem; cabeçalhos reordenam só o que está em memória). Em **Opportunities**, os **modos** (Classic, baixas, sem vendas, abaixo da mediana) enviam `?mode=` à API e voltam a carregar ao mudar; **▾** no cabeçalho de cada coluna abre filtro e A–Z (estilo Excel).
 - **`/categoria/:slug`** — Mesmos relatórios com **`?categoryUrl=...`**; carregamento automático igual ao global.
 - **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`. **Pipeline creator** (estágio operacional) e **notas** ficam em `localStorage` neste browser (chave `productStatus` + prefixo de notas).

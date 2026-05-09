@@ -26,6 +26,7 @@ import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
+import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
@@ -292,6 +293,7 @@ fastify.post("/analytics/export-product-to-spaces", async (req, reply) => {
 
 registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
+registerScrapeRunRoute(fastify);
 
 const graceful = async () => {
   await fastify.close();

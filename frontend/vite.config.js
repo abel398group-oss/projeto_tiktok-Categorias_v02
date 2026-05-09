@@ -14,7 +14,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/analytics": { target: "http://127.0.0.1:3333", changeOrigin: true },
-      "/health": { target: "http://127.0.0.1:3333", changeOrigin: true }
+      "/health": { target: "http://127.0.0.1:3333", changeOrigin: true },
+      "/scrape": { target: "http://127.0.0.1:3333", changeOrigin: true }
     }
   }
 });

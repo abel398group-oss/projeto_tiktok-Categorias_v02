@@ -50,6 +50,8 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
 | POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (snapshot mais recente do produto no core de export). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
 | POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser/playwright uso do projeto. |
+| POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** no mesmo host que a API, com `CATEGORY_URL` definido; resposta **após** o processo terminar. **409** se já houver um scrape a correr neste processo. Ver `scripts/analytics/scrape-run-route.mjs`. |
+| POST | `/analytics/import-output` | Corpo `{}` — corre **`npm run db:import:output`** (JSON em `output/` → Postgres) à espera do fim. O painel **Scrapear** em `/` encadeia isto após `/scrape/run` para actualizar a lista. Ver `scripts/analytics/import-output-route.mjs`. |
 
 ### GET product-workspace
 
