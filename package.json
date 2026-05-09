@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
-    "test": "node --test test/scrape-regression.test.mjs",
+    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
     "setup:local": "node scripts/setup-local-env.mjs",

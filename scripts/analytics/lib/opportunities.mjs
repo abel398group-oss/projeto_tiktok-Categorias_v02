@@ -74,10 +74,25 @@ export function snapshotMatchesBaseQuality(s) {
 }
 
 /**
+ * Critérios mínimos só para modo `no_sales` — **sem** rating/reviews mínimos (produtos sem venda costumam não ter reviews).
+ * @param {*} s — snapshot com `product` incluído quando vindo do relatório por categoria.
+ */
+export function snapshotMatchesNoSalesQuality(s) {
+  if (s.price == null) {
+    return false;
+  }
+  const p = s.product;
+  if (p == null || p.productId == null || String(p.productId).trim() === "") {
+    return false;
+  }
+  return true;
+}
+
+/**
  * @param {Pick<import("@prisma/client").ProductSnapshot, "salesCount">} s
  * @param {OpportunityMode} mode
  */
-function snapshotMatchesSalesMode(s, mode) {
+export function snapshotMatchesSalesMode(s, mode) {
   const sc = s.salesCount;
   if (mode === "classic") {
     if (sc == null) {
@@ -99,18 +114,36 @@ function snapshotMatchesSalesMode(s, mode) {
 
 /** @param {OpportunityMode} mode */
 export function opportunityModeRuleNote(mode) {
-  const base =
+  const baseQuality =
     "preço definido; rating médio ≥4,5; total de avaliações ≥5 — heurística exploratória (ver docs/ANALYTICS.md).";
   if (mode === "classic") {
-    return `Modo classic: vendas entre 10 e 300; ${base}`;
+    return `Modo classic: vendas entre 10 e 300; ${baseQuality}`;
   }
   if (mode === "low_sales") {
-    return `Modo vendas baixas: vendas entre 1 e 99 (com valor registado); ${base}`;
+    return `Modo vendas baixas: vendas entre 1 e 99 (com valor registado); ${baseQuality}`;
   }
   if (mode === "no_sales") {
-    return `Modo sem vendas: vendas = 0 ou ausentes no snapshot; ${base}`;
+    return `Modo sem vendas: vendas = 0 ou ausentes no snapshot; preço definido; produto com identificador; não exige rating nem mínimo de avaliações (ver docs/ANALYTICS.md).`;
   }
-  return `Modo abaixo da mediana: vendas ≥1 e estritamente abaixo da mediana de vendas da mesma categoria (mestre) no último run; ${base}`;
+  return `Modo abaixo da mediana: vendas ≥1 e estritamente abaixo da mediana de vendas da mesma categoria (mestre) no último run; ${baseQuality}`;
+}
+
+/**
+ * Mensagem quando não há linhas (evita confundir `no_sales` com os outros modos).
+ * @param {OpportunityMode} mode
+ * @param {"global" | "category"} scope
+ * @param {{ latestId?: string, filterKey?: string }} ctx
+ */
+function opportunitiesEmptyListMessage(mode, scope, ctx) {
+  if (mode === "no_sales") {
+    return scope === "category"
+      ? "Nenhum produto sem vendas encontrado para este filtro/categoria."
+      : "Nenhum produto sem vendas encontrado.";
+  }
+  if (scope === "category") {
+    return `Último snapshot por produto nesta categoria: nenhum coincide com o modo "${mode}" (${ctx.filterKey ?? ""}).`;
+  }
+  return `Último ScrapeRun (${ctx.latestId ?? "?"}): nenhum produto coincide com o modo "${mode}".`;
 }
 
 /**
@@ -303,6 +336,10 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
   if (mode === "below_median") {
     medianMap = await computeMedianSalesByMasterCategory(prisma, latest.id);
     predicate = (s) => snapshotMatchesBelowMedian(s, medianMap);
+  } else if (mode === "no_sales") {
+    predicate = (s) =>
+      snapshotMatchesNoSalesQuality(/** @type {any} */ (s)) &&
+      snapshotMatchesSalesMode(/** @type {any} */ (s), mode);
   } else {
     predicate = (s) =>
       snapshotMatchesBaseQuality(s) && snapshotMatchesSalesMode(/** @type {any} */ (s), mode);
@@ -326,8 +363,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
           ? {
               scrapeRunId: latest.id,
               price: { not: null },
-              ratingAverage: { gte: 4.5 },
-              ratingTotal: { gte: 5 },
+              product: { productId: { not: "" } },
               OR: [{ salesCount: null }, { salesCount: 0 }]
             }
           : {
@@ -351,7 +387,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
           maxRows: limit,
           ruleNote: opportunityModeRuleNote(mode),
           opportunityMode: mode,
-          message: `Último ScrapeRun (${latest.id}): nenhum produto coincide com o modo "${mode}".`
+          message: opportunitiesEmptyListMessage(mode, "global", { latestId: latest.id })
         };
       }
 
@@ -360,7 +396,10 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
         include: {
           product: { include: { seller: true } }
         },
-        orderBy: [{ ratingAverage: "desc" }, { salesCount: "desc" }],
+        orderBy:
+          mode === "no_sales"
+            ? [{ capturedAt: "desc" }]
+            : [{ ratingAverage: "desc" }, { salesCount: "desc" }],
         take: limit
       });
 
@@ -492,7 +531,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
       categoryUrlFilter: filterKey,
       opportunityMode: mode,
       ruleNote: opportunityModeRuleNote(mode),
-      message: `Último snapshot por produto nesta categoria: nenhum coincide com o modo "${mode}" (${filterKey}).`
+      message: opportunitiesEmptyListMessage(mode, "category", { filterKey })
     };
   }
 

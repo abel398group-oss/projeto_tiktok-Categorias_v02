@@ -1026,9 +1026,10 @@ export default function ProductWorkspacePage() {
           <section style={{ ...box }}>
             <div style={{ ...labelMuted, marginBottom: "0.55rem" }}>Ligações</div>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.69rem", lineHeight: 1.45, opacity: 0.78, maxWidth: "52rem" }}>
-              As fotos mais abaixo vêm da <strong>última importação na BD</strong> (<code>pdpImages</code> no snapshot).
-              «Enriquecer PDP» grava em <code>dados_produtos.json</code>; quando o processo PDP terminar no servidor (~1 min.), use{' '}
-              <strong>Actualizar dados</strong> para importar esse JSON ao Postgres e ver todas as fotos aqui.
+              As fotos mais abaixo vêm da <strong>última importação na BD</strong> (<code>pdpImages</code> no snapshot).{" "}
+              <strong>Enriquecer PDP</strong> dispara no servidor o script que escreve galeria PDP no <code>dados_produtos.json</code> consolidado
+              (pode demorar ~1 min.). <strong>Actualizar dados — import JSON→BD</strong> corre o mesmo import que na raiz (<code>npm run db:import:output</code>): lê o JSON e grava no Postgres — é o passo necessário para as novas fotos aparecerem aqui.{" "}
+              <strong>Refrescar da BD</strong> só volta a pedir à API os dados deste produto <em>sem</em> importar nada (útil se já importaste no terminal ou doutro separador, ou para rever o snapshot actual sem repetir o import).
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-start" }}>
               <PdpEnrichButton productId={decodedId} />
@@ -1056,6 +1057,8 @@ export default function ProductWorkspacePage() {
                 type="button"
                 disabled={loading || !decodedId}
                 onClick={() => void reloadWorkspace()}
+                title="Volta a carregar só esta página a partir da API (GET workspace). Não executa import do JSON — não substitui «Actualizar dados»."
+                aria-label="Refrescar da base de dados sem importar o ficheiro JSON"
                 style={{
                   padding: "0.28rem 0.55rem",
                   fontSize: "0.68rem",
@@ -1069,7 +1072,7 @@ export default function ProductWorkspacePage() {
                   alignSelf: "center"
                 }}
               >
-                Recarregar
+                Refrescar da BD
               </button>
               {workspace.link ? (
                 <a

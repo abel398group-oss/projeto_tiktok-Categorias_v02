@@ -25,34 +25,92 @@ Pré-requisitos habituais: `.env` com `DATABASE_URL`, `ANALYTICS_API_KEY`, chave
 
 # Pendências encontradas na validação
 
-*Síntese das observações da sessão exemplo (09/05/2026, dev). Ao fechar uma linha, removê-la daqui ou marcar «(feito)» e apontar PR/commit.*
+*Síntese das observações da sessão exemplo (09/05/2026, dev).*
+
+**Marcar progresso:** em cada linha, trocar `- [ ]` por `- [x]` quando a pendência estiver tratada. Em **Observação:** (por tarefa) regista o que corrigiste, PR/commit ou conclusão.
 
 ## Prioridade Alta
 
-- **[Investigação]** **Growth / Em ascensão** com filtro **ticket alto**: operador reportou lista sem dados — verificar universo de dados vs query/filtro na API e no `frontend` (aba Growth).
-- **[Investigação]** **Product Score** com **ticket alto**: idem — lista vazia; confirmar se critério exclui tudo ou bug.
-- **[Investigação]** **Opportunities** modo **sem vendas** (`low_sales` / sem vendas): não aparecem produtos — confirmar se não há itens no snapshot com essa condição ou se o filtro está demasiado restritivo.
-- **[Bug provável]** **Notas no workspace**: observação — nota vista no contexto de favoritos, após **refresh** a informação desapareceu — rever chaves `localStorage` (ex.: `productId` vs rota `/shortlist`) e persistência entre páginas.
+- [x] **[Investigação]** **Growth / Em ascensão** com filtro **ticket alto**: operador reportou lista sem dados — verificar universo de dados vs query/filtro na API e no `frontend` (aba Growth).
+
+Observação:Acredito que nao aparecia pq nao tinha produtos sufuciente depois que fizemos vario sgraper ai apareceu um produto la
+-
+
+- [x] **[Investigação]** **Product Score** com **ticket alto**: idem — lista vazia; confirmar se critério exclui tudo ou bug.
+
+Observação:Acredito que nao aparecia pq nao tinha produtos sufuciente depois que fizemos vario sgraper ai apareceu um produto la
+-
+
+- [x] **[Investigação]** **Opportunities** modo **sem vendas** (`low_sales` / sem vendas): não aparecem produtos — confirmar se não há itens no snapshot com essa condição ou se o filtro está demasiado restritivo.
+
+Observação:
+-
+
+- [x] **[Bug provável]** **Notas no workspace**: observação — nota vista no contexto de favoritos, após **refresh** a informação desapareceu — rever chaves `localStorage` (ex.: `productId` vs rota `/shortlist`) e persistência entre páginas.
+
+Observação:
+-
 
 ## Prioridade Média
 
-- **[UX]** **Scrape simultâneo:** ao bloquear scrape num cartão, o botão da toolbar **«Scrapear as duas categorias»** não mostra o mesmo feedback visual de bloqueio que os cartões — alinhar em `CategoriesPage.jsx` (ou mensagem global «ocupado»).
-- **[Investigação / UX]** **`/a-mao`** vs **`/shortlist`:** mudanças no hub não actualizam de imediato a vista de favoritos — decidir se é limitação esperada (`localStorage` + sem evento entre rotas), bug, ou falta de copy no `FLUXO.md`; documentar ou corrigir.
+- [x] **[UX]** **Scrape simultâneo:** ao bloquear scrape num cartão, o botão da toolbar **«Scrapear as duas categorias»** não mostra o mesmo feedback visual de bloqueio que os cartões — alinhar em `CategoriesPage.jsx` (ou mensagem global «ocupado»).
+
+Observação:
+- Cadeado SVG + `title` quando bloqueado por outro cartão; `button.tk-btn-soft:disabled` em `index.css` (opacidade/cursor como o botão Scrapear do cartão). Cartões desactivados por outro fluxo também mostram o mesmo cadeado.
+
+- [x] **[Investigação / UX]** **`/a-mao`** vs **`/shortlist`:** mudanças no hub não actualizam de imediato a vista de favoritos — decidir se é limitação esperada (`localStorage` + sem evento entre rotas), bug, ou falta de copy no `FLUXO.md`; documentar ou corrigir.
+
+Observação:
+-
 
 ## UX / Clareza
 
-- **[UX]** **Em Ascensão / Escalar / Mapa:** não há caminho óbvio para abrir **workspace** pelo produto (só nome ou sem link) — ideia do operador: **linha inteira clicável** ou coluna «Abrir».
-- **[UX]** **Enrich PDP** no workspace: fluxo «Enrich → esperar → Actualizar dados (import) → fotos» pouco claro; botão **Recarregar** sem explicação — melhorar texto de ajuda em `ProductWorkspacePage.jsx` / `FLUXO.md`.
-- **[Clareza]** **Creator Signals:** micro-explicação (uma linha) de que é leitura derivada dos mesmos números do painel, sem mudar score.
-- **[UX]** **Listas vazias** (ex. ticket alto): mensagem explícita («Nenhum produto neste filtro…») em vez de tabela vazia sem contexto.
-- **[Clareza]** Itens do checklist **«Detalhes técnicos do cartão»**, **«Alertas só quando aplicável»**, **«Resiliência (produto inexistente / API offline)»** — operador escreveu «não entendi o que fazer»: reescrever passos no próprio `.md` (exemplos de URL inválida; quando esperar badge «URLs misturadas»; como parar só a API).
+- [x] **[UX]** **Em Ascensão / Escalar / Mapa:** não há caminho óbvio para abrir **workspace** pelo produto (só nome ou sem link) — ideia do operador: **linha inteira clicável** ou coluna «Abrir».
+
+Observação:
+- Implementado em `frontend/src/App.jsx`: clique na linha → `/produto/…` (excepto link TikTok / Exportar). **Mapa:** só na tabela **SKU em destaque**; a tabela de **pastas agregadas** não tem um produto por linha — deixada sem navegação de linha (copy no intro).
+
+- [x] **[UX]** **Enrich PDP** no workspace: fluxo «Enrich → esperar → Actualizar dados (import) → fotos» pouco claro; botão **Recarregar** sem explicação — melhorar texto de ajuda em `ProductWorkspacePage.jsx` / `FLUXO.md`.
+
+Observação:
+- Copy na secção **Ligações** (Enrich → JSON; Import → BD; **Refrescar da BD** = só GET, não import). Botão renomeado + `title` / `aria-label`. `FLUXO.md` secção 9 (`/produto/:id`).
+
+- [x] **[Clareza]** **Creator Signals:** micro-explicação (uma linha) de que é leitura derivada dos mesmos números do painel, sem mudar score.
+
+Observação:
+-
+
+- [ ] **[UX]** **Listas vazias** (ex. ticket alto): mensagem explícita («Nenhum produto neste filtro…») em vez de tabela vazia sem contexto.
+
+Observação:apareceu um produto la , acredito que tenha que escrapear mais , mais pra frente eu monitoro isso
+-
+
+- [z] **[Clareza]** Itens do checklist **«Detalhes técnicos do cartão»**, **«Alertas só quando aplicável»**, **«Resiliência (produto inexistente / API offline)»** — operador escreveu «não entendi o que fazer»: reescrever passos no próprio `.md` (exemplos de URL inválida; quando esperar badge «URLs misturadas»; como parar só a API).
+
+Observação:Acredito que nao tenho que fazert nada
+-
 
 ## Dúvidas operacionais
 
-- **[Falso alarme provável]** Cartão **«Roupas femininas e roupas íntimas…»** após scrape: números mudam (**+0 novos**, N **actualizados**) mas **total na base** pode não subir — esperado quando não entram **product_id** novos; reforçar copy no card ou nota no `FLUXO.md`.
-- **[Esperado]** **Import ignorado** (`input_hash` igual — «ScrapeRun existente») — comportamento correcto de idempotência; não é bug.
-- **[Dúvida]** **Consola** só avisos **amarelos** (ex. React Router future flags em dev) — aceitável até opt-in às flags; não bloqueia validação.
-- **[Melhoria futura]** **Filtros de ticket** e **Creator Presets** — operador pediu lista dedicada de cenários de teste; quando priorizar, virar tarefas no **`docs/ROADMAP.md`**.
+- [x] **[Falso alarme provável]** Cartão **«Roupas femininas e roupas íntimas…»** após scrape: números mudam (**+0 novos**, N **actualizados**) mas **total na base** pode não subir — esperado quando não entram **product_id** novos; reforçar copy no card ou nota no `FLUXO.md`.
+
+Observação:
+-
+
+- [x] **[Esperado]** **Import ignorado** (`input_hash` igual — «ScrapeRun existente») — comportamento correcto de idempotência; não é bug.
+
+Observação:
+-
+
+- [x] **[Dúvida]** **Consola** só avisos **amarelos** (ex. React Router future flags em dev) — aceitável até opt-in às flags; não bloqueia validação.
+
+Observação:
+-
+
+- [x] **[Melhoria futura]** **Filtros de ticket** e **Creator Presets** — operador pediu lista dedicada de cenários de teste; quando priorizar, virar tarefas no **`docs/ROADMAP.md`**.
+
+Observação:
+-
 
 ---
 

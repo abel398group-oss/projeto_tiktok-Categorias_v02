@@ -36,11 +36,10 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |--|--|
 | Fonte | `scripts/analytics/lib/opportunities.mjs` |
 
-**Filtros comuns** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente; depois aplica-se o modo de vendas):
+**Filtros por modo** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente; depois aplica-se o modo de vendas):
 
-- `price` não nulo  
-- `rating_average >= 4.5`  
-- `rating_total >= 5`
+- **`classic`**, **`low_sales`**, **`below_median`:** `price` não nulo; `rating_average >= 4.5`; `rating_total >= 5`; depois a regra de vendas do modo.
+- **`no_sales`:** `price` não nulo; `product_id` não vazio; `sales_count` **IS NULL** ou **= 0**; **sem** mínimo de rating nem de total de avaliações.
 
 **Parâmetro `mode`** (`parseOpportunityMode` em código; omitido ⇒ `classic`):
 
@@ -48,10 +47,10 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |------|---------------------------|
 | `classic` | `>= 10` e `<= 300` |
 | `low_sales` | `>= 1` e `<= 99` |
-| `no_sales` | `IS NULL` ou `= 0` |
+| `no_sales` | `IS NULL` ou `= 0` (com filtros mínimos acima, sem rating) |
 | `below_median` | `>= 1` e `< mediana` da categoria **mestre** (ver `computeMedianSalesByMasterCategory` — mediana só com valores não nulos no mesmo último run) |
 
-**Ordem servidor:** média descendente → vendas descendente; até **`limit`** linhas na resposta (**defeito 20**, máx. **10000**; omitido ou inválido na query → defeito CLI).
+**Ordem servidor:** `no_sales` → `captured_at` descendente; outros modos → média descendente → vendas descendente; até **`limit`** linhas na resposta (**defeito 20**, máx. **10000**; omitido ou inválido na query → defeito CLI).
 
 Meta-resposta quando há dados: **`rankingTotal`**, **`listed`**, **`limit`**, **`truncated`**, **`maxRows`**, **`ruleNote`**, **`opportunityMode`**.
 

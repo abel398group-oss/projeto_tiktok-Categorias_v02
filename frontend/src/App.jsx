@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { AnalyticsDashboardCacheProvider, TOP_PRODUCTS_UI_FETCH_LIMIT, OPPORTUNITIES_UI_FETCH_LIMIT, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
 import CategoriesPage from "./CategoriesPage.jsx";
@@ -831,8 +831,8 @@ const OPP_MODE_OPTIONS = /** @type {const} */ ([
     id: "no_sales",
     label: "Sem vendas",
     description:
-      "Produtos ainda sem vendas registradas, úteis para encontrar itens novos ou pouco explorados.",
-    titleTip: "API: mode=no_sales — sem vendas no snapshot segundo a regra do servidor."
+      "Produtos com vendas 0 ou ausentes. Não exige avaliações, porque produtos sem venda normalmente ainda não têm reviews.",
+    titleTip: "API: mode=no_sales — preço definido; vendas 0 ou nulas; sem mínimo de rating/reviews (ver docs/ANALYTICS.md)."
   },
   {
     id: "below_median",
@@ -1256,6 +1256,13 @@ function asArray(x) {
   return Array.isArray(x) ? x : [];
 }
 
+/** Evita navegar para o workspace quando o clique foi em link, botão, export, etc. */
+function isInteractiveTableCellClick(ev) {
+  const el = ev.target;
+  if (!(el instanceof Element)) return false;
+  return Boolean(el.closest("a, button, input, select, textarea, label, [role='button']"));
+}
+
 /** Texto de categoria/subcategoria da API → rótulo PT quando mapeado (sitemap TikTok). */
 function catCellPt(v) {
   if (v == null || String(v).trim() === "") return "—";
@@ -1263,6 +1270,7 @@ function catCellPt(v) {
 }
 
 function TableTop({ data }) {
+  const navigate = useNavigate();
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
@@ -1305,6 +1313,9 @@ function TableTop({ data }) {
           <li>
             <strong>Ações</strong> → Exportar pelo servidor (<code>SPACES_*</code>). <strong>nome</strong> → trabalho{" "}
             <code>/produto/…</code>. <strong>link</strong> → TikTok.
+          </li>
+          <li>
+            Com <code>productId</code>, pode clicar em <strong>qualquer ponto da linha</strong> (excepto link / Exportar) para abrir o workspace.
           </li>
         </ul>
       </div>
@@ -1406,7 +1417,7 @@ function TableTop({ data }) {
       <p style={{ fontSize: "0.72rem", opacity: 0.7, marginBottom: "0.45rem" }}>
         Ordem inicial: <strong>vendas</strong> maior→menor (API). Cabeçalhos e <strong>▾</strong> só reordenam ou filtram no ecrã.{" "}
         Não ordenamos <strong>link</strong>/<strong>Ações</strong>. <strong>nome</strong> → trabalho quando houver{" "}
-        <code>productId</code>. Resize na beira das colunas.
+        <code>productId</code>; também pode clicar na <strong>linha inteira</strong> (excepto link / Exportar). Resize na beira das colunas.
       </p>
       {filtersActiveTopExcel && rawItems.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
@@ -1603,13 +1614,26 @@ function TableTop({ data }) {
             const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
             const pid = row.productId;
             const hasProductId = pid != null && String(pid).trim() !== "";
+            const pidStr = hasProductId ? String(pid).trim() : "";
             return (
-              <tr key={`${row.productId}-${pos}`}>
+              <tr
+                key={`${row.productId}-${pos}`}
+                style={{
+                  borderBottom: "1px solid var(--tk-border)",
+                  cursor: hasProductId ? "pointer" : "default"
+                }}
+                title={hasProductId ? "Clique na linha para abrir o workspace (excepto link TikTok / Exportar)" : undefined}
+                onClick={(e) => {
+                  if (!hasProductId) return;
+                  if (isInteractiveTableCellClick(e)) return;
+                  void navigate(`/produto/${encodeURIComponent(pidStr)}`);
+                }}
+              >
                 <td style={tdPosStyle}>{pos}</td>
                 <td>
                   {hasProductId ? (
                     <Link
-                      to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                      to={`/produto/${encodeURIComponent(pidStr)}`}
                       title={nomeTitle ?? "Abrir página de trabalho deste produto"}
                       style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                     >
@@ -1694,6 +1718,7 @@ function TableTop({ data }) {
 }
 
 function TableOpp({ data }) {
+  const navigate = useNavigate();
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
@@ -1781,7 +1806,8 @@ function TableOpp({ data }) {
         categoria); o significado operacional de cada modo está no texto sob os botões.
       </p>
       <p style={{ margin: "0.45rem 0 0", color: "var(--tk-text-muted)", lineHeight: 1.45 }}>
-        Tabela: clique no cabeçalho ordena · <strong>▾</strong> filtra (só linhas carregadas) · nome abre o produto ·{" "}
+        Tabela: clique no cabeçalho ordena · <strong>▾</strong> filtra (só linhas carregadas) · nome ou{" "}
+        <strong>linha inteira</strong> (excepto link / Exportar) abre o workspace quando há <code>productId</code> ·{" "}
         <strong>Ações</strong> exporta (servidor). Não é tempo real — ver <code>docs/ANALYTICS.md</code>.
       </p>
       </div>
@@ -2109,14 +2135,27 @@ function TableOpp({ data }) {
                 const nomeTitle = nomeStr !== "" ? nomeStr : undefined;
                 const pid = row.productId;
                 const hasProductId = pid != null && String(pid).trim() !== "";
+                const pidStr = hasProductId ? String(pid).trim() : "";
                 return (
-                  <tr key={`${row.productId}-${pos}`}>
+                  <tr
+                    key={`${row.productId}-${pos}`}
+                    style={{
+                      borderBottom: "1px solid var(--tk-border)",
+                      cursor: hasProductId ? "pointer" : "default"
+                    }}
+                    title={hasProductId ? "Clique na linha para abrir o workspace (excepto link TikTok / Exportar)" : undefined}
+                    onClick={(e) => {
+                      if (!hasProductId) return;
+                      if (isInteractiveTableCellClick(e)) return;
+                      void navigate(`/produto/${encodeURIComponent(pidStr)}`);
+                    }}
+                  >
                     <td style={tdPosStyle}>{pos}</td>
                     <td style={{ verticalAlign: "middle" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
                         {hasProductId ? (
                           <Link
-                            to={`/produto/${encodeURIComponent(String(pid).trim())}`}
+                            to={`/produto/${encodeURIComponent(pidStr)}`}
                             title={nomeTitle ?? "Abrir página de trabalho deste produto"}
                             style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                           >
@@ -2334,6 +2373,7 @@ function ScoreFilterPanel({ filterDraft, setFilterDraft, onApply, onClear, rawCo
 }
 
 function TableScore({ data }) {
+  const navigate = useNavigate();
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
   const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
@@ -2483,10 +2523,13 @@ function TableScore({ data }) {
       ) : null}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
         <strong>Ordem inicial:</strong> pontuação do <strong>maior para o menor</strong> (▼ em <strong>score</strong>).
-        Métricas numéricas fazem primeiro clique maior→menor; nome, categoria, sub e loja A→Z; <strong>PDP</strong>, <strong>link</strong> e{" "}
+        Métricas numéricas fazem primeiro clique maior→menor; nome, categoria, sub e loja A→Z;         <strong>PDP</strong>, <strong>link</strong> e{" "}
         <strong>Ações</strong> não se ordenam. O menu <strong>▾</strong> nas colunas filtra com lista de valores (tipo Excel) sobre as linhas
         que ainda passam pelo painel de cima.{" "}
-        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>
+        <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>{" "}
+        <span style={{ opacity: 0.88, display: "block", marginTop: "0.25rem" }}>
+          <strong>Workspace:</strong> clique na linha (excepto nome já-link, PDP, Exportar ou link TikTok) para abrir <code>/produto/…</code>.
+        </span>
       </p>
       {filtersScoreExcelActive && scoreTicketFiltered.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>
@@ -2722,8 +2765,22 @@ function TableScore({ data }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={`${row.productId}-${i}`}>
+          {rows.map((row, i) => {
+            const pidStr = String(row.productId ?? "").trim();
+            return (
+            <tr
+              key={`${row.productId}-${i}`}
+              style={{
+                borderBottom: "1px solid var(--tk-border)",
+                cursor: pidStr ? "pointer" : "default"
+              }}
+              title={pidStr ? "Clique na linha para abrir o workspace (excepto link / Exportar / Enriquecer PDP)" : undefined}
+              onClick={(e) => {
+                if (!pidStr) return;
+                if (isInteractiveTableCellClick(e)) return;
+                void navigate(`/produto/${encodeURIComponent(pidStr)}`);
+              }}
+            >
               <td style={tdPosStyle}>{i + 1}</td>
               <td>{row.score}</td>
               <td>{row.classific}</td>
@@ -2770,7 +2827,8 @@ function TableScore({ data }) {
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       )}
@@ -2783,6 +2841,7 @@ const GROWTH_EMPTY_MSG =
 
 /** @param {{ data: Record<string, unknown> | null }} props */
 function TableGrowth({ data }) {
+  const navigate = useNavigate();
   const allRows = asArray(data?.items);
   const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
@@ -2800,6 +2859,10 @@ function TableGrowth({ data }) {
         <strong>Variação de vendas</strong> entre o <strong>último</strong> e o <strong>penúltimo</strong> import na base — o
         servidor compara pares de snapshots com vendas registadas e ordena por maior <strong>delta</strong> (sem recalcular no
         browser). Vista global ou filtrada por <code>categoryUrl</code> na API.
+      </p>
+      <p style={{ ...introLead, marginTop: "0.35rem", fontSize: "0.82rem", opacity: 0.9 }}>
+        <strong>Workspace:</strong> clique em qualquer ponto da linha (excepto o link «abrir» TikTok) para abrir{" "}
+        <code>/produto/…</code> quando houver <code>productId</code>.
       </p>
       <div style={introWarn}>
         Métricas derivadas dos imports — não são números em tempo real do TikTok.
@@ -2876,8 +2939,21 @@ function TableGrowth({ data }) {
                   : "—";
             const link = row.link != null ? String(row.link) : "";
             const key = row.productId != null ? String(row.productId) : link || `g-${i}`;
+            const pid = row.productId != null ? String(row.productId).trim() : "";
             return (
-              <tr key={key} style={{ borderBottom: "1px solid var(--tk-border)" }}>
+              <tr
+                key={key}
+                style={{
+                  borderBottom: "1px solid var(--tk-border)",
+                  cursor: pid ? "pointer" : "default"
+                }}
+                title={pid ? "Clique na linha para abrir o workspace deste produto" : undefined}
+                onClick={(e) => {
+                  if (isInteractiveTableCellClick(e)) return;
+                  if (!pid) return;
+                  void navigate(`/produto/${encodeURIComponent(pid)}`);
+                }}
+              >
                 <td style={{ padding: "0.35rem 0.45rem", opacity: 0.85 }}>{i + 1}</td>
                 <td style={{ padding: "0.35rem 0.45rem", verticalAlign: "middle" }}>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
@@ -2919,6 +2995,7 @@ function TableGrowth({ data }) {
 }
 
 function TableCategoryMap({ data }) {
+  const navigate = useNavigate();
   const masters = asArray(data?.masterCategories);
   const colWSub = useColumnWidths(CW_MAP_SUB);
   const colWTop = useColumnWidths(CW_MAP_TOP);
@@ -2961,6 +3038,11 @@ function TableCategoryMap({ data }) {
         <li>identificar onde focar</li>
       </ul>
       <div style={introWarn}>⚠️ Categorias derivadas dos dados importados — não são classificações oficiais do TikTok.</div>
+      <p style={{ margin: "0.55rem 0 0", lineHeight: 1.55, fontSize: "0.82rem", opacity: 0.9 }}>
+        A <strong>primeira tabela</strong> (pastas / subcategorias) é <strong>só agregação</strong> — não há um produto por linha, por isso{" "}
+        <strong>não</strong> abre workspace ao clicar. Na segunda tabela (<strong>SKU em destaque</strong>), cada linha é um produto: clique na linha (excepto{" "}
+        <strong>Exportar</strong> ou link TikTok) para abrir <code>/produto/…</code>.
+      </p>
     </IntroCard>
   );
   /** @type {{
@@ -3393,6 +3475,9 @@ function TableCategoryMap({ data }) {
         <span style={{ opacity: 0.85, display: "block", marginTop: "0.25rem" }}>
           Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
         </span>
+        <span style={{ opacity: 0.88, display: "block", marginTop: "0.25rem" }}>
+          <strong>Workspace:</strong> clique na linha (excepto export ou link «abrir») quando existir <code>productId</code>.
+        </span>
       </p>
       {mapTopFiltersExcelActive && flatTops.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.45rem" }}>
@@ -3627,8 +3712,20 @@ function TableCategoryMap({ data }) {
           ) : (
             sortedTops.map((row, i) => {
             const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
+            const pid = String(row.productId ?? "").trim();
             return (
-              <tr key={row.rowKey || i}>
+              <tr
+                key={row.rowKey || i}
+                style={{
+                  cursor: pid ? "pointer" : "default"
+                }}
+                title={pid ? "Clique na linha para abrir o workspace deste produto" : undefined}
+                onClick={(e) => {
+                  if (isInteractiveTableCellClick(e)) return;
+                  if (!pid) return;
+                  void navigate(`/produto/${encodeURIComponent(pid)}`);
+                }}
+              >
                 <td style={{ ...tdStyle, ...tdPosStyle }}>{i + 1}</td>
                 <td style={tdStyle}>{mestre}</td>
                 <td style={tdStyle}>{categoria}</td>
@@ -3671,6 +3768,7 @@ function TableCategoryMap({ data }) {
 }
 
 function TableScalableSections({ data }) {
+  const navigate = useNavigate();
   const rawV = asArray(data?.validatedToScale);
   const rawP = asArray(data?.potentialBets);
   const colW = useColumnWidths(CW_SCALE);
@@ -3808,6 +3906,10 @@ function TableScalableSections({ data }) {
         👉 Este relatório atravessa <strong>todos os produtos já pontuados</strong> no último import (universo do score completo na base), não
         só os ~30 primeiro da vista Product Score.
       </p>
+      <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55, fontSize: "0.82rem", opacity: 0.9 }}>
+        <strong>Workspace:</strong> em cada lista abaixo, clique na linha (excepto <strong>Exportar</strong> ou link «abrir») para abrir{" "}
+        <code>/produto/…</code>.
+      </p>
       <div style={introWarn}>
         ⚠️ Não considera margem, logística nem estratégia de venda próprios — apenas sinais calculados sobre os dados.
       </div>
@@ -3872,37 +3974,52 @@ function TableScalableSections({ data }) {
   }
 
   const renderRows = (list) =>
-    list.map((row, i) => (
-      <tr key={`${row.productId}-${i}`}>
-        <td style={tdPosStyle}>{i + 1}</td>
-        <td>{row.nome}</td>
-        <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-          {catCellPt(row.categoriaPrincipal)}
-        </td>
-        <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-          {catCellPt(row.subcategoria)}
-        </td>
-        <td>{row.score}</td>
-        <td>{row.vendas ?? "—"}</td>
-        <td>{row.rating ?? "—"}</td>
-        <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
-        <SpacesExportActionCell
-          productId={row.productId}
-          nome={row.nome}
-          exportingProductId={exportingProductId}
-          exportToSpace={exportToSpace}
-        />
-        <td>
-          {row.link ? (
-            <a href={row.link} target="_blank" rel="noopener noreferrer">
-              abrir
-            </a>
-          ) : (
-            "—"
-          )}
-        </td>
-      </tr>
-    ));
+    list.map((row, i) => {
+      const pid = String(row.productId ?? "").trim();
+      return (
+        <tr
+          key={`${row.productId}-${i}`}
+          style={{
+            borderBottom: "1px solid var(--tk-border)",
+            cursor: pid ? "pointer" : "default"
+          }}
+          title={pid ? "Clique na linha para abrir o workspace deste produto" : undefined}
+          onClick={(e) => {
+            if (isInteractiveTableCellClick(e)) return;
+            if (!pid) return;
+            void navigate(`/produto/${encodeURIComponent(pid)}`);
+          }}
+        >
+          <td style={tdPosStyle}>{i + 1}</td>
+          <td>{row.nome}</td>
+          <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+            {catCellPt(row.categoriaPrincipal)}
+          </td>
+          <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+            {catCellPt(row.subcategoria)}
+          </td>
+          <td>{row.score}</td>
+          <td>{row.vendas ?? "—"}</td>
+          <td>{row.rating ?? "—"}</td>
+          <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
+          <SpacesExportActionCell
+            productId={row.productId}
+            nome={row.nome}
+            exportingProductId={exportingProductId}
+            exportToSpace={exportToSpace}
+          />
+          <td>
+            {row.link ? (
+              <a href={row.link} target="_blank" rel="noopener noreferrer">
+                abrir
+              </a>
+            ) : (
+              "—"
+            )}
+          </td>
+        </tr>
+      );
+    });
 
   return (
     <>

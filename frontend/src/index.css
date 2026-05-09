@@ -88,6 +88,16 @@ button.tk-btn-soft:focus-visible {
   outline: 2px solid var(--tk-accent-ring);
   outline-offset: 2px;
 }
+button.tk-btn-soft:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+button.tk-btn-soft:disabled:hover {
+  border-color: var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+}
 
 /* Navegação principal — estados tipo painel TMS (ativo / hover claros) */
 nav.tk-app-nav {

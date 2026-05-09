@@ -113,6 +113,27 @@ function scrapeRunSummary(body) {
   return ` · OUTPUT_DIR=${od}${cons ? " · depois consolidate → output/dados_*.json" : ""}`;
 }
 
+/** Ícone cadeado (toolbar) quando scrape/import corre noutro sítio — alinhado ao bloqueio dos cartões. */
+function ScrapeLockGlyph() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ flexShrink: 0, opacity: 0.88 }}
+    >
+      <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+      <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
+    </svg>
+  );
+}
+
 /** Alinhado à validação do POST `/scrape/run` na API (hostname exacto). */
 function isShopTikTokCategoryUrl(s) {
   try {
@@ -146,6 +167,8 @@ export default function CategoriesPage() {
   const [bulkBothBusy, setBulkBothBusy] = useState(false);
 
   const workflowBusy = scrapingKey !== null || importingKey !== null || bulkBothBusy;
+  /** Toolbar «duas categorias» bloqueada por scrape/import num cartão (não pelo próprio fluxo bulk). */
+  const bulkLockedByCard = (scrapingKey !== null || importingKey !== null) && !bulkBothBusy;
 
   useEffect(() => {
     if (!doneKey) return undefined;
@@ -328,9 +351,19 @@ export default function CategoriesPage() {
                 type="button"
                 className="tk-btn-soft"
                 disabled={workflowBusy}
-                title="Equiv. a `npm run coleta` sem passos extra: duas URLs fixas em scripts/scrape-both.mjs, depois consolidação e import."
+                title={
+                  bulkLockedByCard
+                    ? "Aguarde: já há um scrape ou import a correr num cartão. Este botão fica bloqueado como os outros cartões."
+                    : "Equiv. a `npm run coleta` sem passos extra: duas URLs fixas em scripts/scrape-both.mjs, depois consolidação e import."
+                }
                 onClick={() => void runBothCategories()}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}
               >
+                {bulkLockedByCard ? <ScrapeLockGlyph /> : null}
                 {bulkBothBusy ? "A correr duas…" : "Scrapear as duas categorias"}
               </button>
             ) : null}
@@ -559,13 +592,24 @@ export default function CategoriesPage() {
                       type="button"
                       className="tk-category-card__scrape"
                       disabled={workflowBusy}
-                      title="Scrape (JSON) + import para Postgres; pode demorar vários minutos"
+                      title={
+                        workflowBusy && scrapingKey !== key && importingKey !== key
+                          ? "Outro scrape, import ou fluxo «duas categorias» está em curso — aguarde."
+                          : "Scrape (JSON) + import para Postgres; pode demorar vários minutos"
+                      }
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         void runScrapeForUrl(scrapeTargetUrl, key);
                       }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.3rem"
+                      }}
                     >
+                      {workflowBusy && scrapingKey !== key && importingKey !== key ? <ScrapeLockGlyph /> : null}
                       {scrapingKey === key
                         ? "A scrapear…"
                         : importingKey === key
