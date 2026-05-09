@@ -4,6 +4,16 @@ Uso: abrir este ficheiro durante uma sessão de testes; ir tarefa a tarefa; marc
 
 Pré-requisitos habituais: `.env` com `DATABASE_URL`, `ANALYTICS_API_KEY`, chave no `frontend/.env` alinhada à API. Ver `FLUXO.md` para portas e dois terminais se não usar `dev:all`.
 
+## Registo desta sessão
+
+Preencher no **início** de cada corrida de validação (pode duplicar este bloco para uma nova sessão).
+
+| Campo | Valor |
+|-------|-------|
+| Data do teste: |09/05/2026
+| Ambiente: |dev
+
+
 ---
 
 ## [Ambiente] Subir stack com `npm run dev:all`
@@ -18,7 +28,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -37,7 +47,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
