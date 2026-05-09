@@ -48,6 +48,71 @@ function formatDateTime(iso) {
   }
 }
 
+/** Relativo curto para operação (ex. "há 12 min"). */
+function formatRelativeAgoPt(iso) {
+  if (iso == null || iso === "") return null;
+  try {
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t)) return null;
+    const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (sec < 45) return "agora há pouco";
+    if (sec < 3600) return `há ${Math.floor(sec / 60)} min`;
+    if (sec < 86400) return `há ${Math.floor(sec / 3600)} h`;
+    return `há ${Math.floor(sec / 86400)} d`;
+  } catch {
+    return null;
+  }
+}
+
+function formatIntLocale(n) {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  return Number(n).toLocaleString("pt-BR");
+}
+
+/**
+ * Só alertas que mudam a decisão do operador (sem ruído quando está tudo normal).
+ * @param {Record<string, unknown>} row
+ */
+function buildCategoryAlertBadges(row) {
+  const health = String(row.operationalHealth ?? "ok");
+  /** @type {Array<{ text: string; tone: string }>} */
+  const out = [];
+  if (health === "partial_run") {
+    out.push({ text: "Coleta incompleta", tone: "warn" });
+  }
+  if (health === "stale_collection") {
+    out.push({ text: "Desactualizado", tone: "stale" });
+  }
+  if (health === "mixed_urls") {
+    out.push({ text: "URLs misturadas", tone: "info" });
+  }
+  return out;
+}
+
+/** Linhas técnicas vindas de `POST /analytics/import-output` (`detail`). */
+function linesFromImportDetail(detail) {
+  if (detail == null || typeof detail !== "object") return [];
+  const d = /** @type {Record<string, unknown>} */ (detail);
+  const lines = [];
+  const existing = d.existingScrapeRunId != null ? String(d.existingScrapeRunId).trim() : "";
+  const hash = d.inputHash != null ? String(d.inputHash).trim() : "";
+  const run = d.scrapeRunId != null ? String(d.scrapeRunId).trim() : "";
+  if (existing) lines.push(`ScrapeRun já na BD (mesmo conteúdo): ${existing}`);
+  if (hash) lines.push(`input_hash: ${hash}`);
+  if (run) lines.push(`Novo ScrapeRun: ${run}`);
+  return lines;
+}
+
+/** Resumo curto do `POST /scrape/run` para ver pasta e consolidação. */
+function scrapeRunSummary(body) {
+  if (body == null || typeof body !== "object") return "";
+  const b = /** @type {Record<string, unknown>} */ (body);
+  const od = typeof b.outputDir === "string" ? b.outputDir.trim() : "";
+  if (!od) return "";
+  const cons = Boolean(b.consolidated);
+  return ` · OUTPUT_DIR=${od}${cons ? " · depois consolidate → output/dados_*.json" : ""}`;
+}
+
 /** Alinhado à validação do POST `/scrape/run` na API (hostname exacto). */
 function isShopTikTokCategoryUrl(s) {
   try {
@@ -71,10 +136,16 @@ export default function CategoriesPage() {
   const [scrapingKey, setScrapingKey] = useState(/** @type {string | null} */ (null));
   /** Mesmo cartão enquanto corre import JSON → Postgres após scrape OK. */
   const [importingKey, setImportingKey] = useState(/** @type {string | null} */ (null));
-  /** Mensagem global (sucesso / erro). */
-  const [scrapeFlash, setScrapeFlash] = useState(/** @type {{ kind: "ok" | "err"; text: string } | null} */ (null));
+  /** Mensagem global (sucesso / erro / aviso, ex. import ignorado por input_hash). */
+  const [scrapeFlash, setScrapeFlash] = useState(
+    /** @type {{ kind: "ok" | "err" | "info"; text: string; detailLines?: string[] } | null} */ (null)
+  );
   /** Cartão que acabou o fluxo completo (pulse curto no botão). */
   const [doneKey, setDoneKey] = useState(/** @type {string | null} */ (null));
+  /** Fluxo `scrape-both` + consolidate + import (duas categorias fixas do repo). */
+  const [bulkBothBusy, setBulkBothBusy] = useState(false);
+
+  const workflowBusy = scrapingKey !== null || importingKey !== null || bulkBothBusy;
 
   useEffect(() => {
     if (!doneKey) return undefined;
@@ -112,7 +183,7 @@ export default function CategoriesPage() {
           typeof body?.message === "string" && body.message.trim() !== "" ? body.message.trim() : "Coleta concluída.";
         setScrapeFlash({
           kind: "ok",
-          text: `${hint} A sincronizar JSON → Postgres (import)…`
+          text: `${hint}${scrapeRunSummary(body)} A sincronizar JSON → Postgres (import)…`
         });
       } catch (err) {
         setScrapeFlash({ kind: "err", text: err instanceof Error ? err.message : String(err) });
@@ -123,13 +194,29 @@ export default function CategoriesPage() {
 
       setImportingKey(rowKey);
       try {
-        await apiPost("/analytics/import-output", {});
+        const imp = await apiPost("/analytics/import-output", {});
         await reloadCategories();
-        setScrapeFlash({
-          kind: "ok",
-          text: "Coleta gravada, base actualizada e lista de categorias recarregada."
-        });
-        setDoneKey(rowKey);
+        const impObj = /** @type {Record<string, unknown>} */ (imp);
+        const skipped = Boolean(impObj?.skipped);
+        const impMsg =
+          typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
+        const detailLines = linesFromImportDetail(impObj?.detail);
+        if (skipped) {
+          setScrapeFlash({
+            kind: "info",
+            text:
+              impMsg ||
+              "Import ignorado: o JSON é idêntico ao último import (input_hash). A coleta correu, mas a base e os cartões não mudam até haver dados novos.",
+            detailLines: detailLines.length ? detailLines : undefined
+          });
+        } else {
+          setScrapeFlash({
+            kind: "ok",
+            text: "Coleta gravada, base actualizada e lista de categorias recarregada.",
+            detailLines: detailLines.length ? detailLines : undefined
+          });
+          setDoneKey(rowKey);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setScrapeFlash({
@@ -142,6 +229,54 @@ export default function CategoriesPage() {
     },
     [reloadCategories]
   );
+
+  /** Mesmas URLs que `npm run coleta` (grelha): `scripts/scrape-both.mjs` + consolidação + import. */
+  const runBothCategories = useCallback(async () => {
+    setBulkBothBusy(true);
+    setScrapeFlash(null);
+    setDoneKey(null);
+    try {
+      setScrapeFlash({
+        kind: "ok",
+        text: "A correr as duas coletas (script scrape-both) e a consolidar output/dados_*.json…"
+      });
+      const bothBody = await apiPost("/scrape/run-both", {});
+      setScrapeFlash({
+        kind: "ok",
+        text: `Colectas e consolidação concluídas.${scrapeRunSummary(bothBody)} A sincronizar JSON → Postgres (import)…`
+      });
+      const imp = await apiPost("/analytics/import-output", {});
+      await reloadCategories();
+      const impObj = /** @type {Record<string, unknown>} */ (imp);
+      const skipped = Boolean(impObj?.skipped);
+      const impMsg = typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
+      const detailLines = linesFromImportDetail(impObj?.detail);
+      if (skipped) {
+        setScrapeFlash({
+          kind: "info",
+          text:
+            impMsg ||
+            "Import ignorado (mesmo input_hash): as duas coletas e a consolidação terminaram, mas a base não mudou — os números/datas dos cartões ficam iguais.",
+          detailLines: detailLines.length ? detailLines : undefined
+        });
+      } else {
+        setScrapeFlash({
+          kind: "ok",
+          text: "Duas categorias colectadas, consolidadas, base actualizada e lista recarregada.",
+          detailLines: detailLines.length ? detailLines : undefined
+        });
+        setDoneKey("__both__");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setScrapeFlash({
+        kind: "err",
+        text: `Fluxo duas categorias falhou: ${msg}`
+      });
+    } finally {
+      setBulkBothBusy(false);
+    }
+  }, [reloadCategories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,8 +313,8 @@ export default function CategoriesPage() {
           <p className="tk-dash-header__eyebrow">Painel inicial</p>
           <h1>Categorias</h1>
           <p>
-            Pasta por URL normalizada na base. Escolha uma categoria para abrir os mesmos relatórios de{" "}
-            <strong>Analytics</strong>, já filtrados por <code>categoryUrl</code>.
+            Resumo operacional por categoria na base. Abra <strong>Analytics</strong> por cartão para relatórios
+            filtrados por <code>categoryUrl</code>.
           </p>
         </header>
 
@@ -187,24 +322,61 @@ export default function CategoriesPage() {
           <span style={{ fontSize: "0.82rem", color: "var(--tk-text-muted)" }}>
             <strong>{status === "ok" ? sortedCategories.length : "—"}</strong> categorias nesta vista
           </span>
-          <Link to="/analytics" style={{ color: "var(--tk-accent)" }}>
-            Analytics global →
-          </Link>
+          <span style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem", alignItems: "center" }}>
+            {status === "ok" ? (
+              <button
+                type="button"
+                className="tk-btn-soft"
+                disabled={workflowBusy}
+                title="Equiv. a `npm run coleta` sem passos extra: duas URLs fixas em scripts/scrape-both.mjs, depois consolidação e import."
+                onClick={() => void runBothCategories()}
+              >
+                {bulkBothBusy ? "A correr duas…" : "Scrapear as duas categorias"}
+              </button>
+            ) : null}
+            <Link to="/analytics" style={{ color: "var(--tk-accent)" }}>
+              Analytics global →
+            </Link>
+          </span>
         </div>
 
         {scrapeFlash ? (
-          <p
-            role={scrapeFlash.kind === "err" ? "alert" : "status"}
-            style={{
-              marginTop: "0.65rem",
-              fontSize: "0.86rem",
-              color: scrapeFlash.kind === "err" ? "var(--tk-danger)" : "var(--tk-accent)",
-              maxWidth: "52rem",
-              lineHeight: 1.45
-            }}
-          >
-            {scrapeFlash.text}
-          </p>
+          <div style={{ marginTop: "0.65rem", maxWidth: "52rem" }}>
+            <p
+              role={scrapeFlash.kind === "err" ? "alert" : "status"}
+              style={{
+                margin: 0,
+                fontSize: "0.86rem",
+                color:
+                  scrapeFlash.kind === "err"
+                    ? "var(--tk-danger)"
+                    : scrapeFlash.kind === "info"
+                      ? "#fbbf24"
+                      : "var(--tk-accent)",
+                lineHeight: 1.45
+              }}
+            >
+              {scrapeFlash.text}
+            </p>
+            {scrapeFlash.detailLines && scrapeFlash.detailLines.length > 0 ? (
+              <pre
+                style={{
+                  margin: "0.45rem 0 0",
+                  padding: "0.5rem 0.65rem",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.4,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  color: "var(--tk-text-muted)",
+                  background: "rgba(0,0,0,0.18)",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.06)"
+                }}
+              >
+                {scrapeFlash.detailLines.join("\n")}
+              </pre>
+            ) : null}
+          </div>
         ) : null}
 
         {status === "loading" && <p style={{ color: "var(--tk-text-muted)" }}>Carregando categorias…</p>}
@@ -246,6 +418,12 @@ export default function CategoriesPage() {
 
               const scrapeTargetUrl = String(row.categoryUrl ?? row.categoryKey ?? key).trim();
 
+              const jt = row.lastRunJsonTotal != null ? Number(row.lastRunJsonTotal) : NaN;
+              const imp = row.lastImportProductCount != null ? Number(row.lastImportProductCount) : NaN;
+              const outsideApprox =
+                Number.isFinite(jt) && Number.isFinite(imp) && jt > imp ? Math.floor(jt - imp) : null;
+              const alertBadges = buildCategoryAlertBadges(row);
+
               return (
                 <div key={key} className="tk-category-card">
                   <Link
@@ -264,51 +442,123 @@ export default function CategoriesPage() {
                       ) : null}
                       <div className="tk-category-card__kpi">
                         <span className="tk-category-card__kpi-val">{n}</span>
-                        <span className="tk-category-card__kpi-label">produtos únicos na base</span>
+                        <span className="tk-category-card__kpi-label">produtos na base</span>
                       </div>
-                      <dl className="tk-category-card__meta">
-                        <div>
-                          <dt title="Snapshots da última importação associados a esta categoria">
-                            Última importação
-                          </dt>
-                          <dd>
-                            {row.lastImportProductCount != null
-                              ? `${Number(row.lastImportProductCount).toLocaleString("pt-BR")} produtos nesta corrida`
-                              : "—"}
-                          </dd>
+
+                      <div className="tk-category-card__summary" aria-label="Resumo da última coleta">
+                        <p className="tk-category-card__summary-title">Última coleta</p>
+                        <ul className="tk-category-card__summary-list">
+                          {row.lastRunJsonTotal != null ? (
+                            <li>
+                              <strong>{formatIntLocale(row.lastRunJsonTotal)}</strong> colectados no total
+                            </li>
+                          ) : null}
+                          <li>
+                            <strong>{formatIntLocale(row.lastImportProductCount)}</strong> importados nesta
+                            categoria
+                            <span className="tk-category-card__summary-sep"> · </span>
+                            <strong>{formatIntLocale(row.lastImportSellerCount)}</strong> lojas
+                          </li>
+                          {row.lastRunNewProductsApprox != null && row.lastRunUpdatedProductsApprox != null ? (
+                            <li
+                              title="Estimativa: data da coleta no JSON alinhada à primeira vez que o produto apareceu na base."
+                            >
+                              <strong className="tk-category-card__accent-pos">
+                                +{formatIntLocale(row.lastRunNewProductsApprox)}
+                              </strong>{" "}
+                              novos
+                              <span className="tk-category-card__summary-sep"> · </span>
+                              <strong>{formatIntLocale(row.lastRunUpdatedProductsApprox)}</strong> actualizados
+                            </li>
+                          ) : null}
+                          {outsideApprox != null && outsideApprox > 0 ? (
+                            <li>
+                              <strong>{formatIntLocale(outsideApprox)}</strong> fora desta categoria / dedupe
+                            </li>
+                          ) : null}
+                          <li>
+                            Última coleta: {formatDateTime(row.lastCollectedAt)}
+                            {formatRelativeAgoPt(row.lastCollectedAt) ? (
+                              <span className="tk-category-card__summary-note">
+                                {" "}
+                                ({formatRelativeAgoPt(row.lastCollectedAt)})
+                              </span>
+                            ) : null}
+                          </li>
+                        </ul>
+                      </div>
+
+                      {alertBadges.length > 0 ? (
+                        <div className="tk-category-card__badges" aria-label="Alertas">
+                          {alertBadges.map((b, i) => (
+                            <span
+                              key={`${b.text}-${i}`}
+                              className={`tk-category-card__badge tk-category-card__badge--${b.tone}`}
+                            >
+                              {b.text}
+                            </span>
+                          ))}
                         </div>
-                        <div>
-                          <dt title="Lojas distintas (produtos ligados à loja na BD) nesta mesma corrida/importação que acima">
-                            Lojas nesta corrida
-                          </dt>
-                          <dd>
-                            {row.lastImportSellerCount != null
-                              ? `${Number(row.lastImportSellerCount).toLocaleString(
-                                  "pt-BR"
-                                )} lojas distintas`
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Última coleta</dt>
-                          <dd>{formatDateTime(row.lastCollectedAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>Actualização</dt>
-                          <dd>{formatDateTime(row.lastImportedAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>Criação do run na BD</dt>
-                          <dd>{formatDateTime(row.lastScrapeRunCreatedAt)}</dd>
-                        </div>
-                      </dl>
+                      ) : null}
+
+                      <details className="tk-category-card__details">
+                        <summary>Detalhes técnicos</summary>
+                        <dl className="tk-category-card__details-dl">
+                          <div>
+                            <dt>Hash do import</dt>
+                            <dd>
+                              {row.lastRunInputHashPreview ? (
+                                <code className="tk-category-card__code">{String(row.lastRunInputHashPreview)}</code>
+                              ) : (
+                                "—"
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>ID do import (BD)</dt>
+                            <dd>
+                              {row.lastScrapeRunId ? (
+                                <code className="tk-category-card__code">{String(row.lastScrapeRunId)}</code>
+                              ) : (
+                                "—"
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Estado no JSON</dt>
+                            <dd>
+                              <code className="tk-category-card__code">{row.lastRunStatus ?? "—"}</code>
+                            </dd>
+                          </div>
+                          {row.lastRunFilterNote ? (
+                            <div>
+                              <dt>Nota / filtro</dt>
+                              <dd className="tk-category-card__details-note">{String(row.lastRunFilterNote)}</dd>
+                            </div>
+                          ) : null}
+                          {row.jsonRunCoveragePercent != null ? (
+                            <div>
+                              <dt>Parte no total do ficheiro</dt>
+                              <dd>~{Number(row.jsonRunCoveragePercent)}% (import multi-categoria)</dd>
+                            </div>
+                          ) : null}
+                          <div>
+                            <dt>Actualização na base</dt>
+                            <dd>{formatDateTime(row.lastImportedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Registo do import</dt>
+                            <dd>{formatDateTime(row.lastScrapeRunCreatedAt)}</dd>
+                          </div>
+                        </dl>
+                      </details>
                     </div>
                   </Link>
                   <footer className="tk-category-card__footer">
                     <button
                       type="button"
                       className="tk-category-card__scrape"
-                      disabled={scrapingKey !== null || importingKey !== null}
+                      disabled={workflowBusy}
                       title="Scrape (JSON) + import para Postgres; pode demorar vários minutos"
                       onClick={(e) => {
                         e.preventDefault();

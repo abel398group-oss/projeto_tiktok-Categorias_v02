@@ -60,24 +60,54 @@ function pickRepresentativeStored(b) {
 }
 
 /**
+ * Escolhe o run “mais recente” para métricas do cartão (`lastScrapeRunId`, contagens nesta corrida).
+ * Em empate de `collected_at` (ex.: mesma resolução na BD ou JSON), usar `created_at` do run —
+ * nunca preferir o id lexicograficamente menor (regressão: cartão ficava preso a um import antigo).
  * @param {Map<string, { collected: number, created: number }>} runs
  */
 function pickLatestRunMeta(runs) {
   let bestId = /** @type {string | null} */ (null);
   let bestT = -1;
-  let bestCreated = 0;
+  let bestCreated = -1;
   for (const [id, meta] of runs) {
+    const coll = meta.collected;
+    const crea = meta.created;
     if (
       bestId === null ||
-      meta.collected > bestT ||
-      (meta.collected === bestT && id < /** @type {string} */ (bestId))
+      coll > bestT ||
+      (coll === bestT && crea > bestCreated) ||
+      (coll === bestT && crea === bestCreated && id.localeCompare(/** @type {string} */ (bestId)) > 0)
     ) {
       bestId = id;
-      bestT = meta.collected;
-      bestCreated = meta.created;
+      bestT = coll;
+      bestCreated = crea;
     }
   }
   return { bestId, bestCollectedMs: bestT, bestCreatedMs: bestCreated };
+}
+
+/** Janela (ms) entre `Product.first_seen_at` e `ScrapeRun.collected_at` para contar “novo nesta coleta” (alinhado ao importador). */
+const NEW_PRODUCT_TIME_ALIGN_MS = 12_000;
+
+/** Horas sem coleta para `operationalHealth = stale_collection`. */
+const STALE_COLLECTION_HOURS = 72;
+
+/**
+ * @param {{
+ *   lastRunStatus: string | null,
+ *   lastCollectedAt: string | null,
+ *   storedUrlVariantCount: number
+ * }} p
+ */
+function computeOperationalHealth(p) {
+  const st = p.lastRunStatus != null ? String(p.lastRunStatus).trim().toLowerCase() : "";
+  if (st !== "" && st !== "ok") return "partial_run";
+  const coll = p.lastCollectedAt ? new Date(p.lastCollectedAt).getTime() : 0;
+  if (coll > 0 && Date.now() - coll > STALE_COLLECTION_HOURS * 3600 * 1000) {
+    return "stale_collection";
+  }
+  if (p.storedUrlVariantCount > 1) return "mixed_urls";
+  return "ok";
 }
 
 /**
@@ -91,7 +121,17 @@ function pickLatestRunMeta(runs) {
  *   lastScrapeRunCreatedAt: string | null,
  *   lastScrapeRunId: string | null,
  *   lastImportProductCount: number | null,
- *   lastImportSellerCount: number | null
+ *   lastImportSellerCount: number | null,
+ *   storedUrlVariantCount: number,
+ *   operationalHealth: string,
+ *   lastRunStatus: string | null,
+ *   lastRunJsonTotal: number | null,
+ *   lastRunScopeCategoryUrl: string | null,
+ *   lastRunFilterNote: string | null,
+ *   lastRunInputHashPreview: string | null,
+ *   lastRunNewProductsApprox: number | null,
+ *   lastRunUpdatedProductsApprox: number | null,
+ *   jsonRunCoveragePercent: number | null
  * }> }>}
  */
 export async function listImportedCategories(prisma) {
@@ -187,6 +227,7 @@ SELECT * FROM per_product
       lastImportedAt,
       lastScrapeRunCreatedAt,
       lastScrapeRunId,
+      storedUrlVariantCount: b.urlSamples.size,
       _productIds: [...b.productIds]
     };
   });
@@ -198,6 +239,16 @@ SELECT * FROM per_product
   });
 
   await enrichCategoriesWithImportAndSellers(prisma, categories);
+
+  for (const c of categories) {
+    if (c.operationalHealth == null) {
+      c.operationalHealth = computeOperationalHealth({
+        lastRunStatus: /** @type {string | null} */ (c.lastRunStatus ?? null),
+        lastCollectedAt: /** @type {string | null} */ (c.lastCollectedAt ?? null),
+        storedUrlVariantCount: Number(c.storedUrlVariantCount ?? 0) || 0
+      });
+    }
+  }
 
   const sanitized = categories.map(({ _productIds: _discard, ...rest }) => rest);
   return { categories: sanitized };
@@ -222,11 +273,27 @@ async function enrichCategoriesWithImportAndSellers(prisma, categories) {
     )
   ];
 
+  for (const c of categories) {
+    c.lastRunStatus = null;
+    c.lastRunJsonTotal = null;
+    c.lastRunScopeCategoryUrl = null;
+    c.lastRunFilterNote = null;
+    c.lastRunInputHashPreview = null;
+    c.lastRunNewProductsApprox = null;
+    c.lastRunUpdatedProductsApprox = null;
+    c.jsonRunCoveragePercent = null;
+  }
+
   if (allPid.length === 0) {
     for (const c of categories) {
       c.lastImportProductCount = null;
       c.lastImportSellerCount = null;
       delete c._productIds;
+      c.operationalHealth = computeOperationalHealth({
+        lastRunStatus: null,
+        lastCollectedAt: /** @type {string | null} */ (c.lastCollectedAt ?? null),
+        storedUrlVariantCount: Number(c.storedUrlVariantCount ?? 0) || 0
+      });
     }
     return;
   }
@@ -241,10 +308,38 @@ async function enrichCategoriesWithImportAndSellers(prisma, categories) {
           select: {
             scrapeRunId: true,
             productRefId: true,
-            product: { select: { sellerRefId: true } }
+            product: { select: { sellerRefId: true, firstSeenAt: true } }
           }
         })
       : [];
+
+  /** @type {Map<string, { status: string, totalProducts: number | null, collectedAt: Date, categoryUrl: string | null, filterDescription: string | null, inputHash: string | null }>} */
+  const runMeta = new Map();
+  if (runIds.length > 0) {
+    const runs = await prisma.scrapeRun.findMany({
+      where: { id: { in: runIds } },
+      select: {
+        id: true,
+        status: true,
+        totalProducts: true,
+        collectedAt: true,
+        categoryUrl: true,
+        filterDescription: true,
+        inputHash: true
+      }
+    });
+    for (const r of runs) {
+      const h = r.inputHash != null ? String(r.inputHash).trim() : "";
+      runMeta.set(r.id, {
+        status: String(r.status ?? ""),
+        totalProducts: r.totalProducts != null ? Number(r.totalProducts) : null,
+        collectedAt: r.collectedAt,
+        categoryUrl: r.categoryUrl != null ? String(r.categoryUrl) : null,
+        filterDescription: r.filterDescription != null ? String(r.filterDescription).trim() : null,
+        inputHash: h !== "" ? h : null
+      });
+    }
+  }
 
   for (const c of categories) {
     const pidSet = new Set(/** @type {string[]} */ (c._productIds));
@@ -254,10 +349,27 @@ async function enrichCategoriesWithImportAndSellers(prisma, categories) {
     let lastImportProductCount = null;
     /** @type {number | null} */
     let lastImportSellerCount = null;
+    const meta = rid ? runMeta.get(rid) : undefined;
+    if (meta) {
+      c.lastRunStatus = meta.status;
+      c.lastRunJsonTotal = meta.totalProducts;
+      c.lastRunScopeCategoryUrl = meta.categoryUrl;
+      c.lastRunFilterNote =
+        meta.filterDescription && meta.filterDescription.length > 120
+          ? `${meta.filterDescription.slice(0, 117)}…`
+          : meta.filterDescription;
+      if (meta.inputHash) {
+        c.lastRunInputHashPreview =
+          meta.inputHash.length > 14 ? `${meta.inputHash.slice(0, 12)}…` : meta.inputHash;
+      }
+    }
+
     if (rid) {
       let snapN = 0;
       /** @type {Set<string>} */
       const sellerRefs = new Set();
+      const collectedMs = meta ? new Date(meta.collectedAt).getTime() : 0;
+      let newApprox = 0;
       for (const row of snapshotRows) {
         if (row.scrapeRunId !== rid || !pidSet.has(row.productRefId)) continue;
         snapN += 1;
@@ -265,9 +377,25 @@ async function enrichCategoriesWithImportAndSellers(prisma, categories) {
         if (ref != null && String(ref).trim() !== "") {
           sellerRefs.add(String(ref));
         }
+        const fs = row.product?.firstSeenAt;
+        if (meta && fs != null && collectedMs > 0) {
+          const fsMs = new Date(fs).getTime();
+          if (Math.abs(fsMs - collectedMs) <= NEW_PRODUCT_TIME_ALIGN_MS) {
+            newApprox += 1;
+          }
+        }
       }
       lastImportProductCount = snapN;
       lastImportSellerCount = sellerRefs.size;
+      if (meta && snapN > 0) {
+        c.lastRunNewProductsApprox = newApprox;
+        c.lastRunUpdatedProductsApprox = Math.max(0, snapN - newApprox);
+      }
+      const jt = c.lastRunJsonTotal != null && Number.isFinite(Number(c.lastRunJsonTotal)) ? Number(c.lastRunJsonTotal) : null;
+      const scope = c.lastRunScopeCategoryUrl != null ? String(c.lastRunScopeCategoryUrl).toLowerCase() : "";
+      if (jt != null && jt > 0 && snapN > 0 && (scope === "multiple" || scope.includes("multi"))) {
+        c.jsonRunCoveragePercent = Math.min(100, Math.round((100 * snapN) / jt));
+      }
     }
 
     c.lastImportProductCount = lastImportProductCount;

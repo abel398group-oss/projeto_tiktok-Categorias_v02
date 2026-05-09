@@ -46,12 +46,20 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/growth` | Equiv. `npm run analytics:growth` |
 | GET | `/analytics/scalable-products` | Equiv. `npm run analytics:scalable` |
 | GET | `/analytics/category-map` | Equiv. `npm run analytics:category-map` |
+| GET | `/analytics/categories` | Grelha do painel `/`: categorias derivadas da BD (`scripts/analytics/lib/categories-catalog.mjs`). Inclui métricas operacionais por cartão: `operationalHealth`, `storedUrlVariantCount`, metadados do último `ScrapeRun` (`lastRunStatus`, `lastRunJsonTotal`, `lastRunInputHashPreview`, …), heurística `lastRunNewProductsApprox` / `lastRunUpdatedProductsApprox`, `jsonRunCoveragePercent` quando o run é multi-categoria. |
 | GET | `/analytics/product-workspace/:productId` | Detalhe do produto: **preferência** por snapshot no **último** `ScrapeRun` global (alinhado a `product-score`); se não existir aí, **fallback** ao snapshot mais recente desse produto na BD (mesma ideia que o export Spaces). Ver secção GET abaixo. |
 | POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
 | POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (snapshot mais recente do produto no core de export). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
 | POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser/playwright uso do projeto. |
-| POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** no mesmo host que a API, com `CATEGORY_URL` definido; resposta **após** o processo terminar. **409** se já houver um scrape a correr neste processo. Ver `scripts/analytics/scrape-run-route.mjs`. |
-| POST | `/analytics/import-output` | Corpo `{}` — corre **`npm run db:import:output`** (JSON em `output/` → Postgres) à espera do fim. O painel **Scrapear** em `/` encadeia isto após `/scrape/run` para actualizar a lista. Ver `scripts/analytics/import-output-route.mjs`. |
+| POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** com `CATEGORY_URL` e **`OUTPUT_DIR`** em `output/categorias/…` quando a URL corresponde às duas categorias do repo (como `scrape-both`); em seguida **`consolidate-category-outputs.mjs`** para actualizar `output/dados_*.json` antes do import. **409** se busy. Em sucesso inclui **`outputDir`** (relativo ao repo, separador `/`) e **`consolidated`** (`true` quando correu consolidate após subpasta `categorias/`). Ver `scripts/analytics/scrape-run-route.mjs`. |
+| POST | `/scrape/run-both` | Corpo `{}` — **`node scripts/scrape-both.mjs`** (duas categorias, pastas em `output/categorias/…`) e em seguida **`node scripts/consolidate-category-outputs.mjs`**. Partilha o mesmo mutex **busy** que `/scrape/run`. Em sucesso inclui **`outputDir`** (`output`) e **`consolidated`: true**. |
+| POST | `/analytics/import-output` | Corpo `{}` — corre **`npm run db:import:output`** (JSON em `output/` → Postgres) à espera do fim. Resposta **`200`** com **`skipped: true`** quando o importador detecta o mesmo **`input_hash`** que um `ScrapeRun` já existente (nada é escrito na BD). Opcionalmente **`detail`**: se `skipped`, `existingScrapeRunId` e `inputHash` (parse do log); se importou, `scrapeRunId` do bloco «Resumo importação». O painel **Scrapear** em `/` mostra estas linhas. Ver `scripts/analytics/import-output-route.mjs`. |
+
+### GET `/analytics/categories`
+
+- **`operationalHealth`:** `ok` \| `partial_run` (estado do JSON do run ≠ `ok`) \| `stale_collection` (última coleta há mais de 72 h) \| `mixed_urls` (mais de uma `category_url` bruta no mesmo bucket).
+- **`lastRunNewProductsApprox` / `lastRunUpdatedProductsApprox`:** aproximação alinhada ao importador (`first_seen_at` próximo de `collected_at` do run ≈ produto novo nesta coleta).
+- **`jsonRunCoveragePercent`:** só quando `ScrapeRun.category_url` indica import multi (`multiple` / `multi`): percentagem aproximada do total JSON (`total_products`) representada pelos snapshots **deste** cartão.
 
 ### GET product-workspace
 
