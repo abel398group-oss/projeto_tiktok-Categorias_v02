@@ -5,6 +5,9 @@
 
 export const CREATOR_SHORTLIST_STORAGE_KEY = "tiktok-analytics-creator-shortlist";
 
+/** Evento same-tab: `storage` não dispara no mesmo documento; o painel escuta isto após cada escrita na shortlist. */
+export const CREATOR_SHORTLIST_CHANGED_EVENT = "tiktok-analytics-creator-shortlist-changed";
+
 const LS_KEY = CREATOR_SHORTLIST_STORAGE_KEY;
 
 /** Máximo de entradas (evita crescimento descontrolado no localStorage). */
@@ -44,11 +47,22 @@ export function getCreatorShortlist() {
   }
 }
 
+function notifyCreatorShortlistChanged() {
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CREATOR_SHORTLIST_CHANGED_EVENT));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /** @param {CreatorShortlistEntry[]} list */
 function persistCreatorShortlist(list) {
   try {
     const next = list.slice(0, CREATOR_SHORTLIST_MAX);
     localStorage.setItem(LS_KEY, JSON.stringify(next));
+    notifyCreatorShortlistChanged();
   } catch {
     /* quota */
   }

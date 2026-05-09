@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { badgeTextForProductStatus, getProductStatusForProduct } from "./productStatusStorage.js";
 import {
+  CREATOR_SHORTLIST_CHANGED_EVENT,
   CREATOR_SHORTLIST_STORAGE_KEY,
   getCreatorShortlist,
   removeFromCreatorShortlist
@@ -46,8 +47,15 @@ export default function ShortlistPage() {
     const onStorage = (e) => {
       if (e.key === CREATOR_SHORTLIST_STORAGE_KEY || e.key === null) refresh();
     };
+    const onShortlistSameTab = () => {
+      refresh();
+    };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    };
   }, [refresh]);
 
   const onRemove = useCallback(

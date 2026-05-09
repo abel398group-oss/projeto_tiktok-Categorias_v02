@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import {
+  CREATOR_SHORTLIST_CHANGED_EVENT,
   CREATOR_SHORTLIST_STORAGE_KEY,
   getCreatorShortlist
 } from "./productShortlistStorage.js";
@@ -43,6 +44,33 @@ function sortRecentNewestFirst(list) {
     const vb = Number.isFinite(tb) ? tb : 0;
     return vb - va;
   });
+}
+
+/** Máximo de GETs paralelos a `product-workspace` na tab Recentes (alivia backend e ambientes lentos). */
+const RECENT_WORKSPACE_FETCH_CONCURRENCY = 4;
+
+/**
+ * @template T, R
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T, index: number) => Promise<R>} fn
+ * @returns {Promise<R[]>}
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  if (items.length === 0) return [];
+  /** @type {R[]} */
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Math.max(1, Math.min(limit, items.length));
+  const runWorker = async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: workers }, () => runWorker()));
+  return results;
 }
 
 /** @typedef {{ loading?: boolean, preco?: unknown, vendas?: unknown, rating?: unknown, nome?: string, error?: string | null, workspaceNote?: string | null }} RowDetail */
@@ -178,8 +206,15 @@ export default function HandsOnPage() {
         setShortlistSnapshot(getCreatorShortlist());
       }
     };
+    const onShortlistSameTab = () => {
+      setShortlistSnapshot(getCreatorShortlist());
+    };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    };
   }, []);
 
   useEffect(() => {
@@ -199,24 +234,22 @@ export default function HandsOnPage() {
     });
 
     (async () => {
-      const results = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const j = await apiFetch(`/analytics/product-workspace/${encodeURIComponent(id)}`);
-            return {
-              id,
-              ok: true,
-              payload: /** @type {Record<string, unknown>} */ (j)
-            };
-          } catch (e) {
-            return {
-              id,
-              ok: false,
-              err: e instanceof Error ? e.message : String(e)
-            };
-          }
-        })
-      );
+      const results = await mapWithConcurrency(ids, RECENT_WORKSPACE_FETCH_CONCURRENCY, async (id) => {
+        try {
+          const j = await apiFetch(`/analytics/product-workspace/${encodeURIComponent(id)}`);
+          return {
+            id,
+            ok: true,
+            payload: /** @type {Record<string, unknown>} */ (j)
+          };
+        } catch (e) {
+          return {
+            id,
+            ok: false,
+            err: e instanceof Error ? e.message : String(e)
+          };
+        }
+      });
 
       if (cancel) return;
 

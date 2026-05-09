@@ -15,6 +15,7 @@ import {
   setProductStatus
 } from "./productStatusStorage.js";
 import {
+  CREATOR_SHORTLIST_CHANGED_EVENT,
   CREATOR_SHORTLIST_STORAGE_KEY,
   isProductInShortlist,
   toggleCreatorShortlist
@@ -268,8 +269,15 @@ export default function ProductWorkspacePage() {
     const onStorage = (e) => {
       if (e.key === CREATOR_SHORTLIST_STORAGE_KEY || e.key === null) sync();
     };
+    const onShortlistSameTab = () => {
+      sync();
+    };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    };
   }, [decodedId]);
 
   const onToggleShortlist = useCallback(() => {
