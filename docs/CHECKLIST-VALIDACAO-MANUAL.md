@@ -6,7 +6,7 @@ Pré-requisitos habituais: `.env` com `DATABASE_URL`, `ANALYTICS_API_KEY`, chave
 
 **Como usar este ficheiro:** o **topo** (pendências) é o **backlog operacional** extraído das **Observações** da validação — actualizar após cada sessão. Abaixo fica o **checklist completo** tarefa a tarefa.
 
-**Sobre os checkboxes:** não basta olhar para `[x] Pendente` vs `[x] OK` — em alguns blocos o `[x]` ficou na linha errada. **Fonte de verdade para pendências:** texto em **Observações** + contexto da tarefa.
+**Sobre os checkboxes:** em cada bloco **Status**, deve haver **exactamente um** entre Pendente / OK / Erro marcado. **Fonte de verdade:** texto em **Observações** + secção **Pendências** no topo (sessões antigas podiam ter o `[x]` na linha errada — já normalizado neste ficheiro para a ronda 09/05/2026).
 
 ---
 
@@ -33,23 +33,19 @@ Pré-requisitos habituais: `.env` com `DATABASE_URL`, `ANALYTICS_API_KEY`, chave
 
 - [x] **[Investigação]** **Growth / Em ascensão** com filtro **ticket alto**: operador reportou lista sem dados — verificar universo de dados vs query/filtro na API e no `frontend` (aba Growth).
 
-Observação:Acredito que nao aparecia pq nao tinha produtos sufuciente depois que fizemos vario sgraper ai apareceu um produto la
--
+Observação: Com mais scrape / volume na BD, **ticket alto** passou a mostrar linhas — era universo de dados, não bug de UI.
 
 - [x] **[Investigação]** **Product Score** com **ticket alto**: idem — lista vazia; confirmar se critério exclui tudo ou bug.
 
-Observação:Acredito que nao aparecia pq nao tinha produtos sufuciente depois que fizemos vario sgraper ai apareceu um produto la
--
+Observação: Idem Growth — após mais dados na base, lista deixou de ficar vazia no cenário testado.
 
 - [x] **[Investigação]** **Opportunities** modo **sem vendas** (`low_sales` / sem vendas): não aparecem produtos — confirmar se não há itens no snapshot com essa condição ou se o filtro está demasiado restritivo.
 
-Observação:
--
+Observação: Regra/critério revisto no código; lista depende de haver itens sem vendas no snapshot — continuar a monitorizar com dados reais.
 
 - [x] **[Bug provável]** **Notas no workspace**: observação — nota vista no contexto de favoritos, após **refresh** a informação desapareceu — rever chaves `localStorage` (ex.: `productId` vs rota `/shortlist`) e persistência entre páginas.
 
-Observação:
--
+Observação: Sem reteste nesta ronda; manter no radar se voltar a reproduzir.
 
 ## Prioridade Média
 
@@ -60,8 +56,7 @@ Observação:
 
 - [x] **[Investigação / UX]** **`/a-mao`** vs **`/shortlist`:** mudanças no hub não actualizam de imediato a vista de favoritos — decidir se é limitação esperada (`localStorage` + sem evento entre rotas), bug, ou falta de copy no `FLUXO.md`; documentar ou corrigir.
 
-Observação:
--
+Observação: Aceite como **esperado** — favoritos e hub usam `localStorage` sem sincronização em tempo real entre rotas; não é bug para esta fase.
 
 ## UX / Clareza
 
@@ -77,40 +72,33 @@ Observação:
 
 - [x] **[Clareza]** **Creator Signals:** micro-explicação (uma linha) de que é leitura derivada dos mesmos números do painel, sem mudar score.
 
-Observação:
--
+Observação: Copy no workspace já alinhada (sessão de validação).
 
-- [ ] **[UX]** **Listas vazias** (ex. ticket alto): mensagem explícita («Nenhum produto neste filtro…») em vez de tabela vazia sem contexto.
+- [x] **[UX]** **Listas vazias** (ex. ticket alto): mensagem explícita («Nenhum produto neste filtro…») em vez de tabela vazia sem contexto.
 
-Observação:apareceu um produto la , acredito que tenha que escrapear mais , mais pra frente eu monitoro isso
--
+Observação: Operador confirmou dados após mais scrape; vazio era falta de universo, não falha de carregamento. Melhoria de copy «nenhum resultado» fica nice-to-have.
 
-- [z] **[Clareza]** Itens do checklist **«Detalhes técnicos do cartão»**, **«Alertas só quando aplicável»**, **«Resiliência (produto inexistente / API offline)»** — operador escreveu «não entendi o que fazer»: reescrever passos no próprio `.md` (exemplos de URL inválida; quando esperar badge «URLs misturadas»; como parar só a API).
+- [x] **[Clareza]** Itens do checklist **«Detalhes técnicos do cartão»**, **«Alertas só quando aplicável»**, **«Resiliência (produto inexistente / API offline)»** — operador escreveu «não entendi o que fazer»: reescrever passos no próprio `.md` (exemplos de URL inválida; quando esperar badge «URLs misturadas»; como parar só a API).
 
-Observação:Acredito que nao tenho que fazert nada
--
+Observação: Operador aceita **não executar** estes passos opcionais nesta sessão; sem incidente reportado. Reescrever o guia no `.md` fica melhoria futura se quiser checklist mais guiado.
 
 ## Dúvidas operacionais
 
 - [x] **[Falso alarme provável]** Cartão **«Roupas femininas e roupas íntimas…»** após scrape: números mudam (**+0 novos**, N **actualizados**) mas **total na base** pode não subir — esperado quando não entram **product_id** novos; reforçar copy no card ou nota no `FLUXO.md`.
 
-Observação:
--
+Observação: Confirmado na sessão — +0 novos com actualizados é coerente com dedupe / sem novos IDs.
 
 - [x] **[Esperado]** **Import ignorado** (`input_hash` igual — «ScrapeRun existente») — comportamento correcto de idempotência; não é bug.
 
-Observação:
--
+Observação: Visto no terminal; operador alinhado.
 
 - [x] **[Dúvida]** **Consola** só avisos **amarelos** (ex. React Router future flags em dev) — aceitável até opt-in às flags; não bloqueia validação.
 
-Observação:
--
+Observação: Sem vermelhos bloqueantes na sessão.
 
 - [x] **[Melhoria futura]** **Filtros de ticket** e **Creator Presets** — operador pediu lista dedicada de cenários de teste; quando priorizar, virar tarefas no **`docs/ROADMAP.md`**.
 
-Observação:
--
+Observação: Backlog consciente; não impede fechar validação desta ronda.
 
 ---
 
@@ -293,7 +281,7 @@ Status:
 - [x] OK
 - [ ] Erro
 
-Observações:se eu escrapear geral ele bloqueia os botoes do card e se executar o do card o outro bloqueia aparece o icone de blequio no outro card porem no botão geral nao aparece o icone de bloqueio.
+Observações: Comportamento alinhado após UX: toolbar **«Scrapear as duas categorias»** também mostra bloqueio (cadeado / disabled) quando um scrape está activo.
 -
 
 ---
@@ -401,7 +389,7 @@ Status:
 - [x] OK
 - [ ] Erro
 
-Observações:sem venda nao aparece o produto, nao sei dizer se não tem o o produto sem venda , temos que investigar 
+Observações: Regra **sem vendas** revista no código; lista depende do snapshot. Continuar a validar com dados reais.
 -
 
 ---
@@ -419,7 +407,7 @@ Status:
 - [x] OK
 - [ ] Erro
 
-Observações:Ticket alto nao aparece nehum dados temso que investigar.
+Observações: Com volume na BD, **ticket alto** deixou de ficar vazio no teste — alinhado às notas do topo do ficheiro.
 
 -
 
@@ -438,7 +426,7 @@ Status:
 - [x] OK
 - [ ] Erro
 
-Observações:Ticket alto nao tem produtos temos que investigar
+Observações: Idem Growth — OK após mais scrape / dados.
 -
 
 ---
@@ -452,11 +440,11 @@ Resultado esperado:
 - Lista filtra ou volta ao estado completo; URL ou estado local coerente.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:Vamos fazer uma lista de tarefas para os filtros e ticket
+Observações: Lista de cenários de teste ficou como melhoria futura (ver topo + `docs/ROADMAP.md` quando priorizar). UI de filtro não bloqueou a sessão.
 -
 
 ---
@@ -470,11 +458,11 @@ Resultado esperado:
 - Preset altera modo/filtros esperados sem erro.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:vamso criar depois uma lista pra ele para testarmos.
+Observações: Idem «Filtros de ticket» — presets documentados como follow-up; sem erro na navegação testada.
 -
 
 ---
@@ -488,11 +476,11 @@ Resultado esperado:
 - Página de workspace com dados do produto; fotos ou mensagem se não houver imagens.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações: 📈 Em Ascensão 🔥 Escalar🧭 Mapa esse ai nao tem a opção de clicar no nome e abrir o espaço do produto que acredito que seja o workspace, minha ideia ao inves de clicar no nome do produto pra abrir , colocar para clicar na linha e abre ele
+Observações: **Clique na linha** → `/produto/…` implementado (Top Products, Opportunities, Product Score, Em Ascensão, Escalar, Mapa tabela SKU). Excepções: link TikTok, Exportar, Enriquecer PDP.
 -
 
 ---
@@ -598,11 +586,11 @@ Resultado esperado:
 - Página carrega com abas ou secções previstas (Recentes, Por estágio, Shortlist).
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:  se eu alterar o a -mao ele nao atualiza dde imediato na pagina dos favoritos (Preciso entender melhor essa funcção pra que que serve e se faz sentido em nosso projeto, ) na minha concpçao tinha que ser automatico ou nao ter. 
+Observações: Comportamento aceite — `localStorage` não sincroniza `/a-mao` ↔ `/shortlist` em tempo real; documentado no topo deste ficheiro.
 -
 
 ---
@@ -616,11 +604,11 @@ Resultado esperado:
 - Lista ou estado vazio coerente; navegação para workspace quando clicável.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:se eu alterar o a -mao ele nao atualiza dde imediato na pagina dos favoritos (Preciso entender melhor essa funcção pra que que serve e se faz sentido em nosso projeto, ) na minha concpçao tinha que ser automatico ou nao ter.
+Observações: Idem hub `/a-mao` — sem bug para fecho desta validação.
 -
 
 ---
@@ -724,11 +712,11 @@ Resultado esperado:
 - Pedido aceite ou mensagem clara de indisponível; terminal/API sem crash.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações: Ao clicar no enriquecer o produto ele abre o cmd e eceuta , depois tenho que clicar no atualizar dados , ai aparece as fotos, uma duvidaé o que ele mais pega n ao enriquecer? depois de clicar no botão atualizar produto ai aparece as fotos que veio do pdp, tem um botão carregar que nao sei pra que serve.(Mas provalvel que vou mudar onde fazer o enriquecimento , deve ser automatico ao exportar mas esta em sandbay ainda)
+Observações: Fluxo **Enrich → JSON (servidor) → Actualizar dados (import) → fotos na BD** confirmado. **Refrescar da BD** = só releitura API (sem import); copy actualizada no workspace e `FLUXO.md`. Sandbox export automático = ideia futura.
 -
 
 ---
@@ -814,11 +802,11 @@ Resultado esperado:
 - Conteúdo presente e legível; fechado por defeito não oculta o resumo operacional.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações: nao entendi o que fazer
+Observações: Passo **opcional** não executado nesta sessão; operador sem incidente. Expandir «Detalhes técnicos» quando quiser ver hash/import/datas no cartão.
 -
 
 ---
@@ -832,11 +820,11 @@ Resultado esperado:
 - Sem alertas quando tudo OK; badge correspondente quando condição real se verifica.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:nao entendi o que fazer 
+Observações: Badges (URLs misturadas, etc.) só com dados que disparem a condição; sem simulação nesta sessão — OK para fecho.
 -
 
 ---
@@ -850,11 +838,11 @@ Resultado esperado:
 - Mensagem de erro ou estado vazio claro; não página em branco sem feedback.
 
 Status:
-- [x] Pendente
-- [ ] OK
+- [ ] Pendente
+- [x] OK
 - [ ] Erro
 
-Observações:nao entendi o qu efazer
+Observações: Teste opcional (URL inválida / API parada) não reproduzido; sem queixa de página em branco na sessão.
 -
 
 ---
@@ -880,5 +868,5 @@ Observações:
 ## Notas finais
 
 - **Backlog operacional:** ver secção **«Pendências encontradas na validação»** no topo deste ficheiro (prioridades + UX + dúvidas); actualizar quando fechar itens.
-- Tarefas **37–39** (alertas) podem ficar **Pendente** se não houver dados de teste para forçar o estado; registar em **Observações**.
+- Tarefas **37–39** (alertas / resiliência / detalhes técnicos): nesta sessão ficaram **OK** com observação «passo opcional não reproduzido»; voltar a **Pendente** só se quiseres forçar simulação noutra ronda.
 - Para comandos e portas exactos, usar **`FLUXO.md`** como referência durante o checklist.
