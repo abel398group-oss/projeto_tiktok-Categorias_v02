@@ -65,7 +65,7 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
 Observações:
@@ -83,10 +83,24 @@ Resultado esperado:
 
 Status:
 - [ ] Pendente
-- [ ] OK
+- [x] OK
 - [ ] Erro
 
-Observações:
+Observações:Categoria
+Roupas íntimas femininas
+710
+produtos na base
+Última coleta
+
+215 colectados no total
+110 importados nesta categoria · 102 lojas
++15 novos · 95 actualizados
+105 fora desta categoria / dedupe
+Última coleta: 09/05/2026, 11:23 (há 5 min)
+URLs misturadas
+Detalhes técnicos
+Scrapear
+Abrir análise →
 -
 
 ---

@@ -1784,7 +1784,7 @@ function TableOpp({ data }) {
         Tabela: clique no cabeçalho ordena · <strong>▾</strong> filtra (só linhas carregadas) · nome abre o produto ·{" "}
         <strong>Ações</strong> exporta (servidor). Não é tempo real — ver <code>docs/ANALYTICS.md</code>.
       </p>
-    </div>
+      </div>
   );
 
   const oppIntro = (
@@ -1928,17 +1928,17 @@ function TableOpp({ data }) {
       ) : null}
       {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <>
-        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
-          <colgroup>{colW.colElements}</colgroup>
-          <thead>
-            <tr>
-              <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
+      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <colgroup>{colW.colElements}</colgroup>
+        <thead>
+          <tr>
+            <PlainTh label="#" title={positionThTitle} resizeColIdx={0} onGrip={colW.onGripMouseDown} />
                 <OppExcelSortTh
-                  label="nome"
-                  colKey="nome"
+              label="nome"
+              colKey="nome"
                   filterMode="text"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -1946,15 +1946,15 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={1}
-                  onGrip={colW.onGripMouseDown}
-                />
+              resizeColIdx={1}
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="categoria"
-                  colKey="categoriaPrincipal"
+              label="categoria"
+              colKey="categoriaPrincipal"
                   filterMode="category"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -1962,15 +1962,15 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={2}
-                  onGrip={colW.onGripMouseDown}
-                />
+              resizeColIdx={2}
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="sub"
-                  colKey="subcategoria"
+              label="sub"
+              colKey="subcategoria"
                   filterMode="category"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -1978,15 +1978,15 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={3}
-                  onGrip={colW.onGripMouseDown}
-                />
+              resizeColIdx={3}
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="loja"
-                  colKey="loja"
+              label="loja"
+              colKey="loja"
                   filterMode="text"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -1994,17 +1994,17 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={4}
-                  onGrip={colW.onGripMouseDown}
-                />
+              resizeColIdx={4}
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="preço"
-                  colKey="preco"
+              label="preço"
+              colKey="preco"
                   filterMode="range"
                   rangeMinKey="precoMin"
                   rangeMaxKey="precoMax"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -2012,9 +2012,9 @@ function TableOpp({ data }) {
                   setMenuOpenKey={setOppMenuKey}
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
-                  resizeColIdx={5}
-                  onGrip={colW.onGripMouseDown}
-                />
+              resizeColIdx={5}
+              onGrip={colW.onGripMouseDown}
+            />
                 <PlainTh
                   label="Ticket"
                   title="Faixa de preço só no browser: &lt; 30 baixo · 30–79,9 médio · ≥ 80 alto"
@@ -2022,13 +2022,13 @@ function TableOpp({ data }) {
                   onGrip={colW.onGripMouseDown}
                 />
                 <OppExcelSortTh
-                  label="vendas"
-                  colKey="vendas"
+              label="vendas"
+              colKey="vendas"
                   filterMode="range"
                   rangeMinKey="vendasMin"
                   rangeMaxKey="vendasMax"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -2037,16 +2037,16 @@ function TableOpp({ data }) {
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
                   resizeColIdx={7}
-                  onGrip={colW.onGripMouseDown}
-                />
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="rating"
-                  colKey="avalMed"
+              label="rating"
+              colKey="avalMed"
                   filterMode="range"
                   rangeMinKey="avalMedMin"
                   rangeMaxKey="avalMedMax"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -2055,14 +2055,14 @@ function TableOpp({ data }) {
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
                   resizeColIdx={8}
-                  onGrip={colW.onGripMouseDown}
-                />
+              onGrip={colW.onGripMouseDown}
+            />
                 <OppExcelSortTh
-                  label="motivo"
-                  colKey="motivo"
+              label="motivo"
+              colKey="motivo"
                   filterMode="text"
-                  sortKey={sort.key}
-                  sortDir={sort.dir}
+              sortKey={sort.key}
+              sortDir={sort.dir}
                   onSortLabel={onSort}
                   colFilters={oppColFilters}
                   setColFilters={setOppColFilters}
@@ -2071,18 +2071,18 @@ function TableOpp({ data }) {
                   onApplySort={onApplySort}
                   datasetRows={rawItems}
                   resizeColIdx={9}
-                  onGrip={colW.onGripMouseDown}
-                />
-                <PlainTh
-                  label="Ações"
-                  title="Exportar ao DigitalOcean Spaces"
+              onGrip={colW.onGripMouseDown}
+            />
+            <PlainTh
+              label="Ações"
+              title="Exportar ao DigitalOcean Spaces"
                   resizeColIdx={10}
-                  onGrip={colW.onGripMouseDown}
-                />
+              onGrip={colW.onGripMouseDown}
+            />
                 <PlainTh label="link" resizeColIdx={11} onGrip={colW.onGripMouseDown} />
-              </tr>
-            </thead>
-            <tbody>
+          </tr>
+        </thead>
+        <tbody>
               {items.length === 0 ? (
                 <tr>
                   <td
@@ -2128,41 +2128,41 @@ function TableOpp({ data }) {
                         <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
                       </div>
                     </td>
-                    <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
-                      {catCellPt(row.categoriaPrincipal)}
-                    </td>
-                    <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
-                      {catCellPt(row.subcategoria)}
-                    </td>
-                    <td>{row.loja}</td>
-                    <td>{row.preco ?? "—"}</td>
+              <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
+                {catCellPt(row.categoriaPrincipal)}
+              </td>
+              <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
+                {catCellPt(row.subcategoria)}
+              </td>
+              <td>{row.loja}</td>
+              <td>{row.preco ?? "—"}</td>
                     <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
-                    <td>{row.vendas ?? "—"}</td>
-                    <td>
-                      {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
-                    </td>
-                    <td>{row.motivo ?? "—"}</td>
-                    <SpacesExportActionCell
-                      productId={row.productId}
-                      nome={row.nome}
-                      exportingProductId={exportingProductId}
-                      exportToSpace={exportToSpace}
-                    />
-                    <td>
-                      {row.link ? (
-                        <a href={row.link} target="_blank" rel="noopener noreferrer">
-                          abrir
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
+              <td>{row.vendas ?? "—"}</td>
+              <td>
+                {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
+              </td>
+              <td>{row.motivo ?? "—"}</td>
+              <SpacesExportActionCell
+                productId={row.productId}
+                nome={row.nome}
+                exportingProductId={exportingProductId}
+                exportToSpace={exportToSpace}
+              />
+              <td>
+                {row.link ? (
+                  <a href={row.link} target="_blank" rel="noopener noreferrer">
+                    abrir
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </td>
+            </tr>
                 );
                 })
               )}
-            </tbody>
-          </table>
+        </tbody>
+      </table>
           {hasMoreLocally ? (
             <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
               <button type="button" className="tk-btn-soft" onClick={() => setExpanded((ex) => !ex)}>
@@ -2729,13 +2729,13 @@ function TableScore({ data }) {
               <td>{row.classific}</td>
               <td style={{ verticalAlign: "middle" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
-                  <Link
-                    to={`/produto/${encodeURIComponent(row.productId)}`}
-                    title="Abrir página de trabalho deste produto"
-                    style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
-                  >
-                    {row.nome}
-                  </Link>
+                <Link
+                  to={`/produto/${encodeURIComponent(row.productId)}`}
+                  title="Abrir página de trabalho deste produto"
+                  style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                >
+                  {row.nome}
+                </Link>
                   <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
                 </div>
               </td>
