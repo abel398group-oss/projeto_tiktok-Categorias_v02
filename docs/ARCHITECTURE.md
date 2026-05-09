@@ -75,6 +75,7 @@ flowchart TB
 2. Sessão persistente: diretório de perfil Chrome (`.chrome-tiktok-profile` por defeito; override `CHROME_USER_DATA="..."`; limpar com `FRESH_SESSION=1`).
 3. Relevante para login interativo: `HEADED=1`, `LOGIN_WAIT_MAX_MS` (aumenta se necessário) até `shop.tiktok.com`.
 4. Heurísticas em respostas JSON (URLs com `oec`, `list`, `shop.tiktok`, etc.), filtrando **telemetria** (MCS, Slardar, monitor, batch 204, …).
+4b. **View more (grelha):** após o scroll da categoria, o script pode clicar até **`VIEW_MORE_MAX_CLICKS`** vezes (máx. 10, default 8) em **View more** / **Ver mais** (e equivalentes), para a UI carregar mais blocos; os novos produtos entram pelo mesmo pipeline XHR + merge. Desligar: **`VIEW_MORE_MAX_CLICKS=0`** ou **`VIEW_MORE=0`**. Tempo de espera pós-clique (poll do contador): **`VIEW_MORE_DRAIN_MS`** (default 4500).
 5. Dados iniciais no DOM: leitura de `#__MODERN_ROUTER_DATA__` → `loaderData` (rota `…/c/…/page`) fundido no mesmo mapa de produtos.
 6. Normalização: `normalizeItem` (preço, desconto %, `seo_url` → `product_url`, imagens, etc.).
 7. **Saídas “finais” na raiz de `output/`:** `dados_produtos.json` (PT‑BR, `itens[]`, `categoria_url`, `link_produto`, …) e `dados_lojas.json` (agregado por `seller_id`).

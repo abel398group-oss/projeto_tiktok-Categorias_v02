@@ -125,12 +125,14 @@ Detalhes, limitações e contrato com `DATA_POLICY`: **[`docs/ANALYTICS.md`](doc
 
 ## Desenvolvimento rápido
 
-Um único comando para subir **API (Fastify)** + **frontend (Vite)** ao mesmo tempo, no **mesmo terminal**, com cores por processo (`concurrently`):
+Um único comando para o dia a dia com **Postgres local em Docker** (porta host **5433**) e, em seguida, **API (Fastify)** + **frontend (Vite)** no **mesmo terminal**, com cores por processo (`concurrently`):
 
 ```bash
 npm install
 npm run dev:all
 ```
+
+Se usas **Postgres remoto** (sem Docker local), sobe só API + painel: **`npm run dev:app`**.
 
 - **API** → por defeito **`http://127.0.0.1:3333`** (`npm run analytics:api` atrás de `api:dev`).
 - **Frontend** → **`http://localhost:5173/`** (configuração **`strictPort`** : se 5173 estiver ocupada o Vite falha; liberta a porta ou encerra outro `vite`).
@@ -144,7 +146,7 @@ Detalhes de endpoints e proxy: [`docs/ANALYTICS-API.md`](docs/ANALYTICS-API.md) 
 
 Script individual útil para debug: **`npm run api:dev`** só API · **`npm run frontend:dev`** só frontend.
 
-Para parar os dois processos: **Ctrl+C** no terminal onde correu `dev:all`.
+Para parar API + Vite: **Ctrl+C** no terminal (`dev:all` ou `dev:app`). O contentor Postgres Docker (`db:docker:up`) fica a correr até `npm run db:docker:down`.
 
 ## Desenvolvimento
 

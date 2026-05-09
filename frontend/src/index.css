@@ -69,6 +69,36 @@ code {
   border: 1px solid var(--tk-border-soft);
 }
 
+/* Botão secundário / outline (painel Analytics) */
+button.tk-btn-soft {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.42rem 0.85rem;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+  box-shadow: var(--tk-shadow-sm);
+}
+button.tk-btn-soft:hover {
+  border-color: rgb(148 163 184 / 0.28);
+  background: rgb(255 255 255 / 0.04);
+}
+button.tk-btn-soft:focus-visible {
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 2px;
+}
+button.tk-btn-soft:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+button.tk-btn-soft:disabled:hover {
+  border-color: var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+}
+
 /* Navegação principal — estados tipo painel TMS (ativo / hover claros) */
 nav.tk-app-nav {
   border-bottom: 1px solid var(--tk-border);
@@ -238,8 +268,9 @@ tbody td {
   align-items: stretch;
 }
 
-/* Link React Router no lugar de <article>: cartão inteiro clicável */
-a.tk-category-card {
+/* Cartão: `a` legado (inteiro clicável) ou `div` com área de link + botão scrape no rodapé */
+a.tk-category-card,
+div.tk-category-card {
   display: flex;
   flex-direction: column;
   border-radius: var(--tk-radius-lg);
@@ -248,7 +279,6 @@ a.tk-category-card {
   box-shadow: var(--tk-shadow-sm);
   min-height: 220px;
   overflow: hidden;
-  text-decoration: none;
   color: inherit;
   transition:
     border-color 0.16s ease,
@@ -256,7 +286,16 @@ a.tk-category-card {
     transform 0.16s ease;
 }
 
-a.tk-category-card:hover .tk-category-card__cta {
+a.tk-category-card__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tk-category-card:hover .tk-category-card__cta {
   color: #7dd3fc;
 }
 
@@ -319,37 +358,176 @@ a.tk-category-card:hover .tk-category-card__cta {
   font-weight: 500;
 }
 
-.tk-category-card__meta {
+.tk-category-card__summary {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(0 0 0 / 0.14);
+}
+
+.tk-category-card__summary-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tk-text-subtle);
+}
+
+.tk-category-card__summary-list {
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.42rem;
+  padding: 0 0 0 1rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--tk-text-muted);
 }
 
-.tk-category-card__meta > div {
-  display: grid;
-  grid-template-columns: 7.2rem 1fr;
+.tk-category-card__summary-list li {
+  margin-bottom: 0.28rem;
+}
+
+.tk-category-card__summary-list li:last-child {
+  margin-bottom: 0;
+}
+
+.tk-category-card__summary-list strong {
+  color: var(--tk-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tk-category-card__summary-sep {
+  opacity: 0.55;
+}
+
+.tk-category-card__summary-note {
+  font-weight: 400;
+  opacity: 0.88;
+}
+
+.tk-category-card__accent-pos {
+  color: #86efac;
+}
+
+.tk-category-card__badges {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
-  font-size: 0.74rem;
+  margin: 0 0 0.55rem;
 }
 
-.tk-category-card__meta dt {
+.tk-category-card__badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--tk-border);
+  line-height: 1.2;
+}
+
+.tk-category-card__badge--ok {
+  color: #86efac;
+  border-color: rgb(34 197 94 / 0.35);
+  background: rgb(22 101 52 / 0.2);
+}
+
+.tk-category-card__badge--warn {
+  color: #fdba74;
+  border-color: rgb(249 115 22 / 0.4);
+  background: rgb(124 45 18 / 0.22);
+}
+
+.tk-category-card__badge--stale {
+  color: #cbd5e1;
+  border-color: rgb(148 163 184 / 0.35);
+  background: rgb(51 65 85 / 0.25);
+}
+
+.tk-category-card__badge--info {
+  color: #93c5fd;
+  border-color: rgb(59 130 246 / 0.35);
+  background: rgb(30 58 138 / 0.22);
+}
+
+.tk-category-card__badge--good {
+  color: #a7f3d0;
+  border-color: rgb(45 212 191 / 0.35);
+  background: rgb(6 78 59 / 0.28);
+}
+
+.tk-category-card__details {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  color: var(--tk-text-muted);
+}
+
+.tk-category-card__details summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  color: var(--tk-text-subtle);
+  padding: 0.2rem 0;
+}
+
+.tk-category-card__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.tk-category-card__details summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 0.12s ease;
+  opacity: 0.7;
+}
+
+.tk-category-card__details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.tk-category-card__details-dl {
+  margin: 0.35rem 0 0;
+  padding: 0.45rem 0.5rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  background: rgb(0 0 0 / 0.22);
+  display: grid;
+  gap: 0.32rem;
+}
+
+.tk-category-card__details-dl > div {
+  display: grid;
+  grid-template-columns: minmax(5.75rem, 7.5rem) 1fr;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+}
+
+.tk-category-card__details-dl dt {
   margin: 0;
   color: var(--tk-text-subtle);
-  font-weight: 500;
+  font-weight: 600;
 }
 
-.tk-category-card__meta dd {
+.tk-category-card__details-dl dd {
   margin: 0;
   color: var(--tk-text-muted);
   line-height: 1.35;
   word-break: break-word;
 }
 
-.tk-category-card__run {
-  font-size: 0.68rem;
-  opacity: 0.75;
-  margin-top: 0.18rem;
+.tk-category-card__details-note {
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.tk-category-card__code {
+  font-size: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  word-break: break-all;
 }
 
 .tk-category-card__footer {
@@ -358,6 +536,33 @@ a.tk-category-card:hover .tk-category-card__cta {
   border-top: 1px solid var(--tk-border);
   background: rgb(0 0 0 / 0.18);
   text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.85rem;
+}
+
+.tk-category-card__scrape {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--tk-radius-sm);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+}
+
+.tk-category-card__scrape:hover:not(:disabled) {
+  border-color: var(--tk-accent-ring);
+  color: var(--tk-accent);
+}
+
+.tk-category-card__scrape:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .tk-category-card__cta {
@@ -418,5 +623,65 @@ a.tk-category-card:hover .tk-category-card__cta {
 .tk-dash-toolbar a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Ajuda contextual — pairar para abrir balão (ex.: Opportunities) */
+.tk-help-hover {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tk-help-hover__btn {
+  cursor: help;
+  border: none;
+  background: rgb(56 189 248 / 0.14);
+  color: var(--tk-accent);
+  width: 1.38rem;
+  height: 1.38rem;
+  border-radius: 50%;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tk-help-hover__btn:hover,
+.tk-help-hover__btn:focus-visible {
+  background: rgb(56 189 248 / 0.24);
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 1px;
+}
+
+.tk-help-hover__panel {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: -2px;
+  z-index: 90;
+  width: min(320px, calc(100vw - 2rem));
+  max-height: min(68vh, 400px);
+  overflow-y: auto;
+  padding: 0.6rem 0.72rem 0.65rem;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  box-shadow: var(--tk-shadow-sm), 0 14px 36px rgb(0 0 0 / 0.38);
+  font-size: 0.745rem;
+  line-height: 1.46;
+  color: var(--tk-text);
+  text-align: left;
+  transition: opacity 0.14s ease, visibility 0.14s ease;
+}
+
+.tk-help-hover:hover .tk-help-hover__panel,
+.tk-help-hover:focus-within .tk-help-hover__panel {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 

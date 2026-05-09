@@ -42,6 +42,12 @@ export default function AppShell() {
           <NavLink to="/a-mao" className={({ isActive }) => `tk-nav-link${isActive ? " tk-nav-link--active" : ""}`}>
             Produtos em análise
           </NavLink>
+          <NavLink
+            to="/shortlist"
+            className={({ isActive }) => `tk-nav-link${isActive ? " tk-nav-link--active" : ""}`}
+          >
+            Minha shortlist
+          </NavLink>
         </div>
         <span className="tk-app-nav__trail">Painel · dados importados</span>
       </nav>

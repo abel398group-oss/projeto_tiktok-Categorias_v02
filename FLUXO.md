@@ -1,27 +1,76 @@
 # Fluxo do projeto
 
-## Comandos
+## Execução rápida
 
-1. `npm install` (deps, raiz uma vez)
-2. `npm run setup:local` (`.env` + `frontend/.env` a partir dos exemplos — primeira vez)
-3. `npm run coleta:completa:db` (coleta completa → Postgres)
-4. `npm run prisma:studio` (ver BD no browser)
-5. `npm run dev:all` (API + painel mesmo terminal)
-6. `npm run db:import:output` (só importar JSON já gerado)
-7. `npm run coleta:db` (grelha rápida → Postgres)
-8. `npm run coleta:completa` (JSON com PDP, sem import)
-9. `npm run coleta:completa:login:db` (completa com browser/login)
-10. `npm run analytics:product-score` (relatório score no terminal)
-11. `npm run analytics:api` (só servidor API)
-12. `cd frontend && npm run dev` (só Vite — API noutro terminal)
-13. `npm test` (testes scrape)
-14. `npm run validate:schemas` (validar JSON vs schema)
-15. `npm run validate:db-vs-json` (comparar BD vs JSON)
-16. `npm start` (completa + score no fim)
+Na **raiz do repo** (onde está `package.json`). Postgres **local** usa Docker na porta host **5433** (scripts `db:docker:*`). Se usas **Postgres remoto**, mete só `DATABASE_URL` no `.env` e ignora os passos Docker.
+
+### 1) Primeira vez (PC)
+
+```bash
+npm install
+(cd frontend && npm install)
+npm run setup:local
+npm run db:docker:bootstrap
+npm run db:check
+```
+
+### 2) Painel + API no dia a dia
+
+```bash
+npm run dev:all
+```
+
+Sobe **Postgres local em Docker** (ficheiro `docker-compose.postgres-local.yml`: `up -d` + espera na porta **5433**) e, em seguida, **API Fastify** + **Vite** em paralelo. Se já usas **Postgres remoto** (sem Docker local), usa só API + painel:
+
+```bash
+npm run dev:app
+```
+
+Painel: **http://localhost:5173/** · API: **http://127.0.0.1:3333/** (proxy do Vite encaminha `/analytics` e `/scrape` para a API).
+
+### 3) Coletar TikTok Shop e gravar no Postgres
+
+```bash
+npm run coleta:db
+```
+
+Duas categorias, grelha rápida. **Com PDP** (mais lento): `npm run coleta:completa:db`. **Uma categoria:** `npm run coleta:uma:db` ou `npm run scrape:category`. **Login visível:** `npm run coleta:completa:login:db`.
+
+### 4) Só importar JSON que já existe em `output/`
+
+```bash
+npm run db:import:output
+```
+
+### 5) Ver dados na base (browser)
+
+```bash
+npm run prisma:studio
+```
+
+Típico **http://localhost:5555**.
+
+### 6) Qualidade
+
+```bash
+npm test
+npm run validate:schemas
+npm run validate:db-vs-json
+```
+
+### 7) Produção (Docker no servidor)
+
+Com `.env` na raiz do clone (ver `.env.example`):
+
+```bash
+docker compose up -d --build
+```
+
+Painel no host por defeito em **`http://<IP-do-servidor>:8080/`** (ver §10).
 
 ---
 
-Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser.
+Do zero ao `output/dados_*.json`, import Postgres, analytics e painel no browser — detalhe nas tabelas abaixo.
 
 ## Guia rápido — comandos `npm run`
 
@@ -32,7 +81,7 @@ npm install
 npm run setup:local   # cria .env e frontend/.env a partir dos .env.example (se ainda não existirem)
 ```
 
-**Postgres:** o modelo actual do `.env.example` usa Postgres **Docker** local na porta **`5433`** (`tiktok_dev` / `tiktok_shop_dev`). Depois do `setup:local`, fluxo típico: **`npm run db:docker:bootstrap`**, **`npm run db:check`**. Para Postgres remoto (ex. DigitalOcean), comenta a `DATABASE_URL` local e põe a URI certa (**`sslmode=require`**, porta **25060**).
+**Postgres:** o `.env` na raiz tem dois blocos comentados (**LOCAL** vs **DigitalOcean**): deixa **exactamente uma** linha `DATABASE_URL=...` activa (ver instruções no topo do `.env`). Modelo local: Docker na porta **`5433`** (`tiktok_dev` / `tiktok_shop_dev`). Fluxo típico local: **`npm run db:docker:bootstrap`**, **`npm run db:check`**. Remoto DO: **`sslmode=require`**, porta **25060**, IP permitido em *Trusted sources*. **Prisma Studio** (`npm run prisma:studio` na raiz) liga sempre à BD da `DATABASE_URL` activa — local ou remota (`http://localhost:5555`).
 
 As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`frontend/.env`) vêm alinhadas nos exemplos (`uma-chave-local`). Se `.env` ainda tinha **`...@HOST:5432`** (modelo antigo), atualiza só a línea **`DATABASE_URL=`** conforme `.env.example` actual.
 
@@ -76,6 +125,8 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 | Parar Postgres local Docker | `npm run db:docker:down` |
 | Importar `output/dados_*.json` → Postgres (isolado) | `npm run db:import:output` |
 | Testar ligação Postgres / `DATABASE_URL` (diagnóstico) | `npm run db:check` |
+| Aplicar migrações pendentes (Postgres já acessível; **sem Docker** ou diagnóstico manual) | `npm run db:migrate:deploy` |
+| Migrações com **Docker no Droplet** | Automáticas: **a** cada arranque do contentor **`api`** corre `prisma migrate deploy` (`deploy/docker-api-entrypoint.sh`); não é preciso comando extra só por causa do Studio |
 | Interface web para ver dados (`localhost:5555` típico) | `npm run prisma:studio` |
 | Gerar cliente Prisma | `npm run prisma:generate` |
 
@@ -102,7 +153,8 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 |---------|---------|
 | Só API Fastify (`127.0.0.1:3333` por defeito). Env: `DATABASE_URL`, **`ANALYTICS_API_KEY`** | `npm run analytics:api` |
 | Só Vite (precisa `cd frontend` + `npm install` na primeira vez) | `cd frontend` → `npm run dev` |
-| **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). A parte **API** usa `node --watch` e reinicia ao alterar `server.mjs`. | `npm run dev:all` |
+| **Postgres Docker local** (up + espera **5433**) + **API + Vite** no mesmo terminal (`API` / `FRONT` nos logs). API com `node --watch`. | `npm run dev:all` |
+| **Só API + Vite** (sem subir Docker; ex.: `DATABASE_URL` remoto) | `npm run dev:app` |
 
 - Chave no browser: `frontend/.env` → **`VITE_ANALYTICS_API_KEY`** igual a **`ANALYTICS_API_KEY`** na raiz. Ver `frontend/README.md`, `.env.example` na raiz e `frontend/.env.example`.
 - Rota **`/produto/<id TikTok>`** para a página de trabalho do produto (link no nome do Product Score).
@@ -158,11 +210,15 @@ export CATEGORY_URL="https://shop.tiktok.com/br/c/..."
 npm run coleta
 ```
 
+**View more (mais produtos na grelha):** por defeito o `scrapeCategory` clica até **8** vezes (máx. **10**) em **View more** / **Ver mais** após o scroll. Desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`; ajustar espera pós-clique: `VIEW_MORE_DRAIN_MS` (ms, default 4500). Ver `docs/ARCHITECTURE.md`.
+
 ### 4. API analytics (GET relatórios + POST export Spaces)
 
 - Arranque: **`npm run analytics:api`**.
 - Auth: **`Authorization: Bearer <ANALYTICS_API_KEY>`** (ou `x-api-key`). Endpoints em **`docs/ANALYTICS-API.md`**.
-- **POST** opcional **`/analytics/export-product-to-spaces`**: exporta produto ao DigitalOcean Spaces (credenciais `SPACES_*` no servidor). No painel **Product Score**, botão por linha na coluna **Space**.
+- **POST** opcional **`/analytics/export-product-to-spaces`**: exporta produto ao DigitalOcean Spaces (credenciais `SPACES_*` no **`.env` da raiz** — descomentadas e preenchidas; teste: `npm run test:spaces`). A API carrega só esse ficheiro via **`scripts/load-root-env.mjs`**. Se **503** «…em falta no .env»: confirma que o processo da API arrancou **a partir da raiz do clone** e que não há `SPACES_*` vazias no ambiente do sistema a bloquear o `dotenv` (comportamento por defeito: não sobrescreve variáveis já definidas).
+- **Regra estável (Spaces):** não alterar `load-root-env.mjs` nem o fluxo de credenciais sem tarefa no ROADMAP + `npm run test:spaces`. Copiar **Access Key ID completo** da DO (botão copiar — a tabela trunca e quebra o export). Ver **`.cursor/rules/spaces-env-stable.mdc`**.
+- No painel **Product Score**, botão por linha na coluna **Space**; no **workspace** do produto, **Exportar ao Space**.
 
 Relatórios equivalentes aos da tabela CLI; **Escalar** e **category-map** no painel espelham o mesmo universo que `analytics:scalable` e `analytics:category-map`.
 
@@ -198,11 +254,12 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 
 ### 9. Painel web — comportamento actual (rápido)
 
-- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). O cartão inteiro é cliclável (`/categoria/...` com estado `categoryUrl`).
-- **`/analytics`** — Analytics **global**. Os separadores (Top Products, Opportunities, …) **pedem dados à API ao abrir e ao mudar de separador**. O botão **Carregar dados** **actualiza** só o separador activo (útil depois de novo import ou para forçar refresh).
+- **`/`** — Painel inicial: cartões por categoria (**GET `/analytics/categories`**). Contagem grande = **produtos únicos na base**; **Última importação** = produtos snapshots na última run da pasta; **Lojas nesta corrida** = lojas distintas só nesses mesmos snapshots (quantidade nesta volta, sem lista de nomes). **Scrapear as duas categorias** na barra chama **POST `/scrape/run-both`** (equiv. `scripts/scrape-both.mjs` + `consolidate-category-outputs.mjs`), depois **POST `/analytics/import-output`** e recarrega a lista — URLs fixas como em **`npm run coleta`**, não dependem do número de cartões. Cada cartão tem **Scrapear** ( **POST `/scrape/run`**: grava em `output/categorias/<slug>` quando a URL é das duas categorias do projecto — como `scrape-both` — e corre **consolidate** para voltar a juntar `output/dados_*.json` antes do import; depois import e recarregar) e **Abrir análise** → `/categoria/...` com estado `categoryUrl`. Se o import falhar, o painel mostra o erro e podes correr **`npm run db:import:output`** na raiz. **Import idempotente:** se o JSON consolidado for **byte-a-byte igual** ao de um import anterior, o importador **não cria novo** `ScrapeRun` (`input_hash` igual) — o painel mostra aviso **amarelo** (`skipped` na API); os cartões só mudam quando houver dados novos no ficheiro.
+- **`/analytics`** — Analytics **global**. Os separadores (Top Products, Opportunities, …) **pedem dados à API ao abrir e ao mudar de separador**. O botão **Carregar dados** **actualiza** só o separador activo (útil depois de novo import ou para forçar refresh). **Top Products** e **Opportunities**: o painel pede um `limit` alto à API e mostra primeiro **20** linhas; use **Ver mais produtos** para ver o resto já carregado (mesma ordem; cabeçalhos reordenam só o que está em memória). Em **Opportunities**, os **modos** (Classic, baixas, sem vendas, abaixo da mediana) enviam `?mode=` à API e voltam a carregar ao mudar; **▾** no cabeçalho de cada coluna abre filtro e A–Z (estilo Excel). Em **Top Products**, **Opportunities**, **Product Score**, **Em Ascensão**, **Escalar** e **Mapa** (segunda tabela, *SKU em destaque*), **clique na linha** abre o workspace **`/produto/:id`** quando há produto (excepto colunas de link TikTok «abrir», **Exportar** e, no Product Score, **Enriquecer PDP**). Na primeira tabela do **Mapa** (pastas agregadas) não há um produto por linha — não usa esse atalho.
 - **`/categoria/:slug`** — Mesmos relatórios com **`?categoryUrl=...`**; carregamento automático igual ao global.
-- **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`.
-- **`/a-mao`** — Produtos em análise: histórico local + métricas via API. Em **Exportar** (coluna Ações nas tabelas Analytics), após o POST ao Spaces o fluxo regista o produto no histórico e **navega para `/a-mao`**.
+- **`/produto/:id`** — Página workspace (GET **`/analytics/product-workspace/:id`**). Se o produto não tiver snapshot no **último** `ScrapeRun` global mas tiver dados mais antigos na BD, a API pode devolver métricas a partir do **snapshot mais recente desse produto** (alinha ao export Spaces); o JSON pode incluir `snapshotFromLatestGlobalRun` e `globalLatestScrapeRun`. **Pipeline creator** (estágio operacional) e **notas** ficam em `localStorage` neste browser (chave `productStatus` + prefixo de notas). Na secção **Ligações**: **Enriquecer PDP** grava galeria no `dados_produtos.json` consolidado (servidor); **Actualizar dados — import JSON→BD** corre o import Prisma a partir desse ficheiro; **Refrescar da BD** só repete o GET do workspace (útil após import na CLI ou doutro separador, **sem** novo import).
+- **`/a-mao`** — Hub operacional **Produtos em análise**: abas **Recentes** (histórico `recentWorkspace` + API), **Por estágio** (agrupa recentes + shortlist + chaves de `productStatus`) e **Shortlist** (resumo + link para **`/shortlist`**). Métricas na aba Recentes vêm da API ao abrir ou **Atualizar lista**. Em **Exportar** (Analytics), após o POST ao Spaces o fluxo pode ir a **`/a-mao`**; export bem-sucedido marca **Conteúdo produzido** no pipeline local.
+- **`/shortlist`** — Minha shortlist: favoritos escolhidos no workspace (`tiktok-analytics-creator-shortlist` no `localStorage`). Não substitui `/a-mao` (histórico de aberturas).
 - **Enriquecer PDP** — Não corre sozinho ao abrir links; é acção explícita (**POST `/analytics/pdp-enrich`**) descrita em `scripts/analytics/pdp-enrich-route.mjs`.
 
 ### 10. Docker no Droplet (API + painel; painel em **:8080** por defeito)
@@ -212,4 +269,5 @@ Se mudares **`ANALYTICS_API_PORT`** ou a porta do Vite (`vite.config.js`), docum
 - Se **`git pull` abortar** por alterações locais (`docker-compose.yml`, `package-lock.json`, …), o código fica desactualizado (ex. sem `db:check`). Ver **`docs/DOCKER.md`** — secção *Se `git pull` diz que alterações locais seriam sobrescritas*.
 - **Prisma Studio** no servidor: no PC usa **`ssh -L 5555:127.0.0.1:5555 …`** e no servidor **`npm run prisma:studio`** sem fechar com Ctrl+C; no browser local **http://127.0.0.1:5555**.
 - Painel: **`http://<IP-DO-DROPLET>:8080/`** (se a porta 80 do host estiver livre, podes definir `COMPOSE_WEB_PORT=80` no `.env`). Saúde: **`curl -s http://127.0.0.1:8080/health`** no servidor.
+- **Migrações:** com Compose, ficam aplicadas quando o **`api`** sobe (**`docker compose up`** / rebuild). Só corres **`npm run db:migrate:deploy`** na VM se trabalhares **sem** contentor contra a mesma `DATABASE_URL` (host → Postgres).
 - CI: **`.github/workflows/deploy-droplet-docker.yml`** — secrets `DROPLET_HOST`, `DROPLET_USER`, `DROPLET_SSH_KEY` (e opcionalmente `DROPLET_DEPLOY_PATH`); no Droplet o `.env` mantém-se à mão (não vem do GitHub).

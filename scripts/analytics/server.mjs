@@ -12,9 +12,13 @@ import Fastify from "fastify";
 import { requireDatabaseUrl } from "./_common.mjs";
 import { getGrowthReport } from "./lib/growth.mjs";
 import { getNewProductsReport } from "./lib/new-products.mjs";
-import { getOpportunitiesReport } from "./lib/opportunities.mjs";
+import {
+  clampOpportunitiesLimit,
+  getOpportunitiesReport,
+  parseOpportunityMode
+} from "./lib/opportunities.mjs";
 import { getProductScoreReport } from "./lib/product-score.mjs";
-import { getTopProductsReport } from "./lib/top-products.mjs";
+import { clampTopProductsLimit, getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
@@ -22,6 +26,7 @@ import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
+import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
@@ -77,7 +82,18 @@ fastify.get("/analytics/top-products", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getTopProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  const limRaw = req.query?.limit;
+  const limit = clampTopProductsLimit(
+    typeof limRaw === "string"
+      ? limRaw
+      : Array.isArray(limRaw) && limRaw.length > 0
+        ? limRaw[0]
+        : undefined
+  );
+  return getTopProductsReport(prisma, {
+    ...(categoryUrl !== "" ? { categoryUrl } : {}),
+    limit
+  });
 });
 
 fastify.get("/analytics/opportunities", async (req) => {
@@ -88,7 +104,27 @@ fastify.get("/analytics/opportunities", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getOpportunitiesReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  const limRaw = req.query?.limit;
+  const limit = clampOpportunitiesLimit(
+    typeof limRaw === "string"
+      ? limRaw
+      : Array.isArray(limRaw) && limRaw.length > 0
+        ? limRaw[0]
+        : undefined
+  );
+  const modeRaw = req.query?.mode;
+  const mode = parseOpportunityMode(
+    typeof modeRaw === "string"
+      ? modeRaw
+      : Array.isArray(modeRaw) && modeRaw.length > 0 && typeof modeRaw[0] === "string"
+        ? modeRaw[0]
+        : ""
+  );
+  return getOpportunitiesReport(prisma, {
+    ...(categoryUrl !== "" ? { categoryUrl } : {}),
+    limit,
+    mode
+  });
 });
 
 
@@ -105,7 +141,16 @@ fastify.get("/analytics/product-score", async (req) => {
 
 fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma));
 
-fastify.get("/analytics/growth", async () => getGrowthReport(prisma));
+fastify.get("/analytics/growth", async (req) => {
+  const raw = req.query?.categoryUrl;
+  const categoryUrl =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
+        ? raw[0].trim()
+        : "";
+  return getGrowthReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+});
 
 async function scalableProductsFromQuery(req) {
   const raw = req.query?.categoryUrl;
@@ -248,6 +293,7 @@ fastify.post("/analytics/export-product-to-spaces", async (req, reply) => {
 
 registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
+registerScrapeRunRoute(fastify);
 
 const graceful = async () => {
   await fastify.close();

@@ -6,13 +6,28 @@
  * Modo com `categoryUrl`: para cada produto cuja `Product.categoryUrl` normaliza igual ao parâmetro,
  * escolhe-se o snapshot com `sales_count` não nulo cujo run tem **`ScrapeRun.collected_at` máximo**
  * entre todos os snapshots desse produto — não limita aos snapshots só do último run global — e depois
- * ordenam-se por vendas desc e aplicam-se 20 linhas (igual ao global).
+ * ordenam-se por vendas desc; o parâmetro `limit` corta quantas linhas devolver (defeito 20, máx. 10000).
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 
-const MAX_ROWS = 20;
+export const TOP_PRODUCTS_DEFAULT_LIMIT = 20;
+export const TOP_PRODUCTS_MAX_LIMIT = 10000;
+
+/** @param {unknown} raw */
+export function clampTopProductsLimit(raw) {
+  const n =
+    typeof raw === "number" && Number.isFinite(raw)
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+        ? Number(raw.trim())
+        : NaN;
+  if (!Number.isFinite(n) || n < 1) {
+    return TOP_PRODUCTS_DEFAULT_LIMIT;
+  }
+  return Math.min(Math.floor(n), TOP_PRODUCTS_MAX_LIMIT);
+}
 
 /**
  * @param {*} s — ProductSnapshot com product.seller
@@ -34,11 +49,17 @@ function snapshotToItemRow(s) {
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
- * @param {{ categoryUrl?: string }} [opts]
+ * @param {{ categoryUrl?: string, limit?: number }} [opts]
+ *   — `limit` em [1, TOP_PRODUCTS_MAX_LIMIT]; omitido → TOP_PRODUCTS_DEFAULT_LIMIT (CLI).
  */
 export async function getTopProductsReport(prisma, opts = {}) {
   const rawCat =
     opts.categoryUrl != null && typeof opts.categoryUrl === "string" ? opts.categoryUrl.trim() : "";
+  const limit =
+    typeof opts.limit === "number" && Number.isFinite(opts.limit)
+      ? Math.min(Math.max(1, Math.floor(opts.limit)), TOP_PRODUCTS_MAX_LIMIT)
+      : TOP_PRODUCTS_DEFAULT_LIMIT;
+
   const { latest } = await getLatestAndPreviousRun(prisma);
 
   if (!latest) {
@@ -50,33 +71,46 @@ export async function getTopProductsReport(prisma, opts = {}) {
   }
 
   if (!rawCat) {
-    const rows = await prisma.productSnapshot.findMany({
-      where: {
-        scrapeRunId: latest.id,
-        salesCount: { not: null }
-      },
-      include: {
-        product: { include: { seller: true } }
-      },
-      orderBy: { salesCount: "desc" },
-      take: MAX_ROWS
-    });
+    const whereGlobal = {
+      scrapeRunId: latest.id,
+      salesCount: { not: null }
+    };
 
-    if (rows.length === 0) {
+    const rankingTotal = await prisma.productSnapshot.count({ where: whereGlobal });
+
+    if (rankingTotal === 0) {
       return {
         scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
         items: [],
+        rankingTotal: 0,
+        listed: 0,
+        limit,
+        truncated: false,
         message: `Último ScrapeRun (${latest.id}): nenhum snapshot com sales_count.`
       };
     }
 
+    const rows = await prisma.productSnapshot.findMany({
+      where: whereGlobal,
+      include: {
+        product: { include: { seller: true } }
+      },
+      orderBy: { salesCount: "desc" },
+      take: limit
+    });
+
     const items = rows.map((s) => snapshotToItemRow(s));
+    const truncated = rankingTotal > items.length;
 
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items,
       listed: items.length,
-      maxRows: MAX_ROWS
+      rankingTotal,
+      limit,
+      truncated,
+      /** Compatível com cliente antigo (`maxRows` = linhas máximas pedidas nesta resposta). */
+      maxRows: limit
     };
   }
 
@@ -86,7 +120,10 @@ export async function getTopProductsReport(prisma, opts = {}) {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
       listed: 0,
-      maxRows: MAX_ROWS,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       categoryUrlFilter: filterKey,
       message: "categoryUrl normalizado ficou vazio — confirme a URL da categoria."
     };
@@ -105,7 +142,10 @@ export async function getTopProductsReport(prisma, opts = {}) {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
       listed: 0,
-      maxRows: MAX_ROWS,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       categoryUrlFilter: filterKey,
       message: `Nenhum produto encontrado para categoria (${filterKey}).`
     };
@@ -144,26 +184,35 @@ export async function getTopProductsReport(prisma, opts = {}) {
     const vb = Number(b.salesCount ?? 0);
     return vb - va;
   });
-  const top = ranked.slice(0, MAX_ROWS);
 
-  if (top.length === 0) {
+  const rankingTotal = ranked.length;
+
+  if (rankingTotal === 0) {
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items: [],
       listed: 0,
-      maxRows: MAX_ROWS,
+      rankingTotal: 0,
+      limit,
+      truncated: false,
+      maxRows: limit,
       categoryUrlFilter: filterKey,
       message: `Produtos nesta categoria sem sales_count nos snapshots (${filterKey}).`
     };
   }
 
+  const top = ranked.slice(0, limit);
   const items = top.map((s) => snapshotToItemRow(s));
+  const truncated = rankingTotal > items.length;
 
   return {
     scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
     items,
     listed: items.length,
-    maxRows: MAX_ROWS,
+    rankingTotal,
+    limit,
+    truncated,
+    maxRows: limit,
     categoryUrlFilter: filterKey
   };
 }

@@ -40,7 +40,20 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [x] **Metadados de origem:** `run_type` em `ScrapeRun` (opcional na BD com default `"unknown"`; import padrão grava **`quick_scrape`**; opcional `IMPORT_RUN_TYPE=pdp_enrich` no mesmo importador) — não altera hash nem relatórios
 - [x] **Analytics v1** (CLI read-only, `scripts/analytics/`): `analytics:top-products`, `analytics:new-products`, `analytics:growth`, `analytics:opportunities`, `analytics:product-score` — ver `docs/ANALYTICS.md`
 - [x] **API analytics HTTP read-only (v1):** Fastify (`npm run analytics:api`), `scripts/analytics/server.mjs`, `docs/ANALYTICS-API.md`; auth com `ANALYTICS_API_KEY`
-- [x] **Painel web (v1 UI):** Vite + React em `frontend/` — `npm run frontend:dev`; fluxo em `FLUXO.md`
+- [x] **Carregamento `.env`:** `scripts/load-root-env.mjs` mantém só `.env` na raiz (sem segundo ficheiro nem `override`) — evita regressão em que um `.env.local` sobrescrevia `SPACES_*` com vazio; nota em `FLUXO.md` sobre **503** export Spaces e variáveis de sistema
+- [x] **Regra Cursor — Spaces estável:** `.cursor/rules/spaces-env-stable.mdc` (não alterar `load-root-env` / credenciais sem tarefa; Access Key ID completo da DO); referência em `FLUXO.md` e `architecture-context.mdc`
+- [x] **Operação local — um comando:** `npm run dev:all` sobe Postgres Docker local (`db:docker:up` + `db:docker:wait`) e API + Vite em paralelo; **`npm run dev:app`** só API + Vite (ex.: `DATABASE_URL` remoto)
+- [x] **Scrape manual pelo painel:** `POST /scrape/run` + botão **Scrapear** por cartão no dashboard inicial (`CategoriesPage.jsx`, URL da categoria do card); mutex simples na API (409 se ocupado)
+- [x] **Cartões «Categorias» — run mostrado:** `pickLatestRunMeta` em `scripts/analytics/lib/categories-catalog.mjs` em empate de `collected_at` passou a preferir `created_at` do `ScrapeRun` (evita cartão preso a contagens/horas de um import antigo quando há vários runs com o mesmo instante de coleta)
+- [x] **Painel operacional — cartões Categorias (`/`):** `GET /analytics/categories` + UI com estado da coleta, hash do import, novos/actualiz. aprox., cobertura multi-cat., aviso de URLs misturadas; `docs/ANALYTICS-API.md`
+- [x] **Painel — aba «Em Ascensão» (Growth):** GET `/analytics/growth` com `?categoryUrl=` quando filtrado; tabela só leitura do payload API — `frontend/src/analyticsDashboardCache.jsx`, `frontend/src/App.jsx`; filtro de categoria alinhado à API em `scripts/analytics/lib/growth.mjs`
+- [x] **Painel — filtros tipo Excel nos cabeçalhos (▾):** nas abas Opportunities, Top Products, Product Score, Mapa de categorias e Escalar (`frontend/src/App.jsx`; componente `ExcelSortTh`).
+- [x] **Opportunities — modos de análise (`mode`):** classic, vendas baixas (`low_sales`), sem vendas (`no_sales`), abaixo da mediana por categoria (`below_median`); API `GET ?mode=` e chips no painel; ver `scripts/analytics/lib/opportunities.mjs` e docs.
+- [x] **Painel — Creator Presets:** atalhos só no `frontend` (aba + `mode` Opportunities + filtro Ticket partilhado); sem novos endpoints — `frontend/src/App.jsx`, `frontend/src/analyticsDashboardCache.jsx`, `frontend/src/ticketLabel.js`
+- [x] **Painel — Pipeline creator no workspace:** estados locais (`descoberto` … `descartado`), migração de valores legados (`exportado`→`conteudo_produzido`, `testar`→`em_teste`), UI no `ProductWorkspacePage.jsx`; `HandsOnPage` e chave `productStatus` mantidos — `frontend/src/productStatusStorage.js`
+- [x] **Painel — Shortlist / favoritos:** `frontend/src/productShortlistStorage.js`, botão no workspace, rota **`/shortlist`** (`ShortlistPage.jsx`, nav em `AppShell.jsx`) — só `localStorage`, sem API.
+- [x] **Painel — Hub `/a-mao`:** abas Recentes / Por estágio / Shortlist (resumo), prévia de notas locais, `HandsOnPage.jsx` — só frontend.
+- [x] **Grelha categoria:** cliques opcionais (default ligado) em **View more** / **Ver mais** após o scroll (`VIEW_MORE_MAX_CLICKS`, `VIEW_MORE`, `VIEW_MORE_DRAIN_MS` em `src/scrapeCategory.mjs`; ver `docs/ARCHITECTURE.md`) — sem alterar merge, XHR nem `normalizeItem`.
 
 **Futuro — evoluções (não bloqueadores da v1):**
 

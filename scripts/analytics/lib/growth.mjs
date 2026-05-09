@@ -1,14 +1,22 @@
 /**
  * Crescimento de vendas último vs run anterior — lógica partilhada CLI / API.
+ *
+ * Com `categoryUrl` opcional: restringe o universo aos produtos dessa categoria (mesma normalização que outros relatórios).
+ * A fórmula de cada par (delta, %, ordenação) mantém-se igual.
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
+import { normalizeCategoryKey } from "./categories-catalog.mjs";
 
 const TOP_LIMIT = 20;
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
+ * @param {{ categoryUrl?: string }} [opts]
  */
-export async function getGrowthReport(prisma) {
+export async function getGrowthReport(prisma, opts = {}) {
+  const rawCat =
+    opts.categoryUrl != null && typeof opts.categoryUrl === "string" ? opts.categoryUrl.trim() : "";
+
   const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
 
   if (!latest) {
@@ -29,10 +37,47 @@ export async function getGrowthReport(prisma) {
     };
   }
 
+  /** Restringir por categoria TikTok quando pedido — mesmo critério de `normalizeCategoryKey`. */
+  let categoryFilterIds = /** @type {string[] | null} */ (null);
+  let categoryUrlFilter = /** @type {string | undefined} */ (undefined);
+  if (rawCat !== "") {
+    const filterKey = normalizeCategoryKey(rawCat);
+    if (!filterKey) {
+      return {
+        latestRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
+        previousRun: { id: previous.id, collectedAt: previous.collectedAt.toISOString() },
+        items: [],
+        message: "categoryUrl normalizado ficou vazio — confirme a URL da categoria."
+      };
+    }
+    categoryUrlFilter = filterKey;
+    const products = await prisma.product.findMany({
+      where: { categoryUrl: { not: null } },
+      select: { id: true, categoryUrl: true }
+    });
+    categoryFilterIds = products
+      .filter((p) => p.categoryUrl != null && normalizeCategoryKey(p.categoryUrl) === filterKey)
+      .map((p) => p.id);
+    if (categoryFilterIds.length === 0) {
+      return {
+        latestRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
+        previousRun: { id: previous.id, collectedAt: previous.collectedAt.toISOString() },
+        items: [],
+        categoryUrlFilter,
+        message: `Nenhum produto encontrado para categoria (${filterKey}).`
+      };
+    }
+  }
+
+  const snapWhereBase = {
+    salesCount: { not: null },
+    ...(categoryFilterIds != null ? { productRefId: { in: categoryFilterIds } } : {})
+  };
+
   const prevSnaps = await prisma.productSnapshot.findMany({
     where: {
       scrapeRunId: previous.id,
-      salesCount: { not: null }
+      ...snapWhereBase
     },
     select: {
       productRefId: true,
@@ -44,7 +89,7 @@ export async function getGrowthReport(prisma) {
   const latestSnaps = await prisma.productSnapshot.findMany({
     where: {
       scrapeRunId: latest.id,
-      salesCount: { not: null }
+      ...snapWhereBase
     },
     include: {
       product: { include: { seller: true } }
@@ -75,6 +120,7 @@ export async function getGrowthReport(prisma) {
       latestRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       previousRun: { id: previous.id, collectedAt: previous.collectedAt.toISOString() },
       items: [],
+      ...(categoryUrlFilter != null ? { categoryUrlFilter } : {}),
       message:
         "Sem pares comparáveis: nenhum produto com vendas não nulas no último e no run anterior (ou apenas um run com dados)."
     };
@@ -84,6 +130,7 @@ export async function getGrowthReport(prisma) {
     productId: s.product.productId,
     nome: (s.product.name ?? "").slice(0, 38),
     loja: (s.product.seller?.name ?? "—").slice(0, 24),
+    preco: s.price ?? null,
     vendasAnt: prevSales,
     vendasAtual: s.salesCount,
     delta,
@@ -97,6 +144,7 @@ export async function getGrowthReport(prisma) {
     items,
     sortNote: "ordenação por maior delta absoluto de vendas",
     listed: items.length,
-    maxRows: TOP_LIMIT
+    maxRows: TOP_LIMIT,
+    ...(categoryUrlFilter != null ? { categoryUrlFilter } : {})
   };
 }

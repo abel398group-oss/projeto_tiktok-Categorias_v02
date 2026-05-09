@@ -8,6 +8,7 @@
  * Dados de entrega: por defeito na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; resto (debug, caça) em `output/extra/`.
  * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
+ * Grelha: após scroll, até `VIEW_MORE_MAX_CLICKS` (1–10, default 8) cliques em **View more** / **Ver mais** (desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`); só dispara UI — XHR/merge/router inalterados.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
  * -- Modelo de dados (conceitual; contrato de ficheiros em `docs/ARCHITECTURE.md`) --
@@ -2680,6 +2681,125 @@ async function scrollToLoadGrid(page) {
   await humanPause(page, 150, 300);
 }
 
+/**
+ * Após o scroll da grelha: clica em "View more" / "Ver mais" (e equivalentes) para a UI carregar mais blocos.
+ * Os novos produtos entram só via fluxo existente (`response` + merge); não altera normalização nem router.
+ *
+ * Desligar: `VIEW_MORE=0` ou `VIEW_MORE_MAX_CLICKS=0`.
+ *
+ * @param {import("puppeteer").Page} page
+ * @param {() => number} getProductCount
+ */
+async function clickViewMoreWhileNeeded(page, getProductCount) {
+  const off = process.env.VIEW_MORE === "0";
+  const rawMax = Number(process.env.VIEW_MORE_MAX_CLICKS);
+  const maxClicksConfigured = Number.isFinite(rawMax) ? rawMax : 8;
+  const maxClicks = off ? 0 : Math.min(10, Math.max(0, maxClicksConfigured));
+  const drainMs = Math.max(800, Number(process.env.VIEW_MORE_DRAIN_MS) || 4500);
+
+  if (maxClicks === 0) {
+    // eslint-disable-next-line no-console
+    console.log("[view-more] encerrando (motivo: VIEW_MORE_MAX_CLICKS=0 ou VIEW_MORE=0)");
+    return;
+  }
+
+  let noGrowthStreak = 0;
+
+  for (let i = 0; i < maxClicks; i++) {
+    const found = await page.evaluate(() => {
+      const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+      const matches = (t) => {
+        const s = norm(t).toLowerCase();
+        if (!s) return false;
+        if (s === "view more" || s === "ver mais" || s === "see more" || s === "mostrar mais") return true;
+        return /^(view more|ver mais|see more|mostrar mais)\b/i.test(s) && s.length <= 52;
+      };
+      const visible = (el) => {
+        if (!el || !(el instanceof HTMLElement)) return false;
+        const st = window.getComputedStyle(el);
+        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 2 && r.height > 2;
+      };
+
+      const nodes = Array.from(
+        document.querySelectorAll(
+          'button,[role="button"],a[class*="cursor-pointer"],div[role="button"],span[role="button"]'
+        )
+      );
+      /** @type {HTMLElement | null} */
+      let best = null;
+      for (const el of nodes) {
+        const t = norm(el.textContent);
+        if (!matches(t)) continue;
+        if (!visible(el)) continue;
+        /** @type {HTMLElement | null} */
+        let hx = el;
+        if (hx != null && (hx.tagName === "SPAN" || hx.tagName === "I")) {
+          hx = hx.closest('button,[role="button"],a,[role="link"]');
+        }
+        const target = hx && visible(hx) ? hx : el;
+        best = /** @type {HTMLElement} */ (target);
+        break;
+      }
+      if (!best) {
+        return { ok: false, label: "" };
+      }
+      const lbl = norm(best.textContent).slice(0, 72);
+      try {
+        try {
+          best.scrollIntoView({ block: "center", behavior: "instant" });
+        } catch {
+          /* noop */
+        }
+        best.click();
+        return { ok: true, label: lbl };
+      } catch (e) {
+        return { ok: false, label: lbl || "", err: String(e?.message ?? e) };
+      }
+    });
+
+    if (!found.ok) {
+      // eslint-disable-next-line no-console
+      console.log(
+        found.err
+          ? `[view-more] encerrando (motivo: clique falhou — ${found.err})`
+          : "[view-more] encerrando (motivo: botão não encontrado)"
+      );
+      break;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log("[view-more] botão encontrado");
+    const before = getProductCount();
+    // eslint-disable-next-line no-console
+    console.log(`[view-more] clique ${i + 1}`);
+    await humanPause(page, 1000, 2000);
+
+    const t0 = Date.now();
+    while (Date.now() - t0 < drainMs) {
+      if (getProductCount() > before) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    const after = getProductCount();
+    const delta = after - before;
+    // eslint-disable-next-line no-console
+    console.log(`[view-more] novos produtos detectados: ${delta}`);
+
+    if (delta === 0) {
+      noGrowthStreak += 1;
+      if (noGrowthStreak >= 2) {
+        // eslint-disable-next-line no-console
+        console.log("[view-more] encerrando (motivo: contagem não aumentou após cliques consecutivos)");
+        break;
+      }
+    } else {
+      noGrowthStreak = 0;
+    }
+  }
+}
+
 const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
 
 /**
@@ -3247,6 +3367,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
       await gentleMouseJiggle(page);
       await scrollToLoadGrid(page);
       await humanPause(page, 1000, 2000);
+      await clickViewMoreWhileNeeded(page, () => byProductId.size);
       // Handlers `response` são assíncronos: drena até o mapa estabilizar (teto ~5s como antes)
       await waitForStableProductFeed(() => byProductId.size);
 
@@ -3403,6 +3524,11 @@ async function runCategoryHarvest(browser, page, startUrl) {
       : "(nenhum HIT com produtos; confira se final_url é shop.tiktok.com e cookies/login)";
     await fs.writeFile(debugFile, head + body, "utf8");
   }
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[categoria] Produtos recolhidos nesta categoria: ${byProductId.size} (únicos por product_id, status=${status})`
+  );
 
   // eslint-disable-next-line no-console
   console.log(

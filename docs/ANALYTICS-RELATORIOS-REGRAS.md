@@ -21,11 +21,12 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 
 **Regra**
 
-- Produtos (`ProductSnapshot`) do **último** `ScrapeRun` com **`sales_count` não nulo**.
-- **`orderBy: sales_count desc`**, **`take: 20`** (`MAX_ROWS`).
+- **Modo global** (sem `categoryUrl`): `ProductSnapshot` do **último** `ScrapeRun` com **`sales_count` não nulo**; **`orderBy: sales_count desc`**; resposta com até **`limit`** linhas (Prisma `take: limit`).
+- **Modo categoria** (`categoryUrl`): produtos cuja categoria normaliza ao filtro; por produto escolhe-se o snapshot com `sales_count` não nulo no run de **`collected_at` mais recente**; ordena-se por vendas desc; aplicam-se as primeiras **`limit`** linhas.
+- **Parâmetro HTTP `limit`:** inteiro em **[1, 10000]** (`TOP_PRODUCTS_MAX_LIMIT`); **omitido ou inválido → 20** (`TOP_PRODUCTS_DEFAULT_LIMIT`, usado pelo CLI `npm run analytics:top-products`). O painel web pede `limit` maior (ex.: 5000) via `analyticsDashboardCache.jsx`; a meta **`rankingTotal`** / **`truncated`** reflecte se há mais produtos no ranking do que **`items`** nesta resposta.
 - **`items[].avaliacao`**: média como **número** ou **`null`** (sem string vazia); `nome` e `loja` sem truncar na API (truncagem só pode ser feita no UI).
 
-**Não há** filtro por desconto, categoria nem loja neste relatório.
+**Não há** filtro HTTP por desconto nem por loja; opcionalmente **`categoryUrl`** restringe a produtos dessa categoria (ver modo categoria acima).
 
 ---
 
@@ -35,16 +36,27 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 |--|--|
 | Fonte | `scripts/analytics/lib/opportunities.mjs` |
 
-**Último run**, `ProductSnapshot`:
+**Filtros por modo** (modo global: último run; modo `categoryUrl`: um snapshot por produto = run de `collected_at` mais recente; depois aplica-se o modo de vendas):
 
-- `price` não nulo  
-- `rating_average >= 4.5`  
-- `rating_total >= 5`  
-- `sales_count >= 10` e `<= 300`
+- **`classic`**, **`low_sales`**, **`below_median`:** `price` não nulo; `rating_average >= 4.5`; `rating_total >= 5`; depois a regra de vendas do modo.
+- **`no_sales`:** `price` não nulo; `product_id` não vazio; `sales_count` **IS NULL** ou **= 0**; **sem** mínimo de rating nem de total de avaliações.
 
-**Ordem servidor:** média descendente → vendas descendente (`take` 20).
+**Parâmetro `mode`** (`parseOpportunityMode` em código; omitido ⇒ `classic`):
 
----
+| Modo | Vendas (`sales_count`) |
+|------|---------------------------|
+| `classic` | `>= 10` e `<= 300` |
+| `low_sales` | `>= 1` e `<= 99` |
+| `no_sales` | `IS NULL` ou `= 0` (com filtros mínimos acima, sem rating) |
+| `below_median` | `>= 1` e `< mediana` da categoria **mestre** (ver `computeMedianSalesByMasterCategory` — mediana só com valores não nulos no mesmo último run) |
+
+**Ordem servidor:** `no_sales` → `captured_at` descendente; outros modos → média descendente → vendas descendente; até **`limit`** linhas na resposta (**defeito 20**, máx. **10000**; omitido ou inválido na query → defeito CLI).
+
+Meta-resposta quando há dados: **`rankingTotal`**, **`listed`**, **`limit`**, **`truncated`**, **`maxRows`**, **`ruleNote`**, **`opportunityMode`**.
+
+O painel web pede `limit` alto (ex.: 5000), `mode` conforme chips na aba Opportunities, via `analyticsDashboardCache.jsx`; ajustável com **`OPPORTUNITIES_UI_FETCH_LIMIT`**.
+
+**Não há** filtro HTTP por desconto nem por loja; opcionalmente **`categoryUrl`** como em Top Products.
 
 ## Product Score (`/analytics/product-score`)
 
