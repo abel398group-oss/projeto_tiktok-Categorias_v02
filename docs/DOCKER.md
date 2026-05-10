@@ -4,6 +4,8 @@
 
 Um contentor corre a **API** (Node + Prisma); outro o **Nginx** com o build do **React** e proxy de **`/analytics`**, **`/scrape`** e **`/health`** para a API (`deploy/nginx-docker.conf`).
 
+A imagem **`Dockerfile.api`** inclui o pacote Debian **`chromium`** e bibliotecas para headless, com **`PUPPETEER_SKIP_DOWNLOAD=1`** (sem Chrome empacotado pelo npm) e **`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`**. O scraper (`src/scrapeCategory.mjs`) usa `executablePath` quando essa variável está definida (também podes sobrescrever no `.env` do Easypanel).
+
 ### Ficheiros Compose
 
 | Ficheiro | Uso |

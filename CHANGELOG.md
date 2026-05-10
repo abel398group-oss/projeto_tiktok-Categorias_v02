@@ -8,6 +8,10 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 
 - **Docker Compose:** `docker-compose.yml` deixa de mapear portas no host (`expose` + healthchecks; `web` depende de `api` saudável); **`docker-compose.local.yml`** mapeia `web` para o host (`COMPOSE_WEB_PORT`, defeito 8080); **`docker-compose.easypanel.yml`** opcional (`include`). CI Droplet, `FLUXO.md`, `docs/DOCKER.md`, `.cursor/rules/droplet-docker-prisma.mdc` e `README.md` actualizados com os comandos.
 
+### Added
+
+- **`Dockerfile.api`:** Chromium Debian + libs headless, **`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`**, mantendo **`PUPPETEER_SKIP_DOWNLOAD=1`** e o entrypoint Prisma. **`src/scrapeCategory.mjs`:** `launchTikTokBrowser` usa `executablePath` a partir de `PUPPETEER_EXECUTABLE_PATH` e flags `--disable-setuid-sandbox` entre outras.
+
 ## [0.1.1] - 2026-05-06
 
 ### Documentation

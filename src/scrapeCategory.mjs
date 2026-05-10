@@ -2840,16 +2840,21 @@ async function launchTikTokBrowser() {
   const isHeaded = process.env.HEADED === "1";
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
   const headless = isHeaded ? false : "new";
+  const execPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
   const launchOpts = {
     headless,
     args: [
       "--no-sandbox",
+      "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
       "--window-size=1366,800"
     ],
     defaultViewport: headless ? { width: 1366, height: 800 } : null
   };
+  if (execPath) {
+    launchOpts.executablePath = execPath;
+  }
   if (userDataDir) {
     launchOpts.userDataDir = userDataDir;
   }
