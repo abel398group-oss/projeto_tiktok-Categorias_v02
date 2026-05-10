@@ -45,8 +45,8 @@ jobs:
           cd "${REMOTE_PATH}"
           git fetch origin main
           git reset --hard origin/main
-          docker compose up -d --build
-          docker compose ps
-          WEB_HOST_PORT=$(docker compose port web 80 2>/dev/null | awk -F: '{print $NF}')
+          docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+          docker compose -f docker-compose.yml -f docker-compose.local.yml ps
+          WEB_HOST_PORT=$(docker compose -f docker-compose.yml -f docker-compose.local.yml port web 80 2>/dev/null | awk -F: '{print $NF}')
           curl -sf "http://127.0.0.1:${WEB_HOST_PORT:-8080}/health" | head -c 200 || true
           REMOTE_EOF

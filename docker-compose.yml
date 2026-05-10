@@ -1,13 +1,20 @@
-# Uso rápido (na pasta do projeto, com `.env` preenchido):
-#   docker compose up -d --build
+# Stack API (Fastify + Prisma) + Nginx (SPA Vite build).
 #
-# O ficheiro `.env` deve ter pelo menos DATABASE_URL e ANALYTICS_API_KEY (como em .env.example).
-# Para build do frontend, o Compose lê também VITE_ANALYTICS_API_KEY a partir deste mesmo `.env`
-# (${VITE_ANALYTICS_API_KEY} na secção build args abaixo).
+# Sem publicação de portas no host — adequado a EasyPanel / Traefik (ligação à rede interna
+# do contentor `web` na porta 80; API só em rede Docker na 3333).
 #
-# A API escuta em 0.0.0.0:3333 dentro da rede Docker; o contentor `web` expõe Nginx na porta 80 interna.
-# No host, por defeito usa-se 8080 para evitar conflito com Nginx/EasyPanel já na porta 80.
-# Opcional no `.env`: COMPOSE_WEB_PORT=80 (só se a porta 80 do host estiver livre).
+# Local ou VM com acesso directo por IP:porta no host:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Ou (equivalente):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.local.yml docker compose up -d --build
+#
+# EasyPanel: usar este ficheiro ou `docker-compose.easypanel.yml` (include deste).
+#
+# `.env` na raiz: DATABASE_URL, ANALYTICS_API_KEY; build do frontend: VITE_ANALYTICS_API_KEY
+# (ver `.env.example`, docs/DOCKER.md).
+
+name: tiktok-analytics
 
 services:
   api:
@@ -21,6 +28,18 @@ services:
     expose:
       - "3333"
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   web:
     build:
@@ -28,8 +47,19 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_ANALYTICS_API_KEY: ${VITE_ANALYTICS_API_KEY:-}
-    ports:
-      - "${COMPOSE_WEB_PORT:-8080}:80"
+    expose:
+      - "80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/health | grep -q '\"ok\":true' || exit 1"
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

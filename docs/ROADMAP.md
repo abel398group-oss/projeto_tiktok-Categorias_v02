@@ -32,6 +32,7 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 **v1 actual (no repo):**
 
 - [x] **CI (GitHub Actions):** push e PR — `npm test` **e** `npm run validate:schemas:ci` (fixtures em `test/fixtures/schema-ci/`) — ver `.github/workflows/ci.yml` e `README.md`.
+- [x] **Compose EasyPanel / Traefik:** `docker-compose.yml` sem `ports` no host (`expose` + healthchecks); `docker-compose.local.yml` para mapear `web` no host (Droplet/PC); `docker-compose.easypanel.yml` opcional (`include`); ver `docs/DOCKER.md` e `FLUXO.md`.
 - [x] Governança mínima do repositório (gitignore, CHANGELOG, ADR, engines, README)
 - [x] **JSON Schema** dos outputs (`schemas/dados_produtos.schema.json`, `schemas/dados_lojas.schema.json`)
 - [x] **Validação local** `npm run validate:schemas` (lê `output/dados_*.json`) e **opção `--data-dir`** em `scripts/validate-output-schema.mjs` para outras pastas
