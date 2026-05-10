@@ -1,0 +1,10 @@
+# EasyPanel / Traefik: reutiliza o stack base (sem `ports` no host).
+# No painel, definir "Docker Compose file" = este ficheiro (requer Compose com `include`,
+# Docker Compose v2.24+). Se o teu host tiver versão antiga, aponta directamente para
+# `docker-compose.yml` (é o mesmo conteúdo de serviços).
+#
+# Traefik / proxy do painel: encaminhar HTTP para o contentor `web`, porta interna **80**
+# (Nginx faz proxy de `/analytics`, `/scrape`, `/health` → serviço `api:3333`).
+
+include:
+  - path: ./docker-compose.yml
