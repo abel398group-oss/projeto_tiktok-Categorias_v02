@@ -1873,6 +1873,7 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
     const visitOnePdp = async (workerPage, n) => {
       try {
         await workerPage.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
+        await syncBrazilEnvToLivePage(workerPage);
         await humanPause(workerPage, 900, 1800);
         await workerPage
           .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
@@ -2816,6 +2817,75 @@ const BRAZIL_TIMEZONE_ID = "America/Sao_Paulo";
 /** Evita `evaluateOnNewDocument` duplicado na mesma `Page`. */
 const brazilBrowsingContextApplied = new WeakSet();
 
+/** Uma sessão CDP por `Page` (timezone + locale); evita acumular sessões em cada `sync`. */
+const brazilCdpSessionByPage = new WeakMap();
+
+/**
+ * @param {import("puppeteer").Page} page
+ * @returns {Promise<import("puppeteer").CDPSession>}
+ */
+async function getOrCreateBrazilCdpSession(page) {
+  let s = brazilCdpSessionByPage.get(page);
+  if (!s) {
+    s = await page.createCDPSession();
+    brazilCdpSessionByPage.set(page, s);
+  }
+  return s;
+}
+
+/**
+ * Reforça fingerprint Brasil no documento **actual** (útil pós-`goto`): `Accept-Language`,
+ * `emulateTimezone` + CDP `Emulation.setTimezoneOverride` / `setLocaleOverride`, e overrides no
+ * main world a `navigator.language` / `navigator.languages` (o stealth pode deixar `en-US` só com
+ * `evaluateOnNewDocument`).
+ * @param {import("puppeteer").Page} page
+ */
+async function syncBrazilEnvToLivePage(page) {
+  await page.setExtraHTTPHeaders({
+    "Accept-Language": TIKTOK_ACCEPT_LANGUAGE
+  });
+  try {
+    await page.emulateTimezone(BRAZIL_TIMEZONE_ID);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] emulateTimezone:", e?.message || e);
+  }
+  try {
+    const cdp = await getOrCreateBrazilCdpSession(page);
+    await cdp.send("Emulation.setTimezoneOverride", { timezoneId: BRAZIL_TIMEZONE_ID });
+    await cdp.send("Emulation.setLocaleOverride", { locale: "pt-BR" });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] CDP timezone/locale:", e?.message || e);
+  }
+  try {
+    await page.evaluate(() => {
+      const langs = Object.freeze(["pt-BR", "pt", "en-US", "en"]);
+      try {
+        Object.defineProperty(navigator, "language", {
+          get: () => "pt-BR",
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop */
+      }
+      try {
+        Object.defineProperty(navigator, "languages", {
+          get: () => langs,
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop */
+      }
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] navigator override (main world):", e?.message || e);
+  }
+}
+
 /**
  * Deduplica lojas por `seller_id` a partir do mapa de produtos.
  * Alimenta `output/dados_lojas.json` (agregado oficial por vendedor; ver `docs/ARCHITECTURE.md`).
@@ -2873,41 +2943,28 @@ async function detectTiktokSecurityChallenge(page) {
  * @param {import("puppeteer").Page} page
  */
 async function applyBrazilBrowsingContext(page) {
-  if (brazilBrowsingContextApplied.has(page)) {
-    return;
+  if (!brazilBrowsingContextApplied.has(page)) {
+    await page.evaluateOnNewDocument(() => {
+      try {
+        const langs = Object.freeze(["pt-BR", "pt", "en-US", "en"]);
+        Object.defineProperty(navigator, "language", {
+          get: () => "pt-BR",
+          configurable: true,
+          enumerable: true
+        });
+        Object.defineProperty(navigator, "languages", {
+          get: () => langs,
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop — stealth ou CSP */
+      }
+    });
+    brazilBrowsingContextApplied.add(page);
   }
   await page.setUserAgent(CHROME_STABLE_USER_AGENT);
-  await page.setExtraHTTPHeaders({
-    "Accept-Language": TIKTOK_ACCEPT_LANGUAGE
-  });
-  try {
-    await page.emulateTimezone(BRAZIL_TIMEZONE_ID);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[locale] emulateTimezone:", e?.message || e);
-  }
-  try {
-    const client = await page.createCDPSession();
-    await client.send("Emulation.setLocaleOverride", { locale: "pt-BR" });
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[locale] setLocaleOverride:", e?.message || e);
-  }
-  await page.evaluateOnNewDocument(() => {
-    try {
-      Object.defineProperty(navigator, "language", {
-        get: () => "pt-BR",
-        configurable: true
-      });
-      Object.defineProperty(navigator, "languages", {
-        get: () => Object.freeze(["pt-BR", "pt", "en-US", "en"]),
-        configurable: true
-      });
-    } catch {
-      /* noop — stealth ou CSP */
-    }
-  });
-  brazilBrowsingContextApplied.add(page);
+  await syncBrazilEnvToLivePage(page);
 }
 
 async function launchTikTokBrowser() {
@@ -3180,6 +3237,8 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
   const title = await page.title();
   await fs.writeFile(titlePath, `${title}\n`, "utf8");
 
+  await syncBrazilEnvToLivePage(page);
+
   const browserEnv = await page.evaluate(() => ({
     userAgent: navigator.userAgent,
     webdriver: navigator.webdriver,
@@ -3189,7 +3248,12 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     platform: navigator.platform
   }));
-  await fs.writeFile(envPath, JSON.stringify(browserEnv, null, 2), "utf8");
+  const browserEnvOut = {
+    ...browserEnv,
+    accept_language_header: TIKTOK_ACCEPT_LANGUAGE,
+    timezone_id: BRAZIL_TIMEZONE_ID
+  };
+  await fs.writeFile(envPath, JSON.stringify(browserEnvOut, null, 2), "utf8");
 
   const keywordHits = scanHtmlForAntiBotSignals(html);
   const selectors = [
@@ -3233,7 +3297,7 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
     status: meta.status,
     keyword_hits: keywordHits,
     selector_wait: selectorWait,
-    browser_env: browserEnv,
+    browser_env: browserEnvOut,
     xhr_entries: buckets.xhrLog.length,
     console_lines: buckets.consoleLog.length,
     request_failed: buckets.failed.length,
@@ -3717,18 +3781,20 @@ async function runCategoryHarvest(browser, page, startUrl) {
 
   await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
   await humanPause(page, 1250, 2250);
+  await syncBrazilEnvToLivePage(page);
   finalUrl = page.url();
 
-    if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
-      const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
-      finalUrl = w.url;
-      if (w.ok) {
-        reloadedCategoryAfterLogin = true;
-        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-        await humanPause(page, 1000, 2000);
-        finalUrl = page.url();
-      }
+  if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
+    const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
+    finalUrl = w.url;
+    if (w.ok) {
+      reloadedCategoryAfterLogin = true;
+      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await humanPause(page, 1000, 2000);
+      await syncBrazilEnvToLivePage(page);
+      finalUrl = page.url();
     }
+  }
 
     if (!/shop\.tiktok\.com/i.test(finalUrl)) {
       status = "not_shop";
