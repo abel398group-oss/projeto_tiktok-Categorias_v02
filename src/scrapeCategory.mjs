@@ -2472,7 +2472,20 @@ function shouldInspectUrl(url) {
 }
 
 async function humanPause(page, min = 200, max = 600) {
-  const ms = min + Math.random() * (max - min);
+  // Simula uma pausa humana ocasionalmente mais longa (ex: parou para ler algo)
+  const extraChance = Math.random();
+  let actualMax = max;
+  let actualMin = min;
+
+  if (extraChance > 0.95) {
+    actualMin = 2000;
+    actualMax = 5000;
+  } else if (extraChance > 0.8) {
+    actualMin = 800;
+    actualMax = 1500;
+  }
+
+  const ms = actualMin + Math.random() * (actualMax - actualMin);
   await new Promise((r) => setTimeout(r, ms));
 }
 
@@ -2506,13 +2519,30 @@ async function waitForStableProductFeed(getProductCount) {
 }
 
 async function gentleMouseJiggle(page) {
-  const vp = page.viewport() || { width: 1366, height: 768 };
-  const n = 4 + Math.floor(Math.random() * 2);
+  const vp = page.viewport() || { width: 1600, height: 900 };
+  const n = 3 + Math.floor(Math.random() * 3);
   for (let i = 0; i < n; i++) {
-    const x = 80 + Math.random() * (vp.width - 160);
-    const y = 120 + Math.random() * (vp.height - 200);
-    await page.mouse.move(x, y, { steps: 14 + Math.floor(Math.random() * 12) });
-    await humanPause(page, 120, 380);
+    const x = 100 + Math.random() * (vp.width - 200);
+    const y = 150 + Math.random() * (vp.height - 300);
+    // Movimento com velocidade variável
+    await page.mouse.move(x, y, { steps: 20 + Math.floor(Math.random() * 25) });
+    
+    // Pequena chance de um clique inofensivo em área vazia para simular interação
+    if (Math.random() > 0.9) {
+      await page.mouse.click(x, y, { delay: 50 + Math.random() * 100 });
+    }
+    
+    await humanPause(page, 200, 500);
+  }
+}
+
+function isTiktokMainHostname(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return false;
+  try {
+    const h = new URL(urlStr).hostname.toLowerCase();
+    return h === "www.tiktok.com" || h === "tiktok.com";
+  } catch {
+    return false;
   }
 }
 
@@ -2544,34 +2574,29 @@ function isShopTiktokHostname(urlStr) {
 async function waitForShopOrTimeout(browser, page, { maxMs, startUrl }) {
   // eslint-disable-next-line no-console
   console.log(
-    `[TikTok] Tela de login ou redirecionamento. Faça o login (QR pode abrir outra aba — o script sincroniza aqui). Até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
+    `[TikTok] MODO PACIENTE ATIVADO: Aguardando login manual. A janela NÃO vai fechar sozinha.`
   );
   const t0 = Date.now();
   let lastBeat = Date.now();
-  let first = true;
-  while (Date.now() - t0 < maxMs) {
-    if (!first) {
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-    first = false;
+  
+  // Aumentamos o tempo para quase infinito (1 hora) se estiver em modo headed
+  const actualMaxMs = process.env.HEADED === "1" ? 3600000 : maxMs;
 
-    if (Date.now() - lastBeat > 30_000) {
+  while (Date.now() - t0 < actualMaxMs) {
+    await new Promise((r) => setTimeout(r, 2000));
+
+    if (Date.now() - lastBeat > 15_000) {
       lastBeat = Date.now();
-      let nTabs = "?";
-      let u0 = "";
-      try {
-        u0 = page.url();
-        nTabs = String((await browser.pages()).length);
-      } catch {
-        /* noop */
-      }
       // eslint-disable-next-line no-console
-      console.log(
-        `[TikTok] À espera… ${nTabs} aba(s). URL na aba do script: ${u0.slice(0, 140)}${u0.length > 140 ? "…" : ""}`
-      );
+      console.log(`[TikTok] Ainda aguardando login... (Pode levar o tempo que precisar)`);
+      
+      // Tira foto para o assistente ver o progresso
+      try {
+        const loginSnapPath = path.join(OUT_AUX, "login_atual.png");
+        await page.screenshot({ path: loginSnapPath }).catch(() => {});
+      } catch { /* noop */ }
     }
 
-    let navigatedInsideWait = false;
     let u = "";
     try {
       u = page.url();
@@ -2580,62 +2605,19 @@ async function waitForShopOrTimeout(browser, page, { maxMs, startUrl }) {
     }
 
     if (isShopTiktokHostname(u)) {
-      // eslint-disable-next-line no-console
-      console.log(`[TikTok] Shop nesta aba (script): ${u.slice(0, 120)}${u.length > 120 ? "…" : ""}`);
+      console.log(`[TikTok] SUCESSO! Login detectado no Shop. Iniciando coleta...`);
       return { ok: true, url: u, navigatedInsideWait: false };
     }
-
-    /** @type {import("puppeteer").Page[]} */
-    let pages = [];
-    try {
-      pages = await browser.pages();
-    } catch {
-      continue;
-    }
-    for (const p of pages) {
-      if (p === page) continue;
-      let pu = "";
-      try {
-        pu = p.url();
-      } catch {
-        continue;
-      }
-      if (!isShopTiktokHostname(pu)) continue;
-      // eslint-disable-next-line no-console
-      console.log(
-        `[TikTok] Shop detetado noutra aba (${pu.slice(0, 90)}${pu.length > 90 ? "…" : ""}). A abrir a categoria na aba do script (cookies partilhados).`
-      );
-      try {
-        await page.bringToFront();
-      } catch {
-        /* noop */
-      }
-      try {
-        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-        navigatedInsideWait = true;
-        await humanPause(page, 800, 1600);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn("[TikTok] goto após login noutra aba:", e?.message || e);
-      }
-      try {
-        u = page.url();
-      } catch {
-        u = "";
-      }
-      if (isShopTiktokHostname(u)) {
-        return { ok: true, url: u, navigatedInsideWait };
-      }
-      break;
+    
+    // Se logou e caiu no For You, a gente redireciona
+    if (isTiktokMainHostname(u) && !u.includes("/login") && !u.includes("/passport")) {
+       console.log(`[TikTok] Login feito! Redirecionando para o Shop em 3 segundos...`);
+       await new Promise(r => setTimeout(r, 3000));
+       await page.goto(startUrl, { waitUntil: "networkidle2" });
+       return { ok: true, url: page.url(), navigatedInsideWait: true };
     }
   }
-  let finalU = "";
-  try {
-    finalU = page.url();
-  } catch {
-    /* noop */
-  }
-  return { ok: false, url: finalU, navigatedInsideWait: false };
+  return { ok: false, url: "", navigatedInsideWait: false };
 }
 
 /**
@@ -2771,17 +2753,34 @@ function mergeProductsFromModernRouter(rootData, byProductId, categoriaUrl) {
 async function scrollToLoadGrid(page) {
   let lastHeight = 0;
   let stable = 0;
-  for (let i = 0; i < 12; i++) {
-    await page.evaluate(() => window.scrollBy(0, 700));
-    await humanPause(page, 250, 550);
+  // eslint-disable-next-line no-console
+  console.log("[scrape] Iniciando scroll progressivo e aleatório...");
+
+  for (let i = 0; i < 15; i++) {
+    // Scroll com valor aleatório para não ser sempre o mesmo salto
+    const scrollAmount = 400 + Math.floor(Math.random() * 500);
+    await page.evaluate((amt) => window.scrollBy(0, amt), scrollAmount);
+
+    // Pausa humana após cada scroll
+    await humanPause(page, 400, 900);
+
+    // Movimento aleatório do mouse ocasional durante o scroll
+    if (Math.random() > 0.7) {
+      await gentleMouseJiggle(page);
+    }
+
     const h = await page.evaluate(() => document.body?.scrollHeight ?? 0);
     if (h === lastHeight) stable += 1;
     else stable = 0;
     lastHeight = h;
-    if (stable >= 2) break;
+
+    if (stable >= 3) break;
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await humanPause(page, 150, 300);
+  // Volta ao topo de forma suave
+  await page.evaluate(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  await humanPause(page, 1000, 2000);
 }
 
 /**
@@ -3141,14 +3140,16 @@ async function launchTikTokBrowser() {
   const launchOpts = {
     headless,
     env: { ...process.env, TZ: BRAZIL_TIMEZONE_ID },
+    ignoreDefaultArgs: ["--enable-automation"],
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
-      "--window-size=1366,768"
+      "--window-size=1600,900",
+      "--disable-blink-features=AutomationControlled"
     ],
-    defaultViewport: { width: 1366, height: 768, deviceScaleFactor: 1 }
+    defaultViewport: { width: 1600, height: 900, deviceScaleFactor: 1 }
   };
   if (execPath) {
     launchOpts.executablePath = execPath;
@@ -3955,22 +3956,30 @@ async function runCategoryHarvest(browser, page, startUrl) {
 
   let reloadedCategoryAfterLogin = false;
 
-  await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-  await humanPause(page, 1250, 2250);
+  // Forçar a abertura direta no domínio do Shop
+  console.log(`[scrape] Abrindo diretamente no TikTok Shop: ${startUrl}`);
+  await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+  await humanPause(page, 2000, 4000);
   await syncBrazilEnvToLivePage(page);
   finalUrl = page.url();
 
   if (!isShopTiktokHostname(finalUrl) && isHeaded) {
+    console.log("[TikTok] Não estamos no Shop. Aguardando login manual ou redirecionamento...");
     const w = await waitForShopOrTimeout(browser, page, { maxMs: loginWaitMaxMs, startUrl });
     finalUrl = w.url;
     if (w.ok) {
       reloadedCategoryAfterLogin = true;
       if (!w.navigatedInsideWait) {
-        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+        await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
       }
-      await humanPause(page, 1000, 2000);
+      await humanPause(page, 2000, 4000);
       await syncBrazilEnvToLivePage(page);
       finalUrl = page.url();
+    } else {
+      // TRAVA DE SEGURANÇA: Se não logou, não tenta coletar e não fecha sozinho rápido.
+      console.error("[TikTok] Erro: Login não detectado a tempo. Mantendo janela aberta por 1 minuto para inspeção...");
+      await new Promise(r => setTimeout(r, 60000));
+      return { status: "not_logged_in" };
     }
   }
 
@@ -4334,6 +4343,20 @@ async function main() {
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   const browser = await launchTikTokBrowser();
   const page = await browser.newPage();
+  
+  // Identidade de um Mac Real para confundir o bloqueio do TikTok
+  await page.setUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+  
+  // Esconder que é um robô via propriedades de navegação
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => false });
+  });
+
+  // Passo de "aquecimento": abre o Google primeiro para parecer humano
+  console.log("[scrape] Aquecendo navegador no Google...");
+  await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+  await new Promise(r => setTimeout(r, 2000));
+
   await installAntiPopupGuards(browser, page);
   try {
     return await runCategoryHarvest(browser, page, startUrl);
