@@ -26,8 +26,9 @@ const runs = [
   }
 ];
 
-await scrapeCategoriesSequentialSharedBrowser(runs).catch((e) => {
+const code = await scrapeCategoriesSequentialSharedBrowser(runs).catch((e) => {
   // eslint-disable-next-line no-console
   console.error(e);
-  process.exit(1);
+  return 1;
 });
+process.exit(typeof code === "number" ? code : 0);

@@ -11,6 +11,7 @@ Todas as entradas referem-se ao estado consolidado da linha **0.1.x** (abril 202
 ### Added
 
 - **`Dockerfile.api`:** Chromium Debian + libs headless, **`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`**, mantendo **`PUPPETEER_SKIP_DOWNLOAD=1`** e o entrypoint Prisma. **`src/scrapeCategory.mjs`:** `launchTikTokBrowser` usa `executablePath` a partir de `PUPPETEER_EXECUTABLE_PATH` e flags `--disable-setuid-sandbox` entre outras.
+- **Diagnóstico colheita 0 produtos:** pós-goto `networkidle2` (reload configurável), +10s, scroll longo; `extra/` com PNG/HTML/`xhr_debug.json`/`browser_env.json`/consola e pedidos falhados; **`process.exit(1)`** e campo **`diagnostic`** no JSON; `SCRAPE_DIAGNOSTIC` / `SCRAPE_POST_GOTO_RELOAD`; `scrape-both` propaga código de saída.
 
 ## [0.1.1] - 2026-05-06
 
