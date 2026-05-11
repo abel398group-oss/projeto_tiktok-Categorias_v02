@@ -222,6 +222,8 @@ npm run coleta
 
 **View more (mais produtos na grelha):** por defeito o `scrapeCategory` clica até **8** vezes (máx. **10**) em **View more** / **Ver mais** após o scroll. Desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`; ajustar espera pós-clique: `VIEW_MORE_DRAIN_MS` (ms, default 4500). Ver `docs/ARCHITECTURE.md`.
 
+**0 produtos (headless / Docker):** `status=no_products`, **`process.exit(1)`** na CLI, artefactos em **`OUTPUT_DIR/extra/`** (PNG página completa, HTML, `xhr_debug.json`, `browser_env.json`, consola, pedidos falhados, `empty_harvest_diagnostic.json`). Captura intermédia: **`SCRAPE_DIAGNOSTIC=1`**. Desligar reload `networkidle2` pós-goto: **`SCRAPE_POST_GOTO_RELOAD=0`**. Ver `.env.example` e o cabeçalho de `src/scrapeCategory.mjs`.
+
 ### 4. API analytics (GET relatórios + POST export Spaces)
 
 - Arranque: **`npm run analytics:api`**.

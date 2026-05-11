@@ -8,6 +8,7 @@
  * Dados de entrega: por defeito na raiz de `output/`: `dados_produtos.json` e `dados_lojas.json`; resto (debug, caça) em `output/extra/`.
  * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
+ * **Sem produtos (0):** `status=no_products`, `process.exit(1)` na CLI, campo `diagnostic` + ficheiros em `extra/` (`final_page*.png`, `final_page.html`, `xhr_debug.json`, `browser_env.json`, …). `SCRAPE_DIAGNOSTIC=1`: captura intermédia após pós-goto (`post_goto_diagnostic.json`). `SCRAPE_POST_GOTO_RELOAD=0` desliga o reload `networkidle2` após o primeiro goto (headless).
  * Grelha: após scroll, até `VIEW_MORE_MAX_CLICKS` (1–10, default 8) cliques em **View more** / **Ver mais** (desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`); só dispara UI — XHR/merge/router inalterados.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -2877,11 +2878,294 @@ async function installAntiPopupGuards(browser, page) {
   });
 }
 
+/** Palavras-chave anti-bot / bloqueio no HTML (minúsculas). */
+const SCRAPE_DIAG_HTML_KEYWORDS = [
+  "captcha",
+  "verify",
+  "unusual traffic",
+  "login",
+  "challenge",
+  "access denied",
+  "robot",
+  "blocked"
+];
+
+/** @param {string} html */
+function scanHtmlForAntiBotSignals(html) {
+  const lc = html.toLowerCase();
+  /** @type {string[]} */
+  const hits = [];
+  for (const w of SCRAPE_DIAG_HTML_KEYWORDS) {
+    if (lc.includes(w)) hits.push(w);
+  }
+  return hits;
+}
+
+/**
+ * Scroll longo por passos (lazy-load). Não substitui `scrollToLoadGrid`; complementa pós-goto.
+ * @param {import("puppeteer").Page} page
+ */
+async function progressiveScrollPageToBottom(page) {
+  const vp = (await page.viewport()) || { width: 1366, height: 800 };
+  const step = Math.max(280, Math.floor(vp.height * 0.85));
+  let prevY = -1;
+  for (let i = 0; i < 90; i++) {
+    const metrics = await page.evaluate(() => {
+      const el = document.documentElement || document.body;
+      return {
+        scrollY: window.scrollY,
+        innerHeight: window.innerHeight,
+        scrollHeight: el?.scrollHeight ?? 0
+      };
+    });
+    const atBottom = metrics.scrollY + metrics.innerHeight >= metrics.scrollHeight - 6;
+    if (atBottom) break;
+    await page.evaluate((dy) => window.scrollBy(0, dy), step);
+    await new Promise((r) => setTimeout(r, 380 + Math.floor(Math.random() * 320)));
+    if (Math.abs(metrics.scrollY - prevY) < 2 && i > 4) break;
+    prevY = metrics.scrollY;
+  }
+}
+
+/**
+ * Recarrega com `networkidle2` (headless) + espera extra + scroll longo.
+ * Desligar reload: `SCRAPE_POST_GOTO_RELOAD=0`. Forçar também em headed: `SCRAPE_POST_GOTO_RELOAD=1`.
+ * @param {import("puppeteer").Page} page
+ * @param {boolean} isHeaded
+ */
+async function postGotoShopStabilize(page, isHeaded) {
+  const force = process.env.SCRAPE_POST_GOTO_RELOAD === "1";
+  const skip = process.env.SCRAPE_POST_GOTO_RELOAD === "0";
+  const doReload = force || (!isHeaded && !skip);
+  if (doReload) {
+    try {
+      await page.reload({ waitUntil: "networkidle2", timeout: 120_000 });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[scrape] post-goto reload networkidle2:", e?.message || e);
+    }
+  }
+  await new Promise((r) => setTimeout(r, 10_000));
+  await progressiveScrollPageToBottom(page);
+}
+
+/**
+ * @param {import("puppeteer").Page} page
+ * @param {{ xhrLog: object[], consoleLog: string[], failed: object[] }} b
+ */
+function attachScrapeDiagnosticConsoleAndFailed(page, b) {
+  const consoleCap = 250;
+  const failCap = 200;
+
+  page.on("console", (msg) => {
+    if (b.consoleLog.length >= consoleCap) return;
+    try {
+      const t = msg.text();
+      b.consoleLog.push(`[${msg.type()}] ${String(t).slice(0, 1800)}`);
+    } catch {
+      /* noop */
+    }
+  });
+
+  page.on("requestfailed", (req) => {
+    if (b.failed.length >= failCap) return;
+    try {
+      b.failed.push({
+        url: req.url().slice(0, 900),
+        error: req.failure()?.errorText ?? null
+      });
+    } catch {
+      /* noop */
+    }
+  });
+}
+
+/**
+ * Registar **depois** do `page.on("response")` principal para reduzir corrida em `response.text()`.
+ * @param {import("puppeteer").Page} page
+ * @param {{ xhrLog: object[], consoleLog: string[], failed: object[] }} b
+ */
+function attachScrapeDiagnosticXhrResponse(page, b) {
+  const xhrCap = 1200;
+
+  page.on("response", (response) => {
+    void (async () => {
+      let rt = "";
+      try {
+        rt = response.request()?.resourceType() || "";
+      } catch {
+        return;
+      }
+      if (rt !== "xhr" && rt !== "fetch") return;
+      if (b.xhrLog.length >= xhrCap) return;
+      const url = response.url();
+      let status = 0;
+      let ct = "";
+      try {
+        status = response.status();
+        ct = (response.headers()["content-type"] || "-").split(";")[0].trim();
+      } catch {
+        return;
+      }
+      const clRaw = response.headers()["content-length"];
+      const cl = clRaw ? Number(clRaw) : NaN;
+      /** @type {string[] | null} */
+      let jsonTopKeys = null;
+      let bodyBytes = Number.isFinite(cl) ? cl : null;
+      const maybeJson =
+        /json|javascript/.test(ct.toLowerCase()) || /\.json(\?|$)/i.test(url.split("?")[0] || "");
+      const safePeek = Number.isFinite(cl) && cl > 0 && cl <= 280_000;
+      if (maybeJson && safePeek) {
+        try {
+          const txt = await response.text();
+          bodyBytes = txt.length;
+          const j = JSON.parse(txt);
+          jsonTopKeys = Array.isArray(j)
+            ? [`[array length ${j.length}]`]
+            : Object.keys(j).slice(0, 24);
+        } catch {
+          jsonTopKeys = ["_body_unreadable_or_consumed"];
+        }
+      } else if (maybeJson && !Number.isFinite(cl)) {
+        try {
+          const txt = await response.text();
+          bodyBytes = txt.length;
+          const slice = txt.slice(0, 1_200_000);
+          const j = JSON.parse(slice);
+          jsonTopKeys = Array.isArray(j)
+            ? [`[array length ${j.length}]`]
+            : Object.keys(j).slice(0, 24);
+        } catch {
+          jsonTopKeys = null;
+        }
+      }
+      b.xhrLog.push({
+        t: new Date().toISOString(),
+        url: url.slice(0, 900),
+        status,
+        contentType: ct,
+        bodyBytes,
+        jsonTopKeys
+      });
+    })();
+  });
+}
+
+/**
+ * Escreve ficheiros de diagnóstico em `OUT_AUX` (ex.: `output/categorias/.../extra/`).
+ * @param {import("puppeteer").Page} page
+ * @param {string} outAux
+ * @param {{ xhrLog: object[], consoleLog: string[], failed: object[] }} buckets
+ * @param {{ finalUrl: string, startUrl: string, status: string }} meta
+ * @returns {Promise<object>}
+ */
+async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
+  await ensureOutAuxDir();
+  const png1 = path.join(outAux, "final_page.png");
+  const png2 = path.join(outAux, "final_page_after_scroll.png");
+  const htmlPath = path.join(outAux, "final_page.html");
+  const bodyTxtPath = path.join(outAux, "body_text.txt");
+  const titlePath = path.join(outAux, "page_title.txt");
+  const xhrPath = path.join(outAux, "xhr_debug.json");
+  const envPath = path.join(outAux, "browser_env.json");
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await new Promise((r) => setTimeout(r, 600));
+  await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
+  await progressiveScrollPageToBottom(page);
+  await new Promise((r) => setTimeout(r, 800));
+  await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+
+  const html = await page.content();
+  await fs.writeFile(htmlPath, html, "utf8");
+  const bodyText = await page.evaluate(() => {
+    try {
+      return document.body?.innerText ?? "";
+    } catch {
+      return "";
+    }
+  });
+  await fs.writeFile(bodyTxtPath, bodyText.slice(0, 1_200_000), "utf8");
+  const title = await page.title();
+  await fs.writeFile(titlePath, `${title}\n`, "utf8");
+
+  const browserEnv = await page.evaluate(() => ({
+    userAgent: navigator.userAgent,
+    webdriver: navigator.webdriver,
+    language: navigator.language,
+    languages: navigator.languages ? [...navigator.languages] : [],
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    platform: navigator.platform
+  }));
+  await fs.writeFile(envPath, JSON.stringify(browserEnv, null, 2), "utf8");
+
+  const keywordHits = scanHtmlForAntiBotSignals(html);
+  const selectors = [
+    "script#__MODERN_ROUTER_DATA__",
+    "#__MODERN_ROUTER_DATA__",
+    "a[href*=\"/product/\"]",
+    "[data-e2e]",
+    "div[data-index]"
+  ];
+  /** @type {object[]} */
+  const selectorWait = [];
+  for (const sel of selectors) {
+    try {
+      const h = await page.waitForSelector(sel, { timeout: 4500 });
+      selectorWait.push({ selector: sel, found: !!h, error: null });
+    } catch (e) {
+      selectorWait.push({
+        selector: sel,
+        found: false,
+        error: e?.message ? String(e.message) : String(e)
+      });
+    }
+  }
+
+  await fs.writeFile(xhrPath, JSON.stringify(buckets.xhrLog, null, 2), "utf8");
+  await fs.writeFile(
+    path.join(outAux, "console_debug.txt"),
+    buckets.consoleLog.join("\n"),
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(outAux, "request_failed.json"),
+    JSON.stringify(buckets.failed, null, 2),
+    "utf8"
+  );
+
+  return {
+    coletado_em: new Date().toISOString(),
+    final_url: meta.finalUrl,
+    start_url: meta.startUrl,
+    status: meta.status,
+    keyword_hits: keywordHits,
+    selector_wait: selectorWait,
+    browser_env: browserEnv,
+    xhr_entries: buckets.xhrLog.length,
+    console_lines: buckets.consoleLog.length,
+    request_failed: buckets.failed.length,
+    files: {
+      final_page_png: png1,
+      final_page_after_scroll_png: png2,
+      final_page_html: htmlPath,
+      body_text: bodyTxtPath,
+      page_title: titlePath,
+      xhr_debug: xhrPath,
+      browser_env: envPath,
+      console_debug: path.join(outAux, "console_debug.txt"),
+      request_failed: path.join(outAux, "request_failed.json")
+    }
+  };
+}
+
 /**
  * Uma categoria: rede + scroll + escrita em `OUTPUT_DIR` (definir `initOutputPaths` antes).
  * @param {import("puppeteer").Browser} browser
  * @param {import("puppeteer").Page} page
  * @param {string} startUrl
+ * @returns {Promise<number>} código de saída (0 ok, 1 sem produtos com `status` ok→no_products)
  */
 async function runCategoryHarvest(browser, page, startUrl) {
   const pdpGalleryEnv =
@@ -2897,6 +3181,8 @@ async function runCategoryHarvest(browser, page, startUrl) {
   recordSellerDebug = true;
   sellerDebugSamples.length = 0;
   const debugLines = [];
+  const diagBuckets = { xhrLog: [], consoleLog: [], failed: [] };
+  attachScrapeDiagnosticConsoleAndFailed(page, diagBuckets);
 
   const netLogFile = path.join(OUT_AUX, "rede_ultima_execucao.log");
   if (netLog) {
@@ -3326,6 +3612,8 @@ async function runCategoryHarvest(browser, page, startUrl) {
     }
   });
 
+  attachScrapeDiagnosticXhrResponse(page, diagBuckets);
+
   let finalUrl = startUrl;
   let status = "ok";
   let note = null;
@@ -3363,6 +3651,28 @@ async function runCategoryHarvest(browser, page, startUrl) {
         "utf8"
       );
     } else {
+      // Pós-goto em shop.tiktok.com: networkidle2 (reload em headless por defeito) + 10s + scroll longo
+      await postGotoShopStabilize(page, isHeaded);
+      const diagEarly =
+        process.env.SCRAPE_DIAGNOSTIC === "1" || /^true$/i.test(String(process.env.SCRAPE_DIAGNOSTIC || ""));
+      if (diagEarly) {
+        try {
+          const snap = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
+            finalUrl: page.url(),
+            startUrl,
+            status: "post_goto_diagnostic"
+          });
+          await fs.writeFile(
+            path.join(OUT_AUX, "post_goto_diagnostic.json"),
+            JSON.stringify(snap, null, 2),
+            "utf8"
+          );
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn("[scrape] SCRAPE_DIAGNOSTIC escrita intermédia:", e?.message || e);
+        }
+      }
+
       if (reloadedCategoryAfterLogin) {
         // já recarregou a categoria acima; só ajusta ritmo
         await humanPause(page, 500, 1000);
@@ -3446,10 +3756,43 @@ async function runCategoryHarvest(browser, page, startUrl) {
       }
     }
 
+  let exitCode = 0;
+  /** @type {object | null} */
+  let diagnostic = null;
+
   if (byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
-      "Nenhum produto mapeado (XHR + loader). Abra output/extra/modern_router_peek.json (chaves e amostra) e output/extra/debug_responses.log com --debug; ajuste o parser se o feed vier só em loaderData aninhado.";
+      "Nenhum produto (XHR + loader). Campo `diagnostic` + ficheiros em extra/ (final_page*.png, final_page.html, xhr_debug.json, browser_env.json, empty_harvest_diagnostic.json). Processo termina com código 1.";
+    try {
+      diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
+        finalUrl,
+        startUrl,
+        status: "no_products"
+      });
+      let mr = null;
+      try {
+        mr = await getModernRouterDataFromPage(page);
+      } catch {
+        mr = null;
+      }
+      await fs.writeFile(
+        path.join(OUT_AUX, "empty_harvest_diagnostic.json"),
+        JSON.stringify(
+          {
+            ...diagnostic,
+            has_modern_router_json: mr != null,
+            modern_router_peek_file: MODERN_ROUTER_PEEK
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+    } catch (e) {
+      diagnostic = { erro_escrita_diagnostico: String(e?.message || e) };
+    }
+    exitCode = 1;
   }
 
   const products = Object.fromEntries(
@@ -3465,7 +3808,8 @@ async function runCategoryHarvest(browser, page, startUrl) {
     note,
     collected_at: new Date().toISOString(),
     count: byProductId.size,
-    products
+    products,
+    diagnostic
   };
 
   await ensureOutAuxDir();
@@ -3483,7 +3827,8 @@ async function runCategoryHarvest(browser, page, startUrl) {
     filtro: pdpGalleryEnv
       ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos + preço hero no DOM em .../pdp/...)"
       : "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
-    itens: itensDados
+    itens: itensDados,
+    diagnostic
   };
   await fs.writeFile(DADOS_OUT, JSON.stringify(dadosPayload, null, 2), "utf8");
 
@@ -3547,12 +3892,15 @@ async function runCategoryHarvest(browser, page, startUrl) {
         debug: debug ? debugFile : null,
         caca_dados: huntLog ? CACA_DADOS_JSONL : null,
         caca_xhr_fetch: huntLog ? CACA_XHR_FILE : null,
-        modern_router_peek: MODERN_ROUTER_PEEK
+        modern_router_peek: MODERN_ROUTER_PEEK,
+        exit_code: exitCode
       },
       null,
       2
     )
   );
+
+  return exitCode;
 }
 
 /**
@@ -3565,6 +3913,7 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
     throw new Error("scrapeCategoriesSequentialSharedBrowser: runs[] vazio");
   }
   const browser = await launchTikTokBrowser();
+  let exitCode = 0;
   try {
     for (let i = 0; i < runs.length; i++) {
       const r = runs[i];
@@ -3575,7 +3924,8 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
       console.log(`\n--- ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
       const page = await browser.newPage();
       await installAntiPopupGuards(browser, page);
-      await runCategoryHarvest(browser, page, r.CATEGORY_URL);
+      const code = await runCategoryHarvest(browser, page, r.CATEGORY_URL);
+      exitCode = Math.max(exitCode, code);
       await page.close().catch(() => {});
       if (i < runs.length - 1) {
         await new Promise((res) => setTimeout(res, 450 + Math.random() * 550));
@@ -3584,6 +3934,7 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
   } finally {
     await browser.close();
   }
+  return exitCode;
 }
 
 async function main() {
@@ -3593,7 +3944,7 @@ async function main() {
   const page = await browser.newPage();
   await installAntiPopupGuards(browser, page);
   try {
-    await runCategoryHarvest(browser, page, startUrl);
+    return await runCategoryHarvest(browser, page, startUrl);
   } finally {
     await browser.close();
   }
@@ -3611,11 +3962,15 @@ function isRunAsCli() {
 }
 
 if (isRunAsCli()) {
-  main().catch((e) => {
-    // eslint-disable-next-line no-console
-    console.error(e);
-    process.exit(1);
-  });
+  main()
+    .then((code) => {
+      process.exit(typeof code === "number" ? code : 0);
+    })
+    .catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error(e);
+      process.exit(1);
+    });
 }
 
 /* Regressão: `npm test` importa sem executar o scrape; não alterar sem correr testes. */
