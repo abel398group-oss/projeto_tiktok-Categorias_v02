@@ -224,6 +224,8 @@ npm run coleta
 
 **0 produtos (headless / Docker):** `status=no_products`, **`process.exit(1)`** na CLI, artefactos em **`OUTPUT_DIR/extra/`** (PNG página completa, HTML, `xhr_debug.json`, `browser_env.json`, consola, pedidos falhados, `empty_harvest_diagnostic.json`). Captura intermédia: **`SCRAPE_DIAGNOSTIC=1`**. Desligar reload `networkidle2` pós-goto: **`SCRAPE_POST_GOTO_RELOAD=0`**. Ver `.env.example` e o cabeçalho de `src/scrapeCategory.mjs`.
 
+**Security Check (TikTok puzzle / anti-bot):** `failure_code=TIKTOK_SECURITY_CHECK`, **`process.exit(2)`**, os mesmos artefactos em **`extra/`** (não contar como coleta vazia “sem produtos”). Perfil persistente por defeito: **`.puppeteer-profile/tiktok-shop`** na raiz do clone (no contentor típico **`/app/.puppeteer-profile/tiktok-shop`**); montar volume para manter cookies. Overrides: **`CHROME_USER_DATA`**, **`PUPPETEER_TIKTOK_PROFILE`**, **`CHROME_STABLE_UA`**, sessão limpa **`FRESH_SESSION=1`**.
+
 ### 4. API analytics (GET relatórios + POST export Spaces)
 
 - Arranque: **`npm run analytics:api`**.

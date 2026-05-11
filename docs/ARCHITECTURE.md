@@ -72,7 +72,7 @@ flowchart TB
 ## Fluxo de dados (resumo)
 
 1. Navegação para `CATEGORY_URL` (ou `DEFAULT_URL` no código).
-2. Sessão persistente: diretório de perfil Chrome (`.chrome-tiktok-profile` por defeito; override `CHROME_USER_DATA="..."`; limpar com `FRESH_SESSION=1`).
+2. Sessão persistente: diretório de perfil Chromium (por defeito **`.puppeteer-profile/tiktok-shop`** na raiz do repo; no Docker com `WORKDIR=/app` → `/app/.puppeteer-profile/tiktok-shop`). Overrides: **`CHROME_USER_DATA`**, **`PUPPETEER_TIKTOK_PROFILE`**; limpar com **`FRESH_SESSION=1`**. (Legado documental: `.chrome-tiktok-profile` — substituído pelo caminho acima no scraper actual.)
 3. Relevante para login interativo: `HEADED=1`, `LOGIN_WAIT_MAX_MS` (aumenta se necessário) até `shop.tiktok.com`.
 4. Heurísticas em respostas JSON (URLs com `oec`, `list`, `shop.tiktok`, etc.), filtrando **telemetria** (MCS, Slardar, monitor, batch 204, …).
 4b. **View more (grelha):** após o scroll da categoria, o script pode clicar até **`VIEW_MORE_MAX_CLICKS`** vezes (máx. 10, default 8) em **View more** / **Ver mais** (e equivalentes), para a UI carregar mais blocos; os novos produtos entram pelo mesmo pipeline XHR + merge. Desligar: **`VIEW_MORE_MAX_CLICKS=0`** ou **`VIEW_MORE=0`**. Tempo de espera pós-clique (poll do contador): **`VIEW_MORE_DRAIN_MS`** (default 4500).

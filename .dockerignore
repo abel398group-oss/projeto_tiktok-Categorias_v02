@@ -5,6 +5,7 @@ frontend/dist
 .github
 .cursor
 chrome-tiktok-profile
+.puppeteer-profile
 .env
 .env.*
 !.env.example
