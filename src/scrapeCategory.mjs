@@ -2817,6 +2817,9 @@ const BRAZIL_TIMEZONE_ID = "America/Sao_Paulo";
 /** Evita `evaluateOnNewDocument` duplicado na mesma `Page`. */
 const brazilBrowsingContextApplied = new WeakSet();
 
+/** Evita registar várias vezes o listener `domcontentloaded` na mesma `Page`. */
+const brazilDomContentSyncAttached = new WeakSet();
+
 /** Uma sessão CDP por `Page` (timezone + locale); evita acumular sessões em cada `sync`. */
 const brazilCdpSessionByPage = new WeakMap();
 
@@ -2861,8 +2864,19 @@ async function syncBrazilEnvToLivePage(page) {
   try {
     await page.evaluate(() => {
       const langs = Object.freeze(["pt-BR", "pt", "en-US", "en"]);
+      const nav = navigator;
+      for (const key of ["language", "languages"]) {
+        try {
+          const d = Object.getOwnPropertyDescriptor(nav, key);
+          if (d && d.configurable) {
+            Reflect.deleteProperty(nav, key);
+          }
+        } catch {
+          /* noop */
+        }
+      }
       try {
-        Object.defineProperty(navigator, "language", {
+        Object.defineProperty(nav, "language", {
           get: () => "pt-BR",
           configurable: true,
           enumerable: true
@@ -2871,7 +2885,7 @@ async function syncBrazilEnvToLivePage(page) {
         /* noop */
       }
       try {
-        Object.defineProperty(navigator, "languages", {
+        Object.defineProperty(nav, "languages", {
           get: () => langs,
           configurable: true,
           enumerable: true
@@ -2962,6 +2976,12 @@ async function applyBrazilBrowsingContext(page) {
       }
     });
     brazilBrowsingContextApplied.add(page);
+  }
+  if (!brazilDomContentSyncAttached.has(page)) {
+    page.on("domcontentloaded", () => {
+      void syncBrazilEnvToLivePage(page).catch(() => {});
+    });
+    brazilDomContentSyncAttached.add(page);
   }
   await page.setUserAgent(CHROME_STABLE_USER_AGENT);
   await syncBrazilEnvToLivePage(page);
@@ -3429,6 +3449,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
   await page.setExtraHTTPHeaders({
     "Accept-Language": TIKTOK_ACCEPT_LANGUAGE
   });
+  await applyBrazilBrowsingContext(page);
 
   let jsonPeeksTried = 0;
   let jsonSnapshotN = 0;
@@ -3768,8 +3789,6 @@ async function runCategoryHarvest(browser, page, startUrl) {
   });
 
   attachScrapeDiagnosticXhrResponse(page, diagBuckets);
-
-  await applyBrazilBrowsingContext(page);
 
   let finalUrl = startUrl;
   let status = "ok";
