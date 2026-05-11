@@ -2532,24 +2532,110 @@ function isShopTiktokHostname(urlStr) {
 
 /**
  * Com HEADED=1, se ainda não estiver no domínio do Shop, aguarda login sem fechar o browser.
+ * O QR / OAuth pode abrir o Shop noutra aba — esta função vê **todas** as abas e, se o Shop
+ * estiver só na outra, faz `goto(startUrl)` na aba instrumentada (mesmo contexto = mesmos cookies).
  * Ajuste o tempo: LOGIN_WAIT_MAX_MS (milissegundos, padrão 15 min).
+ *
+ * @param {import("puppeteer").Browser} browser
+ * @param {import("puppeteer").Page} page aba com handlers XHR (não trocar de aba no Puppeteer)
+ * @param {{ maxMs: number, startUrl: string }} opts
+ * @returns {Promise<{ ok: boolean, url: string, navigatedInsideWait: boolean }>}
  */
-async function waitForShopOrTimeout(page, { maxMs }) {
+async function waitForShopOrTimeout(browser, page, { maxMs, startUrl }) {
   // eslint-disable-next-line no-console
   console.log(
-    `[TikTok] Tela de login ou redirecionamento. Faça o login; o script fica aberto por até ${Math.round(maxMs / 60_000)} min (env LOGIN_WAIT_MAX_MS).`
+    `[TikTok] Tela de login ou redirecionamento. Faça o login (QR pode abrir outra aba — o script sincroniza aqui). Até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
   );
   const t0 = Date.now();
+  let lastBeat = Date.now();
+  let first = true;
   while (Date.now() - t0 < maxMs) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const u = page.url();
+    if (!first) {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    first = false;
+
+    if (Date.now() - lastBeat > 30_000) {
+      lastBeat = Date.now();
+      let nTabs = "?";
+      let u0 = "";
+      try {
+        u0 = page.url();
+        nTabs = String((await browser.pages()).length);
+      } catch {
+        /* noop */
+      }
+      // eslint-disable-next-line no-console
+      console.log(
+        `[TikTok] À espera… ${nTabs} aba(s). URL na aba do script: ${u0.slice(0, 140)}${u0.length > 140 ? "…" : ""}`
+      );
+    }
+
+    let navigatedInsideWait = false;
+    let u = "";
+    try {
+      u = page.url();
+    } catch {
+      return { ok: false, url: "", navigatedInsideWait: false };
+    }
+
     if (isShopTiktokHostname(u)) {
       // eslint-disable-next-line no-console
-      console.log(`[TikTok] Shop detectado: ${u.slice(0, 120)}...`);
-      return { ok: true, url: u };
+      console.log(`[TikTok] Shop nesta aba (script): ${u.slice(0, 120)}${u.length > 120 ? "…" : ""}`);
+      return { ok: true, url: u, navigatedInsideWait: false };
+    }
+
+    /** @type {import("puppeteer").Page[]} */
+    let pages = [];
+    try {
+      pages = await browser.pages();
+    } catch {
+      continue;
+    }
+    for (const p of pages) {
+      if (p === page) continue;
+      let pu = "";
+      try {
+        pu = p.url();
+      } catch {
+        continue;
+      }
+      if (!isShopTiktokHostname(pu)) continue;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[TikTok] Shop detetado noutra aba (${pu.slice(0, 90)}${pu.length > 90 ? "…" : ""}). A abrir a categoria na aba do script (cookies partilhados).`
+      );
+      try {
+        await page.bringToFront();
+      } catch {
+        /* noop */
+      }
+      try {
+        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+        navigatedInsideWait = true;
+        await humanPause(page, 800, 1600);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn("[TikTok] goto após login noutra aba:", e?.message || e);
+      }
+      try {
+        u = page.url();
+      } catch {
+        u = "";
+      }
+      if (isShopTiktokHostname(u)) {
+        return { ok: true, url: u, navigatedInsideWait };
+      }
+      break;
     }
   }
-  return { ok: false, url: page.url() };
+  let finalU = "";
+  try {
+    finalU = page.url();
+  } catch {
+    /* noop */
+  }
+  return { ok: false, url: finalU, navigatedInsideWait: false };
 }
 
 /**
@@ -3875,11 +3961,13 @@ async function runCategoryHarvest(browser, page, startUrl) {
   finalUrl = page.url();
 
   if (!isShopTiktokHostname(finalUrl) && isHeaded) {
-    const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
+    const w = await waitForShopOrTimeout(browser, page, { maxMs: loginWaitMaxMs, startUrl });
     finalUrl = w.url;
     if (w.ok) {
       reloadedCategoryAfterLogin = true;
-      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      if (!w.navigatedInsideWait) {
+        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      }
       await humanPause(page, 1000, 2000);
       await syncBrazilEnvToLivePage(page);
       finalUrl = page.url();
