@@ -30,6 +30,7 @@ import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 puppeteer.use(StealthPlugin());
+/** Stealth activo globalmente (`puppeteer-extra-plugin-stealth` + `puppeteer.use` acima). */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1860,9 +1861,7 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
     const workers = [page];
     if (conc > 1) {
       secondary = await browser.newPage();
-      await secondary.setExtraHTTPHeaders({
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
-      });
+      await applyBrazilBrowsingContext(secondary);
       workers.push(secondary);
     }
 
@@ -1874,6 +1873,7 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
     const visitOnePdp = async (workerPage, n) => {
       try {
         await workerPage.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
+        await syncBrazilEnvToLivePage(workerPage);
         await humanPause(workerPage, 900, 1800);
         await workerPage
           .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
@@ -2505,12 +2505,13 @@ async function waitForStableProductFeed(getProductCount) {
 }
 
 async function gentleMouseJiggle(page) {
-  const vp = page.viewport() || { width: 1280, height: 800 };
-  for (let i = 0; i < 3; i++) {
+  const vp = page.viewport() || { width: 1366, height: 768 };
+  const n = 4 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++) {
     const x = 80 + Math.random() * (vp.width - 160);
     const y = 120 + Math.random() * (vp.height - 200);
-    await page.mouse.move(x, y, { steps: 12 + Math.floor(Math.random() * 8) });
-    await humanPause(page, 100, 250);
+    await page.mouse.move(x, y, { steps: 14 + Math.floor(Math.random() * 12) });
+    await humanPause(page, 120, 380);
   }
 }
 
@@ -2801,7 +2802,89 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
   }
 }
 
-const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".chrome-tiktok-profile");
+/** Perfil persistente (Docker: `/app/.puppeteer-profile/tiktok-shop` quando `ROOT=/app`). Sobrescrever: `CHROME_USER_DATA` ou `PUPPETEER_TIKTOK_PROFILE`. */
+const DEFAULT_CHROME_PROFILE = path.join(ROOT, ".puppeteer-profile", "tiktok-shop");
+
+const TIKTOK_ACCEPT_LANGUAGE = "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7";
+
+/** UA estável (Chrome recente em Windows). Override: `CHROME_STABLE_UA`. */
+const CHROME_STABLE_USER_AGENT =
+  process.env.CHROME_STABLE_UA?.trim() ||
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+
+const BRAZIL_TIMEZONE_ID = "America/Sao_Paulo";
+
+/** Evita `evaluateOnNewDocument` duplicado na mesma `Page`. */
+const brazilBrowsingContextApplied = new WeakSet();
+
+/** Uma sessão CDP por `Page` (timezone + locale); evita acumular sessões em cada `sync`. */
+const brazilCdpSessionByPage = new WeakMap();
+
+/**
+ * @param {import("puppeteer").Page} page
+ * @returns {Promise<import("puppeteer").CDPSession>}
+ */
+async function getOrCreateBrazilCdpSession(page) {
+  let s = brazilCdpSessionByPage.get(page);
+  if (!s) {
+    s = await page.createCDPSession();
+    brazilCdpSessionByPage.set(page, s);
+  }
+  return s;
+}
+
+/**
+ * Reforça fingerprint Brasil no documento **actual** (útil pós-`goto`): `Accept-Language`,
+ * `emulateTimezone` + CDP `Emulation.setTimezoneOverride` / `setLocaleOverride`, e overrides no
+ * main world a `navigator.language` / `navigator.languages` (o stealth pode deixar `en-US` só com
+ * `evaluateOnNewDocument`).
+ * @param {import("puppeteer").Page} page
+ */
+async function syncBrazilEnvToLivePage(page) {
+  await page.setExtraHTTPHeaders({
+    "Accept-Language": TIKTOK_ACCEPT_LANGUAGE
+  });
+  try {
+    await page.emulateTimezone(BRAZIL_TIMEZONE_ID);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] emulateTimezone:", e?.message || e);
+  }
+  try {
+    const cdp = await getOrCreateBrazilCdpSession(page);
+    await cdp.send("Emulation.setTimezoneOverride", { timezoneId: BRAZIL_TIMEZONE_ID });
+    await cdp.send("Emulation.setLocaleOverride", { locale: "pt-BR" });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] CDP timezone/locale:", e?.message || e);
+  }
+  try {
+    await page.evaluate(() => {
+      const langs = Object.freeze(["pt-BR", "pt", "en-US", "en"]);
+      try {
+        Object.defineProperty(navigator, "language", {
+          get: () => "pt-BR",
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop */
+      }
+      try {
+        Object.defineProperty(navigator, "languages", {
+          get: () => langs,
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop */
+      }
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[locale] navigator override (main world):", e?.message || e);
+  }
+}
 
 /**
  * Deduplica lojas por `seller_id` a partir do mapa de produtos.
@@ -2827,11 +2910,69 @@ function buildLojasMapBySeller(byProductId) {
   return m;
 }
 
+/**
+ * TikTok "Security Check" / puzzle (anti-bot). Não resolve captcha — só detecta.
+ * @param {import("puppeteer").Page} page
+ */
+async function detectTiktokSecurityChallenge(page) {
+  let title = "";
+  try {
+    title = String(await page.title()).toLowerCase();
+  } catch {
+    return false;
+  }
+  if (title.includes("security check")) return true;
+  let body = "";
+  try {
+    body = await page.evaluate(() =>
+      String(document.body?.innerText || "")
+        .slice(0, 8000)
+        .toLowerCase()
+    );
+  } catch {
+    return false;
+  }
+  if (body.includes("security check")) return true;
+  if (body.includes("verify to continue") && (body.includes("puzzle") || body.includes("drag"))) return true;
+  return false;
+}
+
+/**
+ * Locale Brasil + timezone + UA (reduz inconsistência headless vs TikTok BR).
+ * Chamar **uma vez** por `Page` antes do primeiro `goto`.
+ * @param {import("puppeteer").Page} page
+ */
+async function applyBrazilBrowsingContext(page) {
+  if (!brazilBrowsingContextApplied.has(page)) {
+    await page.evaluateOnNewDocument(() => {
+      try {
+        const langs = Object.freeze(["pt-BR", "pt", "en-US", "en"]);
+        Object.defineProperty(navigator, "language", {
+          get: () => "pt-BR",
+          configurable: true,
+          enumerable: true
+        });
+        Object.defineProperty(navigator, "languages", {
+          get: () => langs,
+          configurable: true,
+          enumerable: true
+        });
+      } catch {
+        /* noop — stealth ou CSP */
+      }
+    });
+    brazilBrowsingContextApplied.add(page);
+  }
+  await page.setUserAgent(CHROME_STABLE_USER_AGENT);
+  await syncBrazilEnvToLivePage(page);
+}
+
 async function launchTikTokBrowser() {
   const fresh = process.env.FRESH_SESSION === "1";
   let userDataDir = process.env.CHROME_USER_DATA?.trim() || null;
   if (!userDataDir && !fresh) {
-    userDataDir = DEFAULT_CHROME_PROFILE;
+    userDataDir =
+      process.env.PUPPETEER_TIKTOK_PROFILE?.trim() || DEFAULT_CHROME_PROFILE;
     await fs.mkdir(userDataDir, { recursive: true });
   }
   if (userDataDir) {
@@ -2844,14 +2985,15 @@ async function launchTikTokBrowser() {
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
   const launchOpts = {
     headless,
+    env: { ...process.env, TZ: BRAZIL_TIMEZONE_ID },
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
-      "--window-size=1366,800"
+      "--window-size=1366,768"
     ],
-    defaultViewport: headless ? { width: 1366, height: 800 } : null
+    defaultViewport: { width: 1366, height: 768, deviceScaleFactor: 1 }
   };
   if (execPath) {
     launchOpts.executablePath = execPath;
@@ -2882,12 +3024,15 @@ async function installAntiPopupGuards(browser, page) {
 const SCRAPE_DIAG_HTML_KEYWORDS = [
   "captcha",
   "verify",
+  "verify to continue",
   "unusual traffic",
   "login",
   "challenge",
   "access denied",
   "robot",
-  "blocked"
+  "blocked",
+  "security check",
+  "drag the puzzle"
 ];
 
 /** @param {string} html */
@@ -2934,6 +3079,7 @@ async function progressiveScrollPageToBottom(page) {
  * @param {boolean} isHeaded
  */
 async function postGotoShopStabilize(page, isHeaded) {
+  await humanPause(page, 800, 2400);
   const force = process.env.SCRAPE_POST_GOTO_RELOAD === "1";
   const skip = process.env.SCRAPE_POST_GOTO_RELOAD === "0";
   const doReload = force || (!isHeaded && !skip);
@@ -2944,9 +3090,11 @@ async function postGotoShopStabilize(page, isHeaded) {
       // eslint-disable-next-line no-console
       console.warn("[scrape] post-goto reload networkidle2:", e?.message || e);
     }
+    await humanPause(page, 900, 2200);
   }
   await new Promise((r) => setTimeout(r, 10_000));
   await progressiveScrollPageToBottom(page);
+  await humanPause(page, 500, 1400);
 }
 
 /**
@@ -3089,6 +3237,8 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
   const title = await page.title();
   await fs.writeFile(titlePath, `${title}\n`, "utf8");
 
+  await syncBrazilEnvToLivePage(page);
+
   const browserEnv = await page.evaluate(() => ({
     userAgent: navigator.userAgent,
     webdriver: navigator.webdriver,
@@ -3098,7 +3248,12 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     platform: navigator.platform
   }));
-  await fs.writeFile(envPath, JSON.stringify(browserEnv, null, 2), "utf8");
+  const browserEnvOut = {
+    ...browserEnv,
+    accept_language_header: TIKTOK_ACCEPT_LANGUAGE,
+    timezone_id: BRAZIL_TIMEZONE_ID
+  };
+  await fs.writeFile(envPath, JSON.stringify(browserEnvOut, null, 2), "utf8");
 
   const keywordHits = scanHtmlForAntiBotSignals(html);
   const selectors = [
@@ -3142,7 +3297,7 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
     status: meta.status,
     keyword_hits: keywordHits,
     selector_wait: selectorWait,
-    browser_env: browserEnv,
+    browser_env: browserEnvOut,
     xhr_entries: buckets.xhrLog.length,
     console_lines: buckets.consoleLog.length,
     request_failed: buckets.failed.length,
@@ -3165,7 +3320,7 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
  * @param {import("puppeteer").Browser} browser
  * @param {import("puppeteer").Page} page
  * @param {string} startUrl
- * @returns {Promise<number>} código de saída (0 ok, 1 sem produtos com `status` ok→no_products)
+ * @returns {Promise<number>} 0 ok · 1 sem produtos (`no_products`) · 2 `TIKTOK_SECURITY_CHECK`
  */
 async function runCategoryHarvest(browser, page, startUrl) {
   const pdpGalleryEnv =
@@ -3272,7 +3427,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
   }
 
   await page.setExtraHTTPHeaders({
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+    "Accept-Language": TIKTOK_ACCEPT_LANGUAGE
   });
 
   let jsonPeeksTried = 0;
@@ -3614,32 +3769,38 @@ async function runCategoryHarvest(browser, page, startUrl) {
 
   attachScrapeDiagnosticXhrResponse(page, diagBuckets);
 
+  await applyBrazilBrowsingContext(page);
+
   let finalUrl = startUrl;
   let status = "ok";
   let note = null;
+  /** @type {string | null} */
+  let failureCode = null;
 
   let reloadedCategoryAfterLogin = false;
 
   await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    await humanPause(page, 1250, 2250);
-    finalUrl = page.url();
+  await humanPause(page, 1250, 2250);
+  await syncBrazilEnvToLivePage(page);
+  finalUrl = page.url();
 
-    if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
-      const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
-      finalUrl = w.url;
-      if (w.ok) {
-        reloadedCategoryAfterLogin = true;
-        await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-        await humanPause(page, 1000, 2000);
-        finalUrl = page.url();
-      }
+  if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
+    const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
+    finalUrl = w.url;
+    if (w.ok) {
+      reloadedCategoryAfterLogin = true;
+      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await humanPause(page, 1000, 2000);
+      await syncBrazilEnvToLivePage(page);
+      finalUrl = page.url();
     }
+  }
 
     if (!/shop\.tiktok\.com/i.test(finalUrl)) {
       status = "not_shop";
       note = isHeaded
         ? `Ainda fora de shop.tiktok.com após ${Math.round(loginWaitMaxMs / 60_000)} min. Aumente LOGIN_WAIT_MAX_MS ou conclua o login a tempo. Perfil: CHROME_USER_DATA=...`
-        : "A sessão caiu fora de shop.tiktok.com. Use HEADED=1, faça o login; na próxima execução o login deve persistir no perfil .chrome-tiktok-profile. Outro local: CHROME_USER_DATA=caminho.";
+        : "A sessão caiu fora de shop.tiktok.com. Use HEADED=1, faça o login; na próxima execução o login deve persistir no perfil `.puppeteer-profile/tiktok-shop` (ou `CHROME_USER_DATA`).";
       await ensureOutAuxDir();
       await fs.writeFile(
         MODERN_ROUTER_PEEK,
@@ -3651,8 +3812,19 @@ async function runCategoryHarvest(browser, page, startUrl) {
         "utf8"
       );
     } else {
-      // Pós-goto em shop.tiktok.com: networkidle2 (reload em headless por defeito) + 10s + scroll longo
-      await postGotoShopStabilize(page, isHeaded);
+      let securityChallenge = await detectTiktokSecurityChallenge(page);
+      if (!securityChallenge) {
+        await postGotoShopStabilize(page, isHeaded);
+        securityChallenge = await detectTiktokSecurityChallenge(page);
+      }
+      if (securityChallenge) {
+        status = "tiktok_security_check";
+        failureCode = "TIKTOK_SECURITY_CHECK";
+        note =
+          "TIKTOK_SECURITY_CHECK: TikTok exibiu Security Check / puzzle (anti-bot). Não há dados de produto para importar nesta execução. Opções: HEADED=1 com o mesmo `userDataDir` para resolver manualmente; alterar IP/rede (ex. sair de datacenter); sem solver automático.";
+        // eslint-disable-next-line no-console
+        console.warn(`[scrape] ${note}`);
+      } else {
       const diagEarly =
         process.env.SCRAPE_DIAGNOSTIC === "1" || /^true$/i.test(String(process.env.SCRAPE_DIAGNOSTIC || ""));
       if (diagEarly) {
@@ -3754,13 +3926,45 @@ async function runCategoryHarvest(browser, page, startUrl) {
           `[pdp_gallery] Concluído: ${pr.visited} visita(s) (elegíveis com /pdp/: ${pr.eligible}, teto ${pr.max}).`
         );
       }
+      }
     }
 
   let exitCode = 0;
   /** @type {object | null} */
   let diagnostic = null;
 
-  if (byProductId.size === 0 && status === "ok") {
+  if (failureCode === "TIKTOK_SECURITY_CHECK") {
+    exitCode = 2;
+    try {
+      diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
+        finalUrl,
+        startUrl,
+        status: "tiktok_security_check"
+      });
+      let mr = null;
+      try {
+        mr = await getModernRouterDataFromPage(page);
+      } catch {
+        mr = null;
+      }
+      await fs.writeFile(
+        path.join(OUT_AUX, "empty_harvest_diagnostic.json"),
+        JSON.stringify(
+          {
+            ...diagnostic,
+            failure_code: "TIKTOK_SECURITY_CHECK",
+            has_modern_router_json: mr != null,
+            modern_router_peek_file: MODERN_ROUTER_PEEK
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+    } catch (e) {
+      diagnostic = { erro_escrita_diagnostico: String(e?.message || e), failure_code: "TIKTOK_SECURITY_CHECK" };
+    }
+  } else if (byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
       "Nenhum produto (XHR + loader). Campo `diagnostic` + ficheiros em extra/ (final_page*.png, final_page.html, xhr_debug.json, browser_env.json, empty_harvest_diagnostic.json). Processo termina com código 1.";
@@ -3806,6 +4010,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
     final_url: finalUrl,
     status,
     note,
+    failure_code: failureCode,
     collected_at: new Date().toISOString(),
     count: byProductId.size,
     products,
@@ -3823,6 +4028,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
     categoria_url: startUrl,
     final_url: finalUrl,
     status,
+    failure_code: failureCode,
     total: itensDados.length,
     filtro: pdpGalleryEnv
       ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos + preço hero no DOM em .../pdp/...)"
