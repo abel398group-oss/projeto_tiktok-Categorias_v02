@@ -9,6 +9,7 @@
  * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * **Sem produtos (0):** `status=no_products`, `process.exit(1)` na CLI, campo `diagnostic` + ficheiros em `extra/` (`final_page*.png`, `final_page.html`, `xhr_debug.json`, `browser_env.json`, …). `SCRAPE_DIAGNOSTIC=1`: captura intermédia após pós-goto (`post_goto_diagnostic.json`). `SCRAPE_POST_GOTO_RELOAD=0` desliga o reload `networkidle2` após o primeiro goto (headless).
+ * **`HEADED=1`:** por defeito usa **Chrome instalado** (`Puppeteer channel=chrome`), não só o Chromium embebido — melhor para login TikTok (QR, Google). `PUPPETEER_USE_BUNDLED_CHROMIUM=1` força o Chromium do Puppeteer; `PUPPETEER_EXECUTABLE_PATH` / `PUPPETEER_CHANNEL` — ver `.env.example`.
  * Grelha: após scroll, até `VIEW_MORE_MAX_CLICKS` (1–10, default 8) cliques em **View more** / **Ver mais** (desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`); só dispara UI — XHR/merge/router inalterados.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -3003,6 +3004,10 @@ async function launchTikTokBrowser() {
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
   const headless = isHeaded ? false : "new";
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
+  /** Forçar Chromium embebido (ex.: Docker só com `chromium` Debian). */
+  const useBundledChromium = /^1|true|yes$/i.test(String(process.env.PUPPETEER_USE_BUNDLED_CHROMIUM || ""));
+  /** `chrome` | `chrome-beta` | `msedge` | … — ver Puppeteer LaunchOptions. */
+  const channelEnv = process.env.PUPPETEER_CHANNEL?.trim() || "";
   const launchOpts = {
     headless,
     env: { ...process.env, TZ: BRAZIL_TIMEZONE_ID },
@@ -3017,6 +3022,15 @@ async function launchTikTokBrowser() {
   };
   if (execPath) {
     launchOpts.executablePath = execPath;
+  } else if (!useBundledChromium) {
+    const channel = channelEnv || (isHeaded ? "chrome" : "");
+    if (channel) {
+      launchOpts.channel = channel;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[scrape] Navegador: channel=${channel} (Chrome/Edge instalado). Headless sem channel usa Chromium embebido. Forçar embebido: PUPPETEER_USE_BUNDLED_CHROMIUM=1. Caminho fixo: PUPPETEER_EXECUTABLE_PATH=...`
+      );
+    }
   }
   if (userDataDir) {
     launchOpts.userDataDir = userDataDir;
@@ -3025,7 +3039,11 @@ async function launchTikTokBrowser() {
 }
 
 /**
- * Fecha abas extra do perfil e impede popups — chamar após `browser.newPage()` da coleta.
+ * Fecha abas extra do perfil ao arranque. Em headless, fecha popups (anúncios / ruído).
+ * Com `HEADED=1` **não** fecha popups: login TikTok (Google / Apple / Facebook) abre janela OAuth —
+ * fechá-la destrói o login e gera `Target closed` no stealth.
+ *
+ * Opcional: `SCRAPE_ALLOW_LOGIN_POPUPS=1` permite popups também em headless (raro).
  * @param {import("puppeteer").Browser} browser
  * @param {import("puppeteer").Page} page
  */
@@ -3034,6 +3052,15 @@ async function installAntiPopupGuards(browser, page) {
     if (p !== page) {
       await p.close().catch(() => {});
     }
+  }
+  const allowLoginPopups =
+    process.env.HEADED === "1" || /^true$/i.test(String(process.env.SCRAPE_ALLOW_LOGIN_POPUPS || ""));
+  if (allowLoginPopups) {
+    // eslint-disable-next-line no-console
+    console.log(
+      "[scrape] Popups de login OAuth permitidos (HEADED=1 ou SCRAPE_ALLOW_LOGIN_POPUPS=1). Não feche a janela do Google/Facebook à mão até concluir."
+    );
+    return;
   }
   page.on("popup", (popup) => {
     void popup.close().catch(() => {});

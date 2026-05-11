@@ -124,6 +124,7 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 | Completa com browser visível para login | `npm run coleta:completa:login` |
 | Idem + **import** Postgres | `npm run coleta:completa:login:db` |
 | Só abrir browser com script de categoria (`src/scrapeCategory.mjs`) | `npm run scrape:category:headed` |
+| **Login / QR no PC:** com `HEADED=1` o scraper usa **Chrome instalado** (não só o Chromium embebido). Sem Chrome: `PUPPETEER_USE_BUNDLED_CHROMIUM=1`. Ver `.env.example` (`PUPPETEER_CHANNEL`, `PUPPETEER_EXECUTABLE_PATH`). |
 
 ### Worker local (Puppeteer no PC + Postgres na API remota)
 
