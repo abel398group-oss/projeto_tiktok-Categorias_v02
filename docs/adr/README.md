@@ -25,3 +25,11 @@ Ficheiro: `docs/adr/0001-titulo-curto-em-kebab.md` (número sequencial com paddi
 ## Relação com o ROADMAP
 
 Tarefas no `docs/ROADMAP.md` podem apontar “ver ADR 00XX”. Ao fechar tarefa que implica decisão, criar o ADR e referenciar no ROADMAP.
+
+## Índice
+
+| ADR | Tema |
+|-----|------|
+| [0001](./0001-modelo-hibrido-produto-loja.md) | Modelo híbrido produto+loja nos JSONs |
+| [0002](./0002-preco-vendas-v1.md) | Preço e vendas v1 |
+| [0003](./0003-local-scraper-worker-remote-import.md) | Worker local + `POST /scrape/import-remote` |

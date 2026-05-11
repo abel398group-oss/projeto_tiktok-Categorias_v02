@@ -1,13 +1,13 @@
 /**
  * Valida consistência entre output/dados_produtos.json (+ dados_lojas opcional)
  * e os dados já importados no Postgres (ProductSnapshot do ScrapeRun correspondente).
- * Usa o mesmo inputHash que scripts/import-output-to-db.mjs.
+ * Usa o mesmo inputHash que `scripts/lib/import-output-core.mjs` (importador CLI).
  */
-import { createHash } from "node:crypto";
 import { access, constants, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { computeInputHash } from "./lib/import-output-core.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -15,11 +15,6 @@ const DADOS_PRODUTOS = path.join(root, "output", "dados_produtos.json");
 const DADOS_LOJAS = path.join(root, "output", "dados_lojas.json");
 
 const EPS_PRICE = 1e-4;
-
-function computeInputHash(produtosText, lojasTextOrAbsent) {
-  const boundary = "\n---IMPORT_INPUT_HASH_V1---\n";
-  return createHash("sha256").update(Buffer.from(produtosText + boundary + lojasTextOrAbsent, "utf8")).digest("hex");
-}
 
 async function fileExists(p) {
   try {

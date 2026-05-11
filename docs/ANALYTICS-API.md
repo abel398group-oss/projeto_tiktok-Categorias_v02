@@ -54,6 +54,18 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** com `CATEGORY_URL` e **`OUTPUT_DIR`** em `output/categorias/…` quando a URL corresponde às duas categorias do repo (como `scrape-both`); em seguida **`consolidate-category-outputs.mjs`** para actualizar `output/dados_*.json` antes do import. **409** se busy. Em sucesso inclui **`outputDir`** (relativo ao repo, separador `/`) e **`consolidated`** (`true` quando correu consolidate após subpasta `categorias/`). Ver `scripts/analytics/scrape-run-route.mjs`. |
 | POST | `/scrape/run-both` | Corpo `{}` — **`node scripts/scrape-both.mjs`** (duas categorias, pastas em `output/categorias/…`) e em seguida **`node scripts/consolidate-category-outputs.mjs`**. Partilha o mesmo mutex **busy** que `/scrape/run`. Em sucesso inclui **`outputDir`** (`output`) e **`consolidated`: true**. |
 | POST | `/analytics/import-output` | Corpo `{}` — corre **`npm run db:import:output`** (JSON em `output/` → Postgres) à espera do fim. Resposta **`200`** com **`skipped: true`** quando o importador detecta o mesmo **`input_hash`** que um `ScrapeRun` já existente (nada é escrito na BD). Opcionalmente **`detail`**: se `skipped`, `existingScrapeRunId` e `inputHash` (parse do log); se importou, `scrapeRunId` do bloco «Resumo importação». O painel **Scrapear** em `/` mostra estas linhas. Ver `scripts/analytics/import-output-route.mjs`. |
+| POST | `/scrape/import-remote` | Importação **in-process** com o mesmo núcleo que o CLI (`scripts/lib/import-output-core.mjs`). Destinado ao **worker local** (`npm run scraper:worker`): envia o conteúdo textual de `dados_produtos.json` / `dados_lojas.json`. Auth: mesma **`ANALYTICS_API_KEY`** (`Authorization: Bearer` ou **`x-api-key`**). Limite de corpo configurável: **`IMPORT_REMOTE_BODY_LIMIT_BYTES`** (defeito 100 MiB, máx. 512 MiB). Ver **`docs/LOCAL_SCRAPER_WORKER.md`**. |
+
+### POST `/scrape/import-remote`
+
+- **Corpo JSON** (`application/json`):
+  - **`dados_produtos_text`** (string, recomendado): conteúdo **byte-a-byte** do ficheiro `dados_produtos.json` (UTF-8), para o **`input_hash`** coincidir com `npm run db:import:output`.
+  - **`dados_lojas_text`** (string, opcional): conteúdo de `dados_lojas.json`; se omitido, usa-se o mesmo sentinel que o CLI quando o ficheiro não existe.
+  - Alternativa: **`dados_produtos`** / **`dados_lojas`** como **object** — o servidor faz `JSON.stringify`; o hash pode **diferir** do CLI nos mesmos dados (ordem de chaves).
+  - **`import_run_type`**: `quick_scrape` | `pdp_enrich` | `unknown` (opcional).
+  - **`raw_payload_extra`**: object opcional — fundido em **`worker_extra`** dentro do envelope `RawPayload` (metadados / diagnósticos leves).
+- **200** `ok: true`, **`skipped: true|false`**, **`message`**, **`detail`** (`scrapeRunId`, `inputHash`, contagens quando importou; `existingScrapeRunId` quando saltou).
+- **400** JSON inválido, campos em falta, ou erro de importação (ex.: `coletado_em` inválido).
 
 ### GET `/analytics/categories`
 

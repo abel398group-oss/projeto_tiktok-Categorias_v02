@@ -102,7 +102,7 @@ flowchart TB
 
 - Implementado como **`ProductSnapshot`** e **`SellerSnapshot`** em `prisma/schema.prisma`, ligados a **`ScrapeRun`** (uma coleta / import) e às dimensões **`Product`** / **`Seller`**.
 - Cada run de importação grava **novas linhas** de snapshot (preço, vendas, imagens no produto; métricas agregadas na loja) sem sobrescrever histórico anterior.
-- Preenchimento: **`scripts/import-output-to-db.mjs`** (`npm run db:import:output`), sobre `output/dados_produtos.json` e `output/dados_lojas.json`; ver secção **Modelo Postgres** abaixo.
+- Preenchimento: **`scripts/import-output-to-db.mjs`** (`npm run db:import:output`) e o mesmo núcleo em **`scripts/lib/import-output-core.mjs`** (usado também por **`POST /scrape/import-remote`** na API analytics — worker local); sobre `output/dados_produtos.json` e `output/dados_lojas.json`; ver secção **Modelo Postgres** abaixo e `docs/LOCAL_SCRAPER_WORKER.md`.
 
 ## Contrato dos outputs
 
@@ -161,7 +161,7 @@ Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline r
 ### Onde está definido
 
 - **Esquema:** `prisma/schema.prisma` (tabelas mapeadas `snake_case` no Postgres).
-- **Import:** `scripts/import-output-to-db.mjs` — comando `npm run db:import:output` (requer `DATABASE_URL`). **Idempotência:** campo `input_hash` em `scrape_run`: reimportação do mesmo conteúdo (hash SHA-256 dos ficheiros consolidados) **não** duplica runs nem snapshots (`README.md`).
+- **Import:** `scripts/import-output-to-db.mjs` (CLI) e **`POST /scrape/import-remote`** partilham **`scripts/lib/import-output-core.mjs`** — comando `npm run db:import:output` (requer `DATABASE_URL`). **Idempotência:** campo `input_hash` em `scrape_run`: reimportação do mesmo conteúdo (hash SHA-256 dos ficheiros consolidados) **não** duplica runs nem snapshots (`README.md`).
 
 ### Tabelas de dimensão (dados relativamente estáveis)
 
@@ -184,7 +184,7 @@ Semântica dos campos numéricos de preço e desconto em `itens[]` (o pipeline r
 
 - Alinhamento ao TikTok nos JSONs: integridade entre `products.seller_ref_id` → `sellers.id` e métricas em `seller_snapshots`.
 
-**Pipeline de scraping:** inalterado em `src/scrapeCategory.mjs` (e scripts de coleta). **Import JSON → Postgres** é **camada separada** — `scripts/import-output-to-db.mjs` apenas mapeia valores; não recalcula preço, vendas ou merge.
+**Pipeline de scraping:** inalterado em `src/scrapeCategory.mjs` (e scripts de coleta). **Import JSON → Postgres** é **camada separada** — `scripts/lib/import-output-core.mjs` (e o CLI `scripts/import-output-to-db.mjs`) apenas mapeiam valores; não recalculam preço, vendas ou merge.
 
 ## Integridade (regressão)
 
