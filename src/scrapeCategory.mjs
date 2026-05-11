@@ -2517,6 +2517,20 @@ async function gentleMouseJiggle(page) {
 }
 
 /**
+ * Host real da página tem de ser `shop.tiktok.com`.
+ * `www.tiktok.com/login?redirect_url=...shop.tiktok.com...` contém o texto no query — não é Shop.
+ * @param {string} urlStr
+ */
+function isShopTiktokHostname(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return false;
+  try {
+    return new URL(urlStr).hostname.toLowerCase() === "shop.tiktok.com";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Com HEADED=1, se ainda não estiver no domínio do Shop, aguarda login sem fechar o browser.
  * Ajuste o tempo: LOGIN_WAIT_MAX_MS (milissegundos, padrão 15 min).
  */
@@ -2529,7 +2543,7 @@ async function waitForShopOrTimeout(page, { maxMs }) {
   while (Date.now() - t0 < maxMs) {
     await new Promise((r) => setTimeout(r, 2000));
     const u = page.url();
-    if (/shop\.tiktok\.com/i.test(u)) {
+    if (isShopTiktokHostname(u)) {
       // eslint-disable-next-line no-console
       console.log(`[TikTok] Shop detectado: ${u.slice(0, 120)}...`);
       return { ok: true, url: u };
@@ -3830,7 +3844,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
   await syncBrazilEnvToLivePage(page);
   finalUrl = page.url();
 
-  if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
+  if (!isShopTiktokHostname(finalUrl) && isHeaded) {
     const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
     finalUrl = w.url;
     if (w.ok) {
@@ -3842,7 +3856,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
     }
   }
 
-    if (!/shop\.tiktok\.com/i.test(finalUrl)) {
+    if (!isShopTiktokHostname(finalUrl)) {
       status = "not_shop";
       note = isHeaded
         ? `Ainda fora de shop.tiktok.com após ${Math.round(loginWaitMaxMs / 60_000)} min. Aumente LOGIN_WAIT_MAX_MS ou conclua o login a tempo. Perfil: CHROME_USER_DATA=...`
