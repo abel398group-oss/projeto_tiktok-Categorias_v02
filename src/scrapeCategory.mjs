@@ -2951,6 +2951,7 @@ async function detectTiktokSecurityChallenge(page) {
     return false;
   }
   if (title.includes("security check")) return true;
+  if (title.includes("verificação de segurança") || title.includes("verificacao de seguranca")) return true;
   let body = "";
   try {
     body = await page.evaluate(() =>
@@ -2962,7 +2963,34 @@ async function detectTiktokSecurityChallenge(page) {
     return false;
   }
   if (body.includes("security check")) return true;
+  if (body.includes("verificação de segurança") || body.includes("verificacao de seguranca")) return true;
   if (body.includes("verify to continue") && (body.includes("puzzle") || body.includes("drag"))) return true;
+  return false;
+}
+
+/**
+ * Com janela visível: espera o utilizador concluir o puzzle / Security Check (polling).
+ * Usa o mesmo teto que o login: `LOGIN_WAIT_MAX_MS`.
+ * @param {import("puppeteer").Page} page
+ * @param {{ maxMs: number }} opts
+ * @returns {Promise<boolean>} true se deixou de detetar challenge
+ */
+async function waitForSecurityChallengeResolved(page, { maxMs }) {
+  // eslint-disable-next-line no-console
+  console.log(
+    `[TikTok] Security Check / puzzle detetado. Conclua a verificação na janela do browser; o script espera até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
+  );
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise((r) => setTimeout(r, 2000));
+    if (!(await detectTiktokSecurityChallenge(page))) {
+      // eslint-disable-next-line no-console
+      console.log("[TikTok] Security Check aparentemente concluído; a continuar a coleta.");
+      return true;
+    }
+  }
+  // eslint-disable-next-line no-console
+  console.warn("[TikTok] Tempo esgotado: Security Check ainda visível (aumente LOGIN_WAIT_MAX_MS se precisar).");
   return false;
 }
 
@@ -3012,7 +3040,9 @@ async function launchTikTokBrowser() {
   }
   if (userDataDir) {
     // eslint-disable-next-line no-console
-    console.log(`[Perfil] ${path.resolve(userDataDir)} (login fica salvo. Sessão limpa: FRESH_SESSION=1)`);
+    console.log(
+      `[Perfil] ${path.resolve(userDataDir)} (cookies nesta pasta. FRESH_SESSION=${fresh ? "1 — não reutiliza o perfil predefinido nesta execução" : "0 — reutiliza o perfil"})`
+    );
   }
   const isHeaded = process.env.HEADED === "1";
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
@@ -3877,11 +3907,19 @@ async function runCategoryHarvest(browser, page, startUrl) {
         await postGotoShopStabilize(page, isHeaded);
         securityChallenge = await detectTiktokSecurityChallenge(page);
       }
+      if (securityChallenge && isHeaded) {
+        await waitForSecurityChallengeResolved(page, { maxMs: loginWaitMaxMs });
+        securityChallenge = await detectTiktokSecurityChallenge(page);
+        if (!securityChallenge) {
+          await postGotoShopStabilize(page, isHeaded);
+          securityChallenge = await detectTiktokSecurityChallenge(page);
+        }
+      }
       if (securityChallenge) {
         status = "tiktok_security_check";
         failureCode = "TIKTOK_SECURITY_CHECK";
         note =
-          "TIKTOK_SECURITY_CHECK: TikTok exibiu Security Check / puzzle (anti-bot). Não há dados de produto para importar nesta execução. Opções: HEADED=1 com o mesmo `userDataDir` para resolver manualmente; alterar IP/rede (ex. sair de datacenter); sem solver automático.";
+          "TIKTOK_SECURITY_CHECK: TikTok exibiu Security Check / puzzle (anti-bot). Com HEADED=1 o script esperou LOGIN_WAIT_MAX_MS; ainda visível ou IP bloqueado. Tente resolver na janela antes do timeout, outra rede, ou aguardar.";
         // eslint-disable-next-line no-console
         console.warn(`[scrape] ${note}`);
       } else {
