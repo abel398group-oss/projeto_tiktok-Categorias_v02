@@ -125,6 +125,16 @@ As chaves **`ANALYTICS_API_KEY`** (raiz) e **`VITE_ANALYTICS_API_KEY`** (`fronte
 | Idem + **import** Postgres | `npm run coleta:completa:login:db` |
 | Só abrir browser com script de categoria (`src/scrapeCategory.mjs`) | `npm run scrape:category:headed` |
 
+### Worker local (Puppeteer no PC + Postgres na API remota)
+
+Quando o TikTok bloqueia o scrape **no datacenter**, corre o browser **localmente** e envia os JSON para a API no servidor (`POST /scrape/import-remote`). Documentação: **`docs/LOCAL_SCRAPER_WORKER.md`**.
+
+| Situação | Comando / notas |
+|----------|------------------|
+| Coleta local + import na API remota | No `.env` do PC: **`REMOTE_API_URL`**, **`ANALYTICS_API_KEY`** (igual ao servidor). Depois: **`npm run scraper:worker`** |
+| Só reenviar ficheiros já gerados em `output/` | **`WORKER_SKIP_SCRAPE=1`** + mesmo comando |
+| Variáveis extra | **`SCRAPER_MODE`**, **`IMPORT_RUN_TYPE`**, **`CATEGORY_URL`**, **`OUTPUT_DIR`** — ver doc acima |
+
 ### Banco e Prisma
 
 | Situação | Comando |
