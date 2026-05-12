@@ -30,8 +30,8 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
-puppeteer.use(StealthPlugin());
-/** Stealth activo globalmente (`puppeteer-extra-plugin-stealth` + `puppeteer.use` acima). */
+// puppeteer.use(StealthPlugin());
+/** Stealth desativado temporariamente para permitir login no Google */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2808,60 +2808,67 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
   let noGrowthStreak = 0;
 
   for (let i = 0; i < maxClicks; i++) {
-    const found = await page.evaluate(() => {
-      const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
-      const matches = (t) => {
-        const s = norm(t).toLowerCase();
-        if (!s) return false;
-        if (s === "view more" || s === "ver mais" || s === "see more" || s === "mostrar mais") return true;
-        return /^(view more|ver mais|see more|mostrar mais)\b/i.test(s) && s.length <= 52;
-      };
-      const visible = (el) => {
-        if (!el || !(el instanceof HTMLElement)) return false;
-        const st = window.getComputedStyle(el);
-        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
-        const r = el.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
-      };
+    let found;
+    try {
+      found = await page.evaluate(() => {
+        const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+        const matches = (t) => {
+          const s = norm(t).toLowerCase();
+          if (!s) return false;
+          if (s === "view more" || s === "ver mais" || s === "see more" || s === "mostrar mais") return true;
+          return /^(view more|ver mais|see more|mostrar mais)\b/i.test(s) && s.length <= 52;
+        };
+        const visible = (el) => {
+          if (!el || !(el instanceof HTMLElement)) return false;
+          const st = window.getComputedStyle(el);
+          if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+          const r = el.getBoundingClientRect();
+          return r.width > 2 && r.height > 2;
+        };
 
-      const nodes = Array.from(
-        document.querySelectorAll(
-          'button,[role="button"],a[class*="cursor-pointer"],div[role="button"],span[role="button"]'
-        )
-      );
-      /** @type {HTMLElement | null} */
-      let best = null;
-      for (const el of nodes) {
-        const t = norm(el.textContent);
-        if (!matches(t)) continue;
-        if (!visible(el)) continue;
+        const nodes = Array.from(
+          document.querySelectorAll(
+            'button,[role="button"],a[class*="cursor-pointer"],div[role="button"],span[role="button"]'
+          )
+        );
         /** @type {HTMLElement | null} */
-        let hx = el;
-        if (hx != null && (hx.tagName === "SPAN" || hx.tagName === "I")) {
-          hx = hx.closest('button,[role="button"],a,[role="link"]');
+        let best = null;
+        for (const el of nodes) {
+          const t = norm(el.textContent);
+          if (!matches(t)) continue;
+          if (!visible(el)) continue;
+          /** @type {HTMLElement | null} */
+          let hx = el;
+          if (hx != null && (hx.tagName === "SPAN" || hx.tagName === "I")) {
+            hx = hx.closest('button,[role="button"],a,[role="link"]');
+          }
+          const target = hx && visible(hx) ? hx : el;
+          best = /** @type {HTMLElement} */ (target);
+          break;
         }
-        const target = hx && visible(hx) ? hx : el;
-        best = /** @type {HTMLElement} */ (target);
-        break;
-      }
-      if (!best) {
-        return { ok: false, label: "" };
-      }
-      const lbl = norm(best.textContent).slice(0, 72);
-      try {
+        if (!best) {
+          return { ok: false, label: "" };
+        }
+        const lbl = norm(best.textContent).slice(0, 72);
         try {
-          best.scrollIntoView({ block: "center", behavior: "instant" });
-        } catch {
-          /* noop */
+          try {
+            best.scrollIntoView({ block: "center", behavior: "instant" });
+          } catch {
+            /* noop */
+          }
+          best.click();
+          return { ok: true, label: lbl };
+        } catch (e) {
+          return { ok: false, label: lbl || "", err: String(e?.message ?? e) };
         }
-        best.click();
-        return { ok: true, label: lbl };
-      } catch (e) {
-        return { ok: false, label: lbl || "", err: String(e?.message ?? e) };
-      }
-    });
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log(`[view-more] erro de execução (possível reload da página): ${e.message}`);
+      break;
+    }
 
-    if (!found.ok) {
+    if (!found || !found.ok) {
       // eslint-disable-next-line no-console
       console.log(
         found.err
@@ -3147,14 +3154,18 @@ async function launchTikTokBrowser() {
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
       "--window-size=1600,900",
-      "--disable-blink-features=AutomationControlled"
+      "--disable-blink-features=AutomationControlled",
+      "--use-fake-ui-for-media-stream",
+      "--disable-infobars"
     ],
     defaultViewport: { width: 1600, height: 900, deviceScaleFactor: 1 }
   };
   if (execPath) {
     launchOpts.executablePath = execPath;
   } else if (!useBundledChromium) {
-    const channel = channelEnv || (isHeaded ? "chrome" : "");
+    // Se for modo login, vamos tentar o Edge para ver se o Google aceita melhor
+    const isLoginOnly = process.env.LOGIN_ONLY === "1";
+    const channel = isLoginOnly ? "msedge" : (channelEnv || (isHeaded ? "chrome" : ""));
     if (channel) {
       launchOpts.channel = channel;
       // eslint-disable-next-line no-console
@@ -4355,6 +4366,20 @@ async function main() {
   // Passo de "aquecimento": abre o Google primeiro para parecer humano
   console.log("[scrape] Aquecendo navegador no Google...");
   await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+  
+  if (process.env.LOGIN_ONLY === "1") {
+    console.log("\n[LOGIN MODE] Navegador aberto no Google.");
+    console.log("1. Faça login no Google e no TikTok Shop nesta janela.");
+    console.log("2. Verifique se o login foi concluído com sucesso.");
+    console.log("3. FECHE o navegador manualmente quando terminar para salvar a sessão.\n");
+    
+    // Aguarda o navegador ser fechado manualmente
+    await new Promise((resolve) => {
+      browser.on("disconnected", resolve);
+    });
+    return 0;
+  }
+
   await new Promise(r => setTimeout(r, 2000));
 
   await installAntiPopupGuards(browser, page);
