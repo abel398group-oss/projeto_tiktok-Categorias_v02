@@ -95,6 +95,20 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
 
   const line = computeProductScoreLine(s, ctx);
   const imageUrls = extractOrderedImageUrls(snap).slice(0, MAX_PREVIEW_IMAGES);
+  const hasPdpImages = (() => {
+    const b = snap?.pdpImages;
+    if (typeof b === "string") {
+      return b.trim().startsWith("http");
+    }
+    if (Array.isArray(b)) {
+      return b.some((x) => {
+        if (typeof x === "string") return x.trim().startsWith("http");
+        if (x && typeof x === "object" && typeof x.url === "string") return x.url.trim().startsWith("http");
+        return false;
+      });
+    }
+    return false;
+  })();
 
   /** @type {string | null} */
   let deltaHint = null;
@@ -142,6 +156,7 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     link: line.link,
     categoryUrl: product.categoryUrl ?? null,
     imageUrls,
+    hasPdpImages,
 
     currency: product.currency ?? null,
     sourcePlatform: product.sourcePlatform ?? null,

@@ -1,10 +1,24 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { CHOSEN_PRODUCTS_CHANGED_EVENT, getChosenProducts } from "./productChosenStorage.js";
 
 /**
  * Envolve Categorias (início), Analytics, «Produtos em análise» e rotas de produto.
  */
 export default function AppShell() {
   const { pathname } = useLocation();
+  const [chosenCount, setChosenCount] = useState(() => getChosenProducts().length);
+
+  useEffect(() => {
+    const refresh = () => setChosenCount(getChosenProducts().length);
+    refresh();
+    window.addEventListener("storage", refresh);
+    window.addEventListener(CHOSEN_PRODUCTS_CHANGED_EVENT, refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener(CHOSEN_PRODUCTS_CHANGED_EVENT, refresh);
+    };
+  }, []);
 
   return (
     <div
@@ -40,7 +54,7 @@ export default function AppShell() {
             Analytics
           </NavLink>
           <NavLink to="/a-mao" className={({ isActive }) => `tk-nav-link${isActive ? " tk-nav-link--active" : ""}`}>
-            Produtos em análise
+            Produtos em análise{chosenCount > 0 ? ` (${chosenCount})` : ""}
           </NavLink>
           <NavLink
             to="/shortlist"

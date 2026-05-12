@@ -25,9 +25,9 @@ import {
   firstFloat,
   parseDelta as parseDeltaVendasStr
 } from "./sortUtils.js";
-import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { deriveProductLabels } from "./productLabels.js";
 import { getTicketLabel, rowMatchesTicketFilter } from "./ticketLabel.js";
+import SendToAnalysisButton from "./SendToAnalysisButton.jsx";
 
 const CategoryAnalyticsPage = lazy(() => import("./CategoryAnalyticsPage.jsx"));
 
@@ -1660,6 +1660,17 @@ function TableTop({ data }) {
                       })
                     : "—"}
                 </td>
+                <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
+                  {pidStr ? (
+                    <SendToAnalysisButton
+                      productId={pidStr}
+                      nome={typeof row.nome === "string" ? row.nome : undefined}
+                      tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    />
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -2170,6 +2181,17 @@ function TableOpp({ data }) {
                 {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
               </td>
               <td>{row.motivo ?? "—"}</td>
+              <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
+                {hasProductId ? (
+                  <SendToAnalysisButton
+                    productId={pidStr}
+                    nome={typeof row.nome === "string" ? row.nome : undefined}
+                    tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                  />
+                ) : (
+                  "—"
+                )}
+              </td>
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -2731,8 +2753,8 @@ function TableScore({ data }) {
               onGrip={colW.onGripMouseDown}
             />
             <PlainTh
-              label="PDP"
-              title="Enriquecer PDP no servidor (npm run pdp:enrich)"
+              label="Enviar"
+              title="Enviar para análise: adiciona à lista manual em /a-mao (Produtos em análise)"
               resizeColIdx={12}
               onGrip={colW.onGripMouseDown}
             />
@@ -2755,7 +2777,7 @@ function TableScore({ data }) {
                 borderBottom: "1px solid var(--tk-border)",
                 cursor: pidStr ? "pointer" : "default"
               }}
-              title={pidStr ? "Clique na linha para abrir o workspace (excepto link / Exportar / Enriquecer PDP)" : undefined}
+              title={pidStr ? "Clique na linha para abrir o workspace (excepto link / Enviar)" : undefined}
               onClick={(e) => {
                 if (!pidStr) return;
                 if (isInteractiveTableCellClick(e)) return;
@@ -2790,8 +2812,17 @@ function TableScore({ data }) {
               <td>{row.rating ?? "—"}</td>
               <td>{row.deltaVendas ?? "—"}</td>
               <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
-                <PdpEnrichButton productId={row.productId} />
+                {pidStr ? (
+                  <SendToAnalysisButton
+                    productId={pidStr}
+                    nome={typeof row.nome === "string" ? row.nome : undefined}
+                    tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                  />
+                ) : (
+                  "—"
+                )}
               </td>
+              <td style={{ padding: "0.35rem 0.3rem", opacity: 0.85 }}>—</td>
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -3715,6 +3746,17 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
                 <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
                 <td style={tdStyle}>
+                  {pid ? (
+                    <SendToAnalysisButton
+                      productId={pid}
+                      nome={typeof row.nome === "string" ? row.nome : undefined}
+                      tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    />
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td style={tdStyle}>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
                       abrir
@@ -3967,6 +4009,17 @@ function TableScalableSections({ data }) {
         <td>{row.vendas ?? "—"}</td>
         <td>{row.rating ?? "—"}</td>
           <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
+        <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
+          {pid ? (
+            <SendToAnalysisButton
+              productId={pid}
+              nome={typeof row.nome === "string" ? row.nome : undefined}
+              tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+            />
+          ) : (
+            "—"
+          )}
+        </td>
         <td>
           {row.link ? (
             <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -4634,7 +4687,7 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         <Route path="/" element={<AppShell />}>
           <Route index element={<CategoriesPage />} />

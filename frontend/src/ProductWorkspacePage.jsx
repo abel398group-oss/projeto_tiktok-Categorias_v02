@@ -209,6 +209,9 @@ export default function ProductWorkspacePage() {
   const [importFlash, setImportFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [importBusy, setImportBusy] = useState(false);
 
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
+
   const [selectedUrls, setSelectedUrls] = useState(() => new Set());
   const [zipBusy, setZipBusy] = useState(false);
   const [zipMsg, setZipMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
@@ -283,6 +286,37 @@ export default function ProductWorkspacePage() {
     const { inList } = toggleCreatorShortlist({ productId: decodedId, nome: nome || "—" });
     setShortlisted(inList);
   }, [decodedId, workspace]);
+
+  const onExportImagesToSpaces = useCallback(async () => {
+    if (!decodedId) return;
+    setExportBusy(true);
+    setExportMsg(null);
+    try {
+      const res = await apiPost("/analytics/images-upload", { productId: decodedId });
+      const stats = res && typeof res === "object" && res.stats && typeof res.stats === "object" ? res.stats : null;
+      const uploaded = stats && Number.isFinite(Number(stats.uploaded)) ? Number(stats.uploaded) : null;
+      const failed = stats && Number.isFinite(Number(stats.failed)) ? Number(stats.failed) : null;
+      const skipped = stats && Number.isFinite(Number(stats.skippedExists)) ? Number(stats.skippedExists) : null;
+      const ms = Number.isFinite(Number(res.ms)) ? Number(res.ms) : null;
+
+      const bits = [];
+      if (uploaded != null) bits.push(`enviadas: ${uploaded.toLocaleString("pt-BR")}`);
+      if (skipped != null) bits.push(`reutilizadas: ${skipped.toLocaleString("pt-BR")}`);
+      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
+      if (ms != null) bits.push(`tempo: ${(ms / 1000).toFixed(1)}s`);
+
+      setProductStatus(decodedId, "conteudo_produzido");
+      setExportMsg({
+        kind: "ok",
+        text: `Exportação concluída.${bits.length ? " " + bits.join(" · ") : ""}`
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExportMsg({ kind: "err", text: `Falha ao exportar: ${msg}` });
+    } finally {
+      setExportBusy(false);
+    }
+  }, [decodedId]);
 
   const briefing = useMemo(
     () => (isWorkspace(workspace) ? buildProductBriefingFromWorkspace(/** @type {WorkspacePayload & Record<string, unknown>} */ (workspace)) : null),
@@ -1026,6 +1060,30 @@ export default function ProductWorkspacePage() {
               </button>
               <button
                 type="button"
+                disabled={exportBusy || loading || !decodedId}
+                onClick={() => void onExportImagesToSpaces()}
+                title="Exporta imagens deste produto para o DigitalOcean Spaces (não faz scraping)"
+                style={{
+                  padding: "0.28rem 0.55rem",
+                  fontSize: "0.68rem",
+                  cursor: exportBusy ? "wait" : "pointer",
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                  display: "inline-block",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                  border: "1px solid #567138",
+                  background: "#203014",
+                  color: "#dcedc8",
+                  opacity: exportBusy ? 0.7 : 1,
+                  alignSelf: "center"
+                }}
+              >
+                {exportBusy ? "Exportando…" : "Exportar"}
+              </button>
+              <button
+                type="button"
                 disabled={loading || !decodedId}
                 onClick={() => void reloadWorkspace()}
                 title="Volta a carregar só esta página a partir da API (GET workspace). Não executa import do JSON — não substitui «Actualizar dados»."
@@ -1070,6 +1128,20 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {importFlash.text}
+              </p>
+            ) : null}
+            {exportMsg ? (
+              <p
+                role="status"
+                style={{
+                  marginTop: "0.35rem",
+                  marginBottom: 0,
+                  fontSize: "0.71rem",
+                  color: exportMsg.kind === "ok" ? "#9ed9b0" : "#f97373",
+                  lineHeight: 1.45
+                }}
+              >
+                {exportMsg.text}
               </p>
             ) : null}
             {workspace.scrapeRun ? (

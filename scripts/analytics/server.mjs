@@ -25,6 +25,7 @@ import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
+import { registerImagesUploadRoute } from "./images-upload-route.mjs";
 import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
@@ -267,6 +268,7 @@ fastify.post("/analytics/product-workspace/:productId/images-zip", async (req, r
 
 registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
+registerImagesUploadRoute(fastify);
 registerScrapeRunRoute(fastify);
 
 const graceful = async () => {

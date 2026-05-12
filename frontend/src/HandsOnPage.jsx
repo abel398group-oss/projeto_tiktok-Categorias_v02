@@ -16,6 +16,12 @@ import {
   setProductStatus
 } from "./productStatusStorage.js";
 import { clearRecentWorkspace, getRecentWorkspace } from "./recentWorkspace.js";
+import {
+  CHOSEN_PRODUCTS_CHANGED_EVENT,
+  CHOSEN_PRODUCTS_STORAGE_KEY,
+  getChosenProducts,
+  removeChosenProduct
+} from "./productChosenStorage.js";
 
 const NOTES_LS_PREFIX = "tiktok-analytics-product-notes:";
 
@@ -75,7 +81,7 @@ async function mapWithConcurrency(items, limit, fn) {
 
 /** @typedef {{ loading?: boolean, preco?: unknown, vendas?: unknown, rating?: unknown, nome?: string, error?: string | null, workspaceNote?: string | null }} RowDetail */
 
-/** @typedef {"recentes" | "estagios" | "shortlist"} HandsOnTab */
+/** @typedef {"escolhidos" | "recentes" | "estagios" | "shortlist"} HandsOnTab */
 
 const btnBase = {
   padding: "0.28rem 0.55rem",
@@ -162,7 +168,8 @@ const tabBtnBase = {
  */
 export default function HandsOnPage() {
   /** @type {HandsOnTab} */
-  const [activeTab, setActiveTab] = useState(/** @type {HandsOnTab} */ ("recentes"));
+  const [activeTab, setActiveTab] = useState(/** @type {HandsOnTab} */ ("escolhidos"));
+  const [chosenProducts, setChosenProducts] = useState(() => getChosenProducts());
   /** @type {[{ productId: string, nome?: string, at?: string }, ...]} */
   const [recentPages, setRecentPages] = useState(() => sortRecentNewestFirst(getRecentWorkspace()));
   /** @type {import("./productShortlistStorage.js").CreatorShortlistEntry[]} */
@@ -171,11 +178,19 @@ export default function HandsOnPage() {
   const [statusMap, setStatusMap] = useState(() => getProductStatuses());
   /** @type {Record<string, RowDetail>} */
   const [details, setDetails] = useState({});
+  const [exportingId, setExportingId] = useState(/** @type {string | null} */ (null));
+  const [exportById, setExportById] = useState(
+    /** @type {Record<string, { kind: "ok" | "err"; text: string }>} */ ({})
+  );
+  const [exportFlash, setExportFlash] = useState(
+    /** @type {{ kind: "ok" | "err"; text: string } | null} */ (null)
+  );
 
   const refreshRecent = useCallback(() => {
     setRecentPages(sortRecentNewestFirst(getRecentWorkspace()));
     setStatusMap(getProductStatuses());
     setShortlistSnapshot(getCreatorShortlist());
+    setExportFlash(null);
   }, []);
 
   useEffect(() => {
@@ -190,26 +205,33 @@ export default function HandsOnPage() {
       if (
         e.key === PRODUCT_STATUS_STORAGE_KEY ||
         e.key === CREATOR_SHORTLIST_STORAGE_KEY ||
+        e.key === CHOSEN_PRODUCTS_STORAGE_KEY ||
         e.key === null
       ) {
         setStatusMap(getProductStatuses());
         setShortlistSnapshot(getCreatorShortlist());
+        setChosenProducts(getChosenProducts());
       }
     };
     const onShortlistSameTab = () => {
       setShortlistSnapshot(getCreatorShortlist());
     };
+    const onChosenSameTab = () => {
+      setChosenProducts(getChosenProducts());
+    };
     window.addEventListener("storage", onStorage);
     window.addEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+    window.addEventListener(CHOSEN_PRODUCTS_CHANGED_EVENT, onChosenSameTab);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(CREATOR_SHORTLIST_CHANGED_EVENT, onShortlistSameTab);
+      window.removeEventListener(CHOSEN_PRODUCTS_CHANGED_EVENT, onChosenSameTab);
     };
   }, []);
 
   useEffect(() => {
     let cancel = false;
-    const ids = recentPages.map((r) => r.productId).filter(Boolean);
+    const ids = chosenProducts.map((r) => r.productId).filter(Boolean);
     if (ids.length === 0) {
       setDetails({});
       return undefined;
@@ -263,6 +285,8 @@ export default function HandsOnPage() {
               vendas: p.vendas ?? "—",
               rating: p.rating ?? "—",
               nome: typeof p.nome === "string" ? p.nome : undefined,
+              link: typeof p.link === "string" ? p.link : null,
+              hasPdpImages: Boolean(p.hasPdpImages),
               error: null,
               workspaceNote: note
             };
@@ -272,6 +296,8 @@ export default function HandsOnPage() {
               preco: "—",
               vendas: "—",
               rating: "—",
+              link: null,
+              hasPdpImages: false,
               error: typeof r.err === "string" ? r.err : "—",
               workspaceNote: null
             };
@@ -284,12 +310,55 @@ export default function HandsOnPage() {
     return () => {
       cancel = true;
     };
-  }, [recentPages]);
+  }, [chosenProducts]);
 
   /** @param {string} pid @param {import("./productStatusStorage.js").ProductStatusKey} statusKey */
   const onPickStatus = useCallback((pid, statusKey) => {
     setProductStatus(pid, statusKey);
     setStatusMap(getProductStatuses());
+  }, []);
+
+  const onExport = useCallback(async (productId) => {
+    const pid = String(productId ?? "").trim();
+    if (!pid) return;
+    setExportFlash(null);
+    setExportById((prev) => {
+      const next = { ...prev };
+      delete next[pid];
+      return next;
+    });
+    setExportingId(pid);
+    try {
+      const res = await apiPost("/analytics/images-upload", { productId: pid });
+      const stats = res && typeof res === "object" && res.stats && typeof res.stats === "object" ? res.stats : null;
+      const uploaded = stats && Number.isFinite(Number(stats.uploaded)) ? Number(stats.uploaded) : null;
+      const failed = stats && Number.isFinite(Number(stats.failed)) ? Number(stats.failed) : null;
+      const skipped = stats && Number.isFinite(Number(stats.skippedExists)) ? Number(stats.skippedExists) : null;
+      const ms = Number.isFinite(Number(res.ms)) ? Number(res.ms) : null;
+
+      const bits = [];
+      if (uploaded != null) bits.push(`enviadas: ${uploaded.toLocaleString("pt-BR")}`);
+      if (skipped != null) bits.push(`reutilizadas: ${skipped.toLocaleString("pt-BR")}`);
+      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
+      if (ms != null) bits.push(`tempo: ${(ms / 1000).toFixed(1)}s`);
+
+      setProductStatus(pid, "conteudo_produzido");
+      setStatusMap(getProductStatuses());
+      const msg = `Exportação concluída.${bits.length ? " " + bits.join(" · ") : ""}`;
+      setExportFlash({ kind: "ok", text: `productId=${pid} · ${msg}` });
+      setExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: msg } }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExportFlash({ kind: "err", text: `productId=${pid} · Falha ao exportar: ${msg}` });
+      setExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: msg } }));
+    } finally {
+      setExportingId(null);
+    }
+  }, []);
+
+  const onRemoveChosen = useCallback((productId) => {
+    removeChosenProduct(productId);
+    setChosenProducts(getChosenProducts());
   }, []);
 
   const rowsSorted = useMemo(() => recentPages, [recentPages]);
@@ -342,9 +411,7 @@ export default function HandsOnPage() {
     >
       {(
         /** @type {{ id: HandsOnTab, label: string }[]} */ ([
-          { id: "recentes", label: "Recentes" },
-          { id: "estagios", label: "Por estágio" },
-          { id: "shortlist", label: "Shortlist" }
+          { id: "escolhidos", label: "Escolhidos" }
         ])
       ).map((t) => {
         const active = activeTab === t.id;
@@ -375,10 +442,10 @@ export default function HandsOnPage() {
       <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
         <h1 style={{ fontSize: "1.2rem", fontWeight: 600, margin: "0 0 0.35rem" }}>Produtos em análise</h1>
         <p style={{ fontSize: "0.82rem", opacity: 0.9, margin: "0 0 0.45rem", maxWidth: "44rem", lineHeight: 1.55 }}>
-          <strong>Hub operacional</strong> — use esta área para acompanhar produtos vistos, em análise, em teste e publicados. Tudo fica neste browser (sem servidor).
+          <strong>Workspace operacional</strong> — lista manual de produtos <strong>escolhidos</strong> a partir do <strong>Product Score</strong>.
         </p>
         <p style={{ fontSize: "0.78rem", opacity: 0.78, margin: "0 0 1rem", maxWidth: "44rem", lineHeight: 1.5 }}>
-          <strong>Recentes</strong>: histórico de workspaces abertos. <strong>Por estágio</strong>: junta recentes, favoritos e o que tem pipeline guardado. Na lista recente, caixas <strong>azuladas</strong> são mensagens da <strong>API</strong>; o texto <strong>«Minhas notas»</strong> vem das suas notas no workspace.
+          Esta página não executa scraping nem abre navegador. As ações disponíveis são: abrir workspace, abrir no TikTok, iniciar PDP enrich e exportar imagens para Spaces.
         </p>
 
         {tabBar}
@@ -397,6 +464,169 @@ export default function HandsOnPage() {
           >
             {exportFlash.text}
           </p>
+        ) : null}
+
+        {activeTab === "escolhidos" ? (
+          <section
+            style={{
+              marginBottom: "1rem",
+              padding: "0.75rem 0.85rem",
+              borderRadius: 8,
+              border: "1px solid #2a3844",
+              background: "#151e27"
+            }}
+          >
+            <div style={{ fontSize: "0.76rem", opacity: 0.9, marginBottom: "0.5rem", lineHeight: 1.45 }}>
+              <strong>Escolhidos</strong> — lista manual a partir do Product Score. ({chosenProducts.length})
+            </div>
+
+            {chosenProducts.length > 0 ? (
+              <ul style={{ listStyle: "none", margin: "0.35rem 0 0", padding: 0, display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+                {chosenProducts.map((r) => {
+                  const d = details[r.productId];
+                  /** @type {import("./productStatusStorage.js").ProductStatusKey} */
+                  const rowStatus = normalizeProductStatusKey(statusMap[r.productId]);
+                  const nome = (d?.nome || r.nome || "—").trim() || "—";
+                  const tiktokUrl =
+                    (typeof d?.link === "string" && d.link.trim()) ||
+                    (typeof r.tiktokUrl === "string" && r.tiktokUrl.trim()) ||
+                    `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(r.productId)}`;
+
+                  return (
+                    <li
+                      key={r.productId}
+                      style={{
+                        border: "1px solid #2f3f4d",
+                        borderRadius: 8,
+                        padding: "0.55rem 0.65rem",
+                        background: "#111820",
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto",
+                        gap: "0.5rem",
+                        alignItems: "stretch"
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.35rem", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.82rem", color: "#e7e9ea", lineHeight: 1.35, wordBreak: "break-word" }}>
+                            {nome}
+                          </div>
+                          {rowStatus === "em_teste" ? (
+                            <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(59, 130, 246, 0.18)", color: "#cfe6ff" }}>
+                              EM TESTE
+                            </span>
+                          ) : null}
+                          {rowStatus === "conteudo_produzido" ? (
+                            <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(34, 197, 94, 0.16)", color: "#c9f7d7" }}>
+                              EXPORTADO
+                            </span>
+                          ) : null}
+                          {d?.hasPdpImages ? (
+                            <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(168, 85, 247, 0.16)", color: "#f0d7ff" }}>
+                              PDP ENRIQUECIDO
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <p style={{ margin: "0.2rem 0 0", fontSize: "0.66rem", opacity: 0.75, fontFamily: "ui-monospace, monospace", wordBreak: "break-all" }}>
+                          {r.productId}
+                        </p>
+
+                        {d?.error ? (
+                          <p style={{ margin: "0.35rem 0 0", fontSize: "0.7rem", opacity: 0.9, color: "#f0a08a", lineHeight: 1.35 }}>
+                            Erro ao carregar dados (API): {String(d.error)}
+                          </p>
+                        ) : null}
+
+                        {!d?.error && (d?.preco != null || d?.vendas != null || d?.rating != null) ? (
+                          <p style={{ margin: "0.35rem 0 0", fontSize: "0.74rem", opacity: 0.86, lineHeight: 1.5 }}>
+                            preço: <strong>{d?.preco ?? "—"}</strong> · vendas: <strong>{d?.vendas ?? "—"}</strong> · rating:{" "}
+                            <strong>{d?.rating ?? "—"}</strong>
+                          </p>
+                        ) : null}
+
+                        {d?.workspaceNote ? (
+                          <div
+                            style={{
+                              margin: "0.4rem 0 0",
+                              padding: "0.4rem 0.5rem",
+                              borderRadius: 6,
+                              border: "1px solid rgba(56, 189, 248, 0.22)",
+                              background: "rgba(14, 165, 233, 0.06)"
+                            }}
+                          >
+                            <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em", opacity: 0.88, color: "#7dd3fc", marginBottom: "0.2rem" }}>
+                              Contexto dos dados (API)
+                            </div>
+                            <p style={{ margin: 0, fontSize: "0.63rem", opacity: 0.82, color: "#b8d4e8", lineHeight: 1.42 }}>
+                              {String(d.workspaceNote).length > 200 ? `${String(d.workspaceNote).slice(0, 197)}…` : String(d.workspaceNote)}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
+                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
+                          Abrir produto
+                        </Link>
+                        <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" style={btnOpen}>
+                          Abrir no TikTok
+                        </a>
+                        <PdpEnrichButton productId={r.productId} />
+                        <button
+                          type="button"
+                          style={{
+                            ...btnOpen,
+                            border: "1px solid #567138",
+                            background: "#203014",
+                            color: "#dcedc8",
+                            fontWeight: 700,
+                            opacity: exportingId === r.productId ? 0.6 : 1,
+                            cursor: exportingId != null ? "wait" : "pointer"
+                          }}
+                          disabled={exportingId != null}
+                          onClick={() => void onExport(r.productId)}
+                          title="Exporta imagens para o DigitalOcean Spaces (não faz scraping)"
+                        >
+                          {exportingId === r.productId ? "Exportando…" : "Exportar"}
+                        </button>
+                        {exportById[r.productId] ? (
+                          <div
+                            role="status"
+                            style={{
+                              fontSize: "0.62rem",
+                              lineHeight: 1.35,
+                              opacity: 0.92,
+                              color: exportById[r.productId].kind === "ok" ? "#9dd4b8" : "#f0a08a"
+                            }}
+                          >
+                            {exportById[r.productId].text}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          style={{
+                            ...btnOpen,
+                            border: "1px solid #6b3b3b",
+                            background: "#2a1515",
+                            color: "#ffd6d6",
+                            fontWeight: 700
+                          }}
+                          onClick={() => onRemoveChosen(r.productId)}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p style={{ margin: 0, fontSize: "0.78rem", opacity: 0.78, lineHeight: 1.55, maxWidth: "34rem" }}>
+                Nenhum produto escolhido ainda. Vá ao <strong>Product Score</strong> e use o botão <strong>Escolher</strong>.
+              </p>
+            )}
+          </section>
         ) : null}
 
         {activeTab === "recentes" ? (
