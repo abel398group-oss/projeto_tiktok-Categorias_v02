@@ -3406,12 +3406,20 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
   const xhrPath = path.join(outAux, "xhr_debug.json");
   const envPath = path.join(outAux, "browser_env.json");
 
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await new Promise((r) => setTimeout(r, 600));
-  await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
-  await progressiveScrollPageToBottom(page);
-  await new Promise((r) => setTimeout(r, 800));
-  await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  const assisted = isAssistedModeEnabled();
+  if (!assisted) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
+    await progressiveScrollPageToBottom(page);
+    await new Promise((r) => setTimeout(r, 800));
+    await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  } else {
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 250));
+    await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  }
 
   const html = await page.content();
   await fs.writeFile(htmlPath, html, "utf8");
@@ -3518,6 +3526,7 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const outFile = path.join(OUT_AUX, "teste_categoria.json");
   const debugFile = path.join(OUT_AUX, "debug_responses.log");
   const skipGoto = opts && opts.skipGoto === true;
+  const passive = opts && opts.passive === true;
   const isHeaded = process.env.HEADED === "1";
   const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
 
@@ -4018,14 +4027,22 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     } else {
       let securityChallenge = await detectTiktokSecurityChallenge(page);
       if (!securityChallenge) {
-        await postGotoShopStabilize(page, isHeaded);
+        if (!passive) {
+          await postGotoShopStabilize(page, isHeaded);
+        } else {
+          await humanPause(page, 800, 1600);
+        }
         securityChallenge = await detectTiktokSecurityChallenge(page);
       }
       if (securityChallenge && isHeaded) {
         await waitForSecurityChallengeResolved(page, { maxMs: loginWaitMaxMs });
         securityChallenge = await detectTiktokSecurityChallenge(page);
         if (!securityChallenge) {
-          await postGotoShopStabilize(page, isHeaded);
+          if (!passive) {
+            await postGotoShopStabilize(page, isHeaded);
+          } else {
+            await humanPause(page, 800, 1600);
+          }
           securityChallenge = await detectTiktokSecurityChallenge(page);
         }
       }
@@ -4057,16 +4074,19 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
         }
       }
 
-      if (reloadedCategoryAfterLogin) {
-        // já recarregou a categoria acima; só ajusta ritmo
-        await humanPause(page, 500, 1000);
+      if (!passive) {
+        if (reloadedCategoryAfterLogin) {
+          await humanPause(page, 500, 1000);
+        } else {
+          await humanPause(page, 750, 1500);
+        }
+        await gentleMouseJiggle(page);
+        await scrollToLoadGrid(page);
+        await humanPause(page, 1000, 2000);
+        await clickViewMoreWhileNeeded(page, () => byProductId.size);
       } else {
-        await humanPause(page, 750, 1500);
+        await humanPause(page, 1000, 1800);
       }
-      await gentleMouseJiggle(page);
-      await scrollToLoadGrid(page);
-      await humanPause(page, 1000, 2000);
-      await clickViewMoreWhileNeeded(page, () => byProductId.size);
       // Handlers `response` são assíncronos: drena até o mapa estabilizar (teto ~5s como antes)
       await waitForStableProductFeed(() => byProductId.size);
 
@@ -4145,7 +4165,32 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   /** @type {object | null} */
   let diagnostic = null;
 
-  if (failureCode === "TIKTOK_SECURITY_CHECK") {
+  try {
+    const nowUrl = page.url();
+    if (nowUrl && nowUrl !== finalUrl) {
+      finalUrl = nowUrl;
+    }
+  } catch {
+    /* noop */
+  }
+
+  if (!isShopTiktokHostname(finalUrl)) {
+    status = "not_shop";
+    note =
+      "A sessão saiu de shop.tiktok.com durante a coleta (possível redirecionamento para login). Reabra o Shop, conclua login/puzzle e tente novamente.";
+    exitCode = 1;
+    try {
+      diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
+        finalUrl,
+        startUrl,
+        status: "not_shop"
+      });
+    } catch (e) {
+      diagnostic = { erro_escrita_diagnostico: String(e?.message || e) };
+    }
+  }
+
+  if (exitCode === 0 && failureCode === "TIKTOK_SECURITY_CHECK") {
     exitCode = 2;
     try {
       diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
@@ -4176,7 +4221,7 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     } catch (e) {
       diagnostic = { erro_escrita_diagnostico: String(e?.message || e), failure_code: "TIKTOK_SECURITY_CHECK" };
     }
-  } else if (byProductId.size === 0 && status === "ok") {
+  } else if (exitCode === 0 && byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
       "Nenhum produto (XHR + loader). Campo `diagnostic` + ficheiros em extra/ (final_page*.png, final_page.html, xhr_debug.json, browser_env.json, empty_harvest_diagnostic.json). Processo termina com código 1.";
@@ -4431,13 +4476,14 @@ async function main() {
   const browser = await launchTikTokBrowser();
   const page = await browser.newPage();
   
-  // Identidade de um Mac Real para confundir o bloqueio do TikTok
-  await page.setUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-  
-  // Esconder que é um robô via propriedades de navegação
-  await page.evaluateOnNewDocument(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false });
-  });
+  if (!assistedMode) {
+    await page.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    );
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => false });
+    });
+  }
 
   if (!assistedMode) {
     console.log("[scrape] Aquecendo navegador no Google...");
@@ -4465,7 +4511,7 @@ async function main() {
       console.log(`[ASSISTED_MODE] URL inicial: ${startUrl}`);
       await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
       const catUrl = await assistedWaitForCategoryUrl(page);
-      return await runCategoryHarvest(browser, page, catUrl, { skipGoto: true });
+      return await runCategoryHarvest(browser, page, catUrl, { skipGoto: true, passive: true });
     }
     return await runCategoryHarvest(browser, page, startUrl);
   } finally {
