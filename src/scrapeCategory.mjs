@@ -3511,12 +3511,13 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
  * @param {string} startUrl
  * @returns {Promise<number>} 0 ok · 1 sem produtos (`no_products`) · 2 `TIKTOK_SECURITY_CHECK`
  */
-async function runCategoryHarvest(browser, page, startUrl) {
+async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
   await ensureOutAuxDir();
   const outFile = path.join(OUT_AUX, "teste_categoria.json");
   const debugFile = path.join(OUT_AUX, "debug_responses.log");
+  const skipGoto = opts && opts.skipGoto === true;
   const isHeaded = process.env.HEADED === "1";
   const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
 
@@ -3967,14 +3968,19 @@ async function runCategoryHarvest(browser, page, startUrl) {
 
   let reloadedCategoryAfterLogin = false;
 
-  // Forçar a abertura direta no domínio do Shop
-  console.log(`[scrape] Abrindo diretamente no TikTok Shop: ${startUrl}`);
-  await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
-  await humanPause(page, 2000, 4000);
-  await syncBrazilEnvToLivePage(page);
-  finalUrl = page.url();
+  if (!skipGoto) {
+    console.log(`[scrape] Abrindo diretamente no TikTok Shop: ${startUrl}`);
+    await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+    await humanPause(page, 2000, 4000);
+    await syncBrazilEnvToLivePage(page);
+    finalUrl = page.url();
+  } else {
+    console.log(`[scrape] ASSISTED_MODE: usando página atual (sem page.goto). startUrl=${startUrl}`);
+    await syncBrazilEnvToLivePage(page);
+    finalUrl = page.url();
+  }
 
-  if (!isShopTiktokHostname(finalUrl) && isHeaded) {
+  if (!skipGoto && !isShopTiktokHostname(finalUrl) && isHeaded) {
     console.log("[TikTok] Não estamos no Shop. Aguardando login manual ou redirecionamento...");
     const w = await waitForShopOrTimeout(browser, page, { maxMs: loginWaitMaxMs, startUrl });
     finalUrl = w.url;
@@ -4349,9 +4355,79 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
   return exitCode;
 }
 
+function isAssistedModeEnabled() {
+  const v = String(process.env.ASSISTED_MODE || "").trim();
+  return v === "1" || /^true$/i.test(v);
+}
+
+function isBrazilCategoryUrl(urlStr) {
+  try {
+    const u = new URL(String(urlStr));
+    if (u.hostname.toLowerCase() !== "shop.tiktok.com") return false;
+    return /\/br\/c\/[^/]+/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function waitForEnter(prompt) {
+  if (!process.stdin.isTTY) {
+    throw new Error("stdin não é TTY (sem ENTER). Rode este modo num terminal.");
+  }
+  process.stdout.write(prompt);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+  await new Promise((resolve) => {
+    const onData = (chunk) => {
+      if (String(chunk).includes("\n")) {
+        process.stdin.off("data", onData);
+        resolve();
+      }
+    };
+    process.stdin.on("data", onData);
+  });
+}
+
+async function assistedWaitForCategoryUrl(page) {
+  while (true) {
+    console.log(
+      '[ASSISTED_MODE] Resolva login/security check manualmente e navegue até uma categoria /br/c/... Depois pressione ENTER aqui para começar a coleta.'
+    );
+    await waitForEnter("> ");
+    const currentUrl = page.url();
+    console.log(`[ASSISTED_MODE] URL após navegação manual: ${currentUrl}`);
+
+    const isShop = isShopTiktokHostname(currentUrl);
+    const isCategory = isBrazilCategoryUrl(currentUrl);
+    const hasSecurity = isShop ? await detectTiktokSecurityChallenge(page) : false;
+
+    const status = hasSecurity ? "security_check" : isCategory ? "category_page" : isShop ? "logged_in" : "not_shop";
+    console.log(`[ASSISTED_MODE] status=${status}`);
+
+    if (hasSecurity) {
+      console.error(
+        "[ASSISTED_MODE] Security Check ainda ativo. Conclua no browser e pressione ENTER novamente."
+      );
+      continue;
+    }
+    if (!isCategory) {
+      console.error(
+        "[ASSISTED_MODE] A URL atual não parece ser uma categoria TikTok Shop. Navegue até uma URL /br/c/... e pressione ENTER novamente."
+      );
+      continue;
+    }
+    return currentUrl;
+  }
+}
+
 async function main() {
   initOutputPaths();
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
+  const assistedMode = isAssistedModeEnabled();
+  if (assistedMode && process.env.HEADED !== "1") {
+    console.error("[ASSISTED_MODE] Requer HEADED=1 (janela visível).");
+    return 1;
+  }
   const browser = await launchTikTokBrowser();
   const page = await browser.newPage();
   
@@ -4363,9 +4439,10 @@ async function main() {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
   });
 
-  // Passo de "aquecimento": abre o Google primeiro para parecer humano
-  console.log("[scrape] Aquecendo navegador no Google...");
-  await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+  if (!assistedMode) {
+    console.log("[scrape] Aquecendo navegador no Google...");
+    await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+  }
   
   if (process.env.LOGIN_ONLY === "1") {
     console.log("\n[LOGIN MODE] Navegador aberto no Google.");
@@ -4384,6 +4461,12 @@ async function main() {
 
   await installAntiPopupGuards(browser, page);
   try {
+    if (assistedMode) {
+      console.log(`[ASSISTED_MODE] URL inicial: ${startUrl}`);
+      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      const catUrl = await assistedWaitForCategoryUrl(page);
+      return await runCategoryHarvest(browser, page, catUrl, { skipGoto: true });
+    }
     return await runCategoryHarvest(browser, page, startUrl);
   } finally {
     await browser.close();

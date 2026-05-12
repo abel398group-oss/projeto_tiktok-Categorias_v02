@@ -59,6 +59,7 @@
     "scrape:category:peek": "cross-env HEADED=1 ROUTER_PEEK_LEN=12000 node src/scrapeCategory.mjs --debug",
     "scrape:category:pdp": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
     "scrape:login": "cross-env HEADED=1 LOGIN_ONLY=1 node src/scrapeCategory.mjs",
+    "scraper:worker": "node --import ./scripts/load-root-env.mjs src/scrapeCategory.mjs --debug",
     "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
     "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
     "scrape:categories:sample": "node scripts/scrape-both.mjs"
