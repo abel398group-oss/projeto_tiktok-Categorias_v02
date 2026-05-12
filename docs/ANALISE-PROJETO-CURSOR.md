@@ -21,9 +21,11 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 **Persistência e analytics:** Import `npm run db:import:output` → Prisma (`Product`, `ProductSnapshot`, `ScrapeRun`, …). Queries read-only em `scripts/analytics/lib/` consumidas por CLI e por **Fastify** (`scripts/analytics/server.mjs`) com **`ANALYTICS_API_KEY`**.
 
-**Painel web (`frontend/`):** Vite + React + React Router (`AppShell`). Rotas típicas: **`/`** listagem de **categorias** (GET `/analytics/categories`); **`/analytics`** relatórios globais; **`/categoria/:slug`** mesmos relatórios com `categoryUrl`; **`/produto/:id`** workspace; **`/a-mao`** Produtos em análise (histórico `localStorage` + métricas via API). O proxy Vite envia `/analytics/*` para a API. Carregamento dos separadores de relatórios é **automático** ao abrir ou mudar de aba (cache em `analyticsDashboardCache.jsx`); **Carregar dados** força refresh do separador actual. **Exportar** (Spaces) dispara POST no servidor e leva o utilizador a **`/a-mao`** após o pedido, com produto no histórico recente.
+**Infraestrutura:** Tudo local (PC). Postgres em Docker (porta 5433), API Fastify (3333) e Frontend Vite (5173). Sem dependências de servidores externos (DigitalOcean removido).
 
-**Documentação viva:** `FLUXO.md` (comandos + painel), `docs/ANALYTICS-API.md`, `docs/ARCHITECTURE.md`, `frontend/README.md`, regras em `.cursor/rules/`.
+**Painel web (`frontend/`):** Vite + React + React Router (`AppShell`). Rotas típicas: **`/`** listagem de **categorias** (GET `/analytics/categories`); **`/analytics`** relatórios globais; **`/categoria/:slug`** mesmos relatórios com `categoryUrl`; **`/produto/:id`** workspace; **`/a-mao`** Produtos em análise (histórico `localStorage` + métricas via API). O proxy Vite envia `/analytics/*` para a API. Carregamento dos separadores de relatórios é **automático** ao abrir ou mudar de aba (cache em `analyticsDashboardCache.jsx`); **Carregar dados** força refresh do separador actual.
+
+**Documentação viva:** `FLUXO.md` (comandos + painel), `docs/ARCHITECTURE.md`, `frontend/README.md`, regras em `.cursor/rules/`.
 
 ---
 
@@ -91,7 +93,7 @@ Projeto: scraper de **TikTok Shop** (categoria) em Node + Puppeteer — reposit�
 
 ## 7. Resumo executivo (para colar no Cursor)
 
-> **Pipeline:** coleta (Puppeteer Stealth) → JSON `output/` → import Prisma → relatórios CLI/lib + **API Fastify** autenticada → **React/Vite** (categorias, analytics global/por categoria, workspace por produto, Produtos em análise). **Pontos fortes:** contrato JSON + schema AJV, histórico na BD por `ScrapeRun`, analytics partilhados CLI/API, export Spaces só no servidor, UI coerente (tema escuro). **Em desenvolvimento:** deploy produção (sem Docker no repo), rate limits / hardening API se exposta à internet, eventual separação droplet coleta vs painel. **Segurança:** não commitar `output/`, perfil Chrome, `.env`; `ANALYTICS_API_KEY` obrigatória na API; consciência ToS TikTok. **Aberto:** LICENSE se repo público, ESLint opcional, rever `docs/ROADMAP.md`.
+> **Pipeline:** coleta (Puppeteer Stealth) → JSON `output/` → import Prisma → relatórios CLI/lib + **API Fastify** autenticada → **React/Vite** (categorias, analytics global/por categoria, workspace por produto, Produtos em análise). **Pontos fortes:** contrato JSON + schema AJV, histórico na BD por `ScrapeRun`, analytics partilhados CLI/API, UI coerente (tema escuro). **Em desenvolvimento:** rate limits / hardening API se exposta à internet. **Segurança:** não commitar `output/`, perfil Chrome, `.env`; `ANALYTICS_API_KEY` obrigatória na API; consciência ToS TikTok. **Aberto:** LICENSE se repo público, ESLint opcional, rever `docs/ROADMAP.md`.
 
 ---
 

@@ -1,12 +1,11 @@
 # Analytics API v1
 
-Servidor HTTP expõe os mesmos relatórios em **GET** que os comandos CLI em `npm run analytics:*`, **GET por produto** para a página «workspace», e **POST** opcional para exportar um produto para DigitalOcean Spaces. A lógica de relatórios partilha `scripts/analytics/lib/` com os scripts de linha de comando; o núcleo de export partilha `scripts/lib/export-product-to-spaces-core.mjs` com `npm run export:product-spaces`.
+Servidor HTTP expõe os mesmos relatórios em **GET** que os comandos CLI em `npm run analytics:*`, **GET por produto** para a página «workspace». A lógica de relatórios partilha `scripts/analytics/lib/` com os scripts de linha de comando.
 
 ## Pré-requisitos
 
 - `DATABASE_URL` no `.env` (Postgres já importado com `npm run db:import:output`).
-- **`ANALYTICS_API_KEY` obrigatória como variável activa** (valor não pode estar apenas comentado no `.env`). Os comandos `analytics:*` em CLI só precisam de `DATABASE_URL`; **`npm run analytics:api`** aborta imediatamente sem chave definida — ver `.env.example`.
-- **`POST /analytics/export-product-to-spaces`** exige no **servidor** as variáveis **SPACES_\*** configuradas (`SPACES_ENDPOINT`, `SPACES_REGION`, bucket, keys). Sem elas o endpoint responde **503** (`spaces_unconfigured`). Ver também `EXPORT_IMAGE_*` e `SPACES_OBJECTS_PUBLIC_READ` em `.env.example`.
+- **`ANALYTICS_API_KEY` obrigatória como variável activa** (valor não pode estar apenas comentado no `.env`). Os comandos `analytics:*` em CLI só precisam de `DATABASE_URL`; **`npm run analytics:api`** aborta imediatamente sem chave definida — ver `.env`.
 
 ## Arranque
 
@@ -47,14 +46,13 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/scalable-products` | Equiv. `npm run analytics:scalable` |
 | GET | `/analytics/category-map` | Equiv. `npm run analytics:category-map` |
 | GET | `/analytics/categories` | Grelha do painel `/`: categorias derivadas da BD (`scripts/analytics/lib/categories-catalog.mjs`). Inclui métricas operacionais por cartão: `operationalHealth`, `storedUrlVariantCount`, metadados do último `ScrapeRun` (`lastRunStatus`, `lastRunJsonTotal`, `lastRunInputHashPreview`, …), heurística `lastRunNewProductsApprox` / `lastRunUpdatedProductsApprox`, `jsonRunCoveragePercent` quando o run é multi-categoria. |
-| GET | `/analytics/product-workspace/:productId` | Detalhe do produto: **preferência** por snapshot no **último** `ScrapeRun` global (alinhado a `product-score`); se não existir aí, **fallback** ao snapshot mais recente desse produto na BD (mesma ideia que o export Spaces). Ver secção GET abaixo. |
+| GET | `/analytics/product-workspace/:productId` | Detalhe do produto: **preferência** por snapshot no **último** `ScrapeRun` global (alinhado a `product-score`); se não existir aí, **fallback** ao snapshot mais recente desse produto na BD. Ver secção GET abaixo. |
 | POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
-| POST | `/analytics/export-product-to-spaces` | Grava **`produto.json`** + imagens no Space (snapshot mais recente do produto no core de export). JSON: `{ "productId": "<id TikTok>", "skipImages"?: boolean }`. |
-| POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser/playwright uso do projeto. |
+| POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser. |
 | POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** com `CATEGORY_URL` e **`OUTPUT_DIR`** em `output/categorias/…` quando a URL corresponde às duas categorias do repo (como `scrape-both`); em seguida **`consolidate-category-outputs.mjs`** para actualizar `output/dados_*.json` antes do import. **409** se busy. Em sucesso inclui **`outputDir`** (relativo ao repo, separador `/`) e **`consolidated`** (`true` quando correu consolidate após subpasta `categorias/`). Ver `scripts/analytics/scrape-run-route.mjs`. |
 | POST | `/scrape/run-both` | Corpo `{}` — **`node scripts/scrape-both.mjs`** (duas categorias, pastas em `output/categorias/…`) e em seguida **`node scripts/consolidate-category-outputs.mjs`**. Partilha o mesmo mutex **busy** que `/scrape/run`. Em sucesso inclui **`outputDir`** (`output`) e **`consolidated`: true**. |
 | POST | `/analytics/import-output` | Corpo `{}` — corre **`npm run db:import:output`** (JSON em `output/` → Postgres) à espera do fim. Resposta **`200`** com **`skipped: true`** quando o importador detecta o mesmo **`input_hash`** que um `ScrapeRun` já existente (nada é escrito na BD). Opcionalmente **`detail`**: se `skipped`, `existingScrapeRunId` e `inputHash` (parse do log); se importou, `scrapeRunId` do bloco «Resumo importação». O painel **Scrapear** em `/` mostra estas linhas. Ver `scripts/analytics/import-output-route.mjs`. |
-| POST | `/scrape/import-remote` | Importação **in-process** com o mesmo núcleo que o CLI (`scripts/lib/import-output-core.mjs`). Destinado ao **worker local** (`npm run scraper:worker`): envia o conteúdo textual de `dados_produtos.json` / `dados_lojas.json`. Auth: mesma **`ANALYTICS_API_KEY`** (`Authorization: Bearer` ou **`x-api-key`**). Limite de corpo configurável: **`IMPORT_REMOTE_BODY_LIMIT_BYTES`** (defeito 100 MiB, máx. 512 MiB). Ver **`docs/LOCAL_SCRAPER_WORKER.md`**. |
+| POST | `/scrape/import-remote` | Importação **in-process** com o mesmo núcleo que o CLI (`scripts/lib/import-output-core.mjs`). Destinado ao **worker local** (`npm run scraper:worker`): envia o conteúdo textual de `dados_produtos.json` / `dados_lojas.json`. Auth: mesma **`ANALYTICS_API_KEY`** (`Authorization: Bearer` ou **`x-api-key`**). Limite de corpo configurável: **`IMPORT_REMOTE_BODY_LIMIT_BYTES`** (defeito 100 MiB, máx. 512 MiB). |
 
 ### POST `/scrape/import-remote`
 
@@ -75,11 +73,11 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 
 ### GET product-workspace
 
-- **200** com corpo completo: métricas alinhadas ao score; **`scrapeRun`** corresponde à **coleta do snapshot efectivamente usado**; **`globalLatestScrapeRun`** é o último run global na BD (útil quando o fallback não é o mesmíssimo run); **`snapshotFromLatestGlobalRun`** (boolean): `false` quando os dados vêm de um snapshot **mais recente do produto** mas **fora** do último import global (Δ vendas entre runs não comparado nesse modo); **`nome`**, **`nomeLista`**, **`categorySlug`**, **`exportPrefix`**, preços extra, **`imageUrls`**, **`deltaHint`**, etc. Ver `scripts/analytics/lib/product-workspace.mjs`.
+- **200** com corpo completo: métricas alinhadas ao score; **`scrapeRun`** corresponde à **coleta do snapshot efectivamente usado**; **`globalLatestScrapeRun`** é o último run global na BD (útil quando o fallback não é o mesmíssimo run); **`snapshotFromLatestGlobalRun`** (boolean): `false` quando os dados vêm de um snapshot **mais recente do produto** mas **fora** do último import global (Δ vendas entre runs não comparado nesse modo); **`nome`**, **`nomeLista`**, **`categorySlug`**, preços extra, **`imageUrls`**, **`deltaHint`**, etc. Ver `scripts/analytics/lib/product-workspace.mjs`.
 - **404** `not_found` — produto inexistente.
 - **404** `no_snapshot` — produto sem **nenhum** `ProductSnapshot` na base.
 - **200** com `{ "error": "no_run", "message": "…" }` se não houver `ScrapeRun`.
-- **400** se o segmento do path estiver vazio após trim.
+- **400** se the segmento do path estiver vazio após trim.
 
 ### POST product-workspace … / images-zip
 
@@ -88,23 +86,6 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 - O servidor faz o download das imagens (evita CORS no browser). Se algumas falharem, o ZIP inclui as que correram bem e, quando há falhas, o ficheiro **`_falhas-download.txt`** dentro do ZIP.
 - **400** `no_images` | **400** `invalid_urls` | **404** / **503** alinhados ao GET workspace | **502** `zip_failed`.
 - Env opcional: **`WORKSPACE_IMAGE_ZIP_MAX_BYTES`**, **`WORKSPACE_IMAGE_ZIP_TIMEOUT_MS`** — ver `scripts/analytics/lib/product-images-zip.mjs`.
-
-### POST export-product-to-spaces
-
-- **`productId`**: obrigatório, string igual ao **`Product.productId`** (ID TikTok na base).
-- **`skipImages`**: opcional; se `true`, só envia `produto.json` (sem downloads de imagens).
-
-**Respostas típicas (200)** incluem `prefix`, `bucket`, `jsonKey`, contagens `imagesUploaded`, `imagesDiscovered`, `imagesFailed`, lista truncada `failures`; se **`SPACES_PUBLIC_BASE_URL`** estiver definido, também `publicUrls` com URLs CDN sugeridas.
-
-| HTTP | Situação |
-|------|-----------|
-| 400 | `productId` em falta ou inválido no corpo. |
-| 404 | Produto inexistente ou sem `ProductSnapshot`. |
-| 401 | API key incorrecta. |
-| 503 | Variável Spaces em falta no `.env` do processo (`… em falta no .env`). |
-| 500 | Outro erro de export (ex.: falha rede/S3 não mapeada). |
-
-Equivale conceitualmente a `npm run export:product-spaces -- --product-id <id>`; ver `scripts/export-product-to-spaces.mjs`.
 
 ## Formato de resposta (GET relatórios)
 
@@ -124,17 +105,8 @@ curl -s -H "Authorization: Bearer SUA_CHAVE" \
   http://127.0.0.1:3333/analytics/product-workspace/1732593847560123456
 ```
 
-Export (POST):
-
-```bash
-curl -s -X POST -H "Authorization: Bearer SUA_CHAVE" -H "Content-Type: application/json" \
-  -d '{"productId":"1732593847560123456"}' \
-  http://127.0.0.1:3333/analytics/export-product-to-spaces
-```
-
 ## Segurança
 
 - Não expor a API à Internet sem **TLS** (reverse proxy) e política de rede.
 - Tratar `ANALYTICS_API_KEY` como segredo; rotação periódica recomendada.
-- **Quem tem a mesma API key pode disparar uploads para o Space** configurado no servidor; não coloque chaves `SPACES_*` no frontend nem em `VITE_*`.
-- A API **não** altera Postgres; **escreve** apenas objectos no **DigitalOcean Spaces** quando usa o POST de export.
+- A API **não** altera Postgres.

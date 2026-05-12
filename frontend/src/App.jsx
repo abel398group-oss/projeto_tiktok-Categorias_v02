@@ -26,7 +26,6 @@ import {
   parseDelta as parseDeltaVendasStr
 } from "./sortUtils.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
-import { SpacesExportActionCell, SpacesExportFeedback, useSpacesExport } from "./spacesExport.jsx";
 import { deriveProductLabels } from "./productLabels.js";
 import { getTicketLabel, rowMatchesTicketFilter } from "./ticketLabel.js";
 
@@ -1273,7 +1272,6 @@ function TableTop({ data }) {
   const navigate = useNavigate();
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_TOP);
-  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
   const [expanded, setExpanded] = useState(false);
   /** Filtros por coluna (linhas já carregadas no painel). */
@@ -1444,7 +1442,6 @@ function TableTop({ data }) {
             : null}
         </p>
       ) : null}
-      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
@@ -1663,12 +1660,6 @@ function TableTop({ data }) {
                       })
                     : "—"}
                 </td>
-                <SpacesExportActionCell
-                  productId={pid}
-                  nome={row.nome}
-                  exportingProductId={exportingProductId}
-                  exportToSpace={exportToSpace}
-                />
                 <td>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -1721,7 +1712,6 @@ function TableOpp({ data }) {
   const navigate = useNavigate();
   const rawItems = asArray(data?.items);
   const colW = useColumnWidths(CW_OPP);
-  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const { opportunityMode, setOpportunityMode, ticketTier, setTicketTier } = useAnalyticsDashboardCache();
   const [expanded, setExpanded] = useState(false);
   /** Filtros por coluna (subset dos dados já carregados). */
@@ -1952,7 +1942,6 @@ function TableOpp({ data }) {
           .
         </p>
       ) : null}
-      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <>
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
@@ -2181,12 +2170,6 @@ function TableOpp({ data }) {
                 {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
               </td>
               <td>{row.motivo ?? "—"}</td>
-              <SpacesExportActionCell
-                productId={row.productId}
-                nome={row.nome}
-                exportingProductId={exportingProductId}
-                exportToSpace={exportToSpace}
-              />
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -2376,7 +2359,6 @@ function TableScore({ data }) {
   const navigate = useNavigate();
   const rawRows = asArray(data?.top);
   const colW = useColumnWidths(CW_SCORE);
-  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
   const scoreIntro = (
@@ -2537,7 +2519,6 @@ function TableScore({ data }) {
           {scoreTicketFiltered.length !== 1 ? "s" : ""} após presets e Ticket.
         </p>
       ) : null}
-      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       {filteredRows.length === 0 ? (
         <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros actuais — ajuste os limites ou clique em Limpar.</p>
       ) : scoreExcelFiltered.length === 0 ? (
@@ -2811,12 +2792,6 @@ function TableScore({ data }) {
               <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
                 <PdpEnrichButton productId={row.productId} />
               </td>
-              <SpacesExportActionCell
-                productId={row.productId}
-                nome={row.nome}
-                exportingProductId={exportingProductId}
-                exportToSpace={exportToSpace}
-              />
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -2999,7 +2974,6 @@ function TableCategoryMap({ data }) {
   const masters = asArray(data?.masterCategories);
   const colWSub = useColumnWidths(CW_MAP_SUB);
   const colWTop = useColumnWidths(CW_MAP_TOP);
-  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
 
   const mapIntro = (
     <IntroCard title='Mapa de categorias'>
@@ -3484,7 +3458,6 @@ function TableCategoryMap({ data }) {
           Filtros ▾ (SKU destacados): <strong>{flatTopFiltered.length}</strong> de {flatTops.length} linha(s).
         </p>
       ) : null}
-      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
       <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colWTop.colElements}</colgroup>
         <thead>
@@ -3741,13 +3714,6 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
                 <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
                 <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
-                <SpacesExportActionCell
-                  productId={row.productId}
-                  nome={row.nome}
-                  exportingProductId={exportingProductId}
-                  exportToSpace={exportToSpace}
-                  tdStyle={tdStyle}
-                />
                 <td style={tdStyle}>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -3772,7 +3738,6 @@ function TableScalableSections({ data }) {
   const rawV = asArray(data?.validatedToScale);
   const rawP = asArray(data?.potentialBets);
   const colW = useColumnWidths(CW_SCALE);
-  const { exportingProductId, exportFeedback, exportToSpace } = useSpacesExport();
   const { ticketTier, setTicketTier } = useAnalyticsDashboardCache();
 
   const [scaleView, setScaleView] = useState(/** @type {'validated' | 'potential'} */ ("validated"));
@@ -4002,12 +3967,6 @@ function TableScalableSections({ data }) {
         <td>{row.vendas ?? "—"}</td>
         <td>{row.rating ?? "—"}</td>
           <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
-        <SpacesExportActionCell
-          productId={row.productId}
-          nome={row.nome}
-          exportingProductId={exportingProductId}
-          exportToSpace={exportToSpace}
-        />
         <td>
           {row.link ? (
             <a href={row.link} target="_blank" rel="noopener noreferrer">
@@ -4032,7 +3991,6 @@ function TableScalableSections({ data }) {
           {rawVFiltered.length} após ▾ · Potencial: <strong>{rawPTicket.length}</strong> de {rawPFiltered.length} após ▾).
         </p>
       ) : null}
-      {exportFeedback ? <SpacesExportFeedback feedback={exportFeedback} /> : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
         <button type="button" style={pill(scaleView === "validated")} onClick={() => setScaleView("validated")}>

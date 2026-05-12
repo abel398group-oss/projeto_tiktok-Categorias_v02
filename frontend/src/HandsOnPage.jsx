@@ -91,16 +91,10 @@ const btnBase = {
 
 const btnOpen = {
   ...btnBase,
-  border: "1px solid #3978a8",
-  background: "#1e4a63",
-  color: "#eaf6ff"
-};
-
-const btnExport = {
-  ...btnBase,
-  border: "1px solid #4a7a9e",
-  background: "#1a3a52",
-  color: "#e8f4ff"
+  border: "1px solid #2978b8",
+  background: "#1d6fa5",
+  color: "#fff",
+  textAlign: "center"
 };
 
 /** @param {import("./productStatusStorage.js").ProductStatusKey} key */
@@ -177,15 +171,11 @@ export default function HandsOnPage() {
   const [statusMap, setStatusMap] = useState(() => getProductStatuses());
   /** @type {Record<string, RowDetail>} */
   const [details, setDetails] = useState({});
-  const [exportingId, setExportingId] = useState(/** @type {string | null} */ (null));
-  /** @type {{ kind: "ok" | "err", text: string, productId: string } | null} */
-  const [exportFlash, setExportFlash] = useState(null);
 
   const refreshRecent = useCallback(() => {
     setRecentPages(sortRecentNewestFirst(getRecentWorkspace()));
     setStatusMap(getProductStatuses());
     setShortlistSnapshot(getCreatorShortlist());
-    setExportFlash(null);
   }, []);
 
   useEffect(() => {
@@ -295,30 +285,6 @@ export default function HandsOnPage() {
       cancel = true;
     };
   }, [recentPages]);
-
-  const onExport = useCallback(async (productId) => {
-    setExportingId(productId);
-    setExportFlash(null);
-    try {
-      const res = await apiPost("/analytics/export-product-to-spaces", { productId });
-      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
-      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
-      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
-      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
-      setProductStatus(productId, "conteudo_produzido");
-      setStatusMap(getProductStatuses());
-      setExportFlash({
-        kind: "ok",
-        productId,
-        text: `Enviado: ${prefix || "ok"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}.`
-      });
-    } catch (err) {
-      const text = err instanceof Error ? err.message : String(err);
-      setExportFlash({ kind: "err", productId, text });
-    } finally {
-      setExportingId(null);
-    }
-  }, []);
 
   /** @param {string} pid @param {import("./productStatusStorage.js").ProductStatusKey} statusKey */
   const onPickStatus = useCallback((pid, statusKey) => {
@@ -656,18 +622,6 @@ export default function HandsOnPage() {
                           Abrir produto
                         </Link>
                         <PdpEnrichButton productId={r.productId} />
-                        <button
-                          type="button"
-                          style={{
-                            ...btnExport,
-                            opacity: exportingId === r.productId ? 0.55 : 1,
-                            cursor: exportingId != null ? "wait" : "pointer"
-                          }}
-                          disabled={exportingId != null}
-                          onClick={() => onExport(r.productId)}
-                        >
-                          {exportingId === r.productId ? "…" : "Exportar"}
-                        </button>
                       </div>
                     </li>
                   );

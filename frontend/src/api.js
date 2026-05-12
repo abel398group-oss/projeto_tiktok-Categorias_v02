@@ -39,7 +39,7 @@ export async function apiFetch(path) {
 
 /**
  * POST JSON com a mesma autenticação que {@link apiFetch}.
- * @param {string} path ex.: "/analytics/export-product-to-spaces"
+ * @param {string} path ex.: "/analytics/import-output"
  * @param {Record<string, unknown>} body
  */
 export async function apiPost(path, body) {

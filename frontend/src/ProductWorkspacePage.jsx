@@ -209,9 +209,6 @@ export default function ProductWorkspacePage() {
   const [importFlash, setImportFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [importBusy, setImportBusy] = useState(false);
 
-  const [exporting, setExporting] = useState(false);
-  const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
-
   const [selectedUrls, setSelectedUrls] = useState(() => new Set());
   const [zipBusy, setZipBusy] = useState(false);
   const [zipMsg, setZipMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
@@ -432,32 +429,6 @@ export default function ProductWorkspacePage() {
     const next = v.length > NOTES_MAX ? v.slice(0, NOTES_MAX) : v;
     setNotes(next);
     persistNotes(next);
-  };
-
-  const onExport = async () => {
-    if (!decodedId) return;
-    setExporting(true);
-    setExportMsg(null);
-    try {
-      const res = await apiPost("/analytics/export-product-to-spaces", { productId: decodedId });
-      const prefix = typeof res?.prefix === "string" ? res.prefix : "";
-      const up = typeof res?.imagesUploaded === "number" ? res.imagesUploaded : 0;
-      const disc = typeof res?.imagesDiscovered === "number" ? res.imagesDiscovered : 0;
-      const fail = typeof res?.imagesFailed === "number" ? res.imagesFailed : 0;
-      setProductStatus(decodedId, "conteudo_produzido");
-      setPipelineKey(normalizeProductStatusKey("conteudo_produzido"));
-      setExportMsg({
-        kind: "ok",
-        text: `Exportado · ${prefix || "OK"} · imagens ${up}/${disc}${fail ? ` (${fail} falhas)` : ""}`
-      });
-    } catch (err) {
-      setExportMsg({
-        kind: "err",
-        text: err instanceof Error ? err.message : String(err)
-      });
-    } finally {
-      setExporting(false);
-    }
   };
 
   const toggleImageUrl = useCallback((url) => {
@@ -1086,25 +1057,6 @@ export default function ProductWorkspacePage() {
               ) : (
                 <span style={{ opacity: 0.65, alignSelf: "center" }}>Sem URL do produto.</span>
               )}
-              <button
-                type="button"
-                disabled={exporting}
-                onClick={onExport}
-                style={{
-                  padding: "0.35rem 0.85rem",
-                  fontSize: "0.76rem",
-                  cursor: exporting ? "wait" : "pointer",
-                  borderRadius: 6,
-                  border: "1px solid #2978b8",
-                  background: "#1d6fa5",
-                  color: "#fff",
-                  fontWeight: 600,
-                  opacity: exporting ? 0.7 : 1,
-                  alignSelf: "center"
-                }}
-              >
-                {exporting ? "Exportar…" : "Exportar ao Space"}
-              </button>
             </div>
             {importFlash ? (
               <p
@@ -1118,19 +1070,6 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {importFlash.text}
-              </p>
-            ) : null}
-            {exportMsg ? (
-              <p
-                role="status"
-                style={{
-                  marginTop: "0.55rem",
-                  marginBottom: 0,
-                  fontSize: "0.72rem",
-                  color: exportMsg.kind === "ok" ? "#9ed9b0" : "#f97373"
-                }}
-              >
-                {exportMsg.text}
               </p>
             ) : null}
             {workspace.scrapeRun ? (
