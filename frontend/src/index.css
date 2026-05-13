@@ -326,6 +326,54 @@ tbody td {
   background: var(--tk-surface);
 }
 
+/* Tabelas do analytics — leitura rápida (densidade + hover + links discretos) */
+table.tk-analytics-table {
+  font-size: 0.84rem;
+}
+table.tk-analytics-table th,
+table.tk-analytics-table td {
+  padding: 0.36rem 0.5rem;
+  border-color: var(--tk-border-soft);
+}
+table.tk-analytics-table tbody tr.tk-row-clickable td {
+  transition: background 0.12s ease;
+}
+table.tk-analytics-table tbody tr.tk-row-clickable {
+  cursor: pointer;
+}
+table.tk-analytics-table tbody tr.tk-row-clickable:hover td {
+  background: rgb(255 255 255 / 0.045);
+}
+table.tk-analytics-table tbody tr.tk-row-clickable:active td {
+  background: rgb(56 189 248 / 0.08);
+}
+table.tk-analytics-table a.tk-link-workspace {
+  color: var(--tk-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+table.tk-analytics-table a.tk-link-workspace:hover {
+  color: var(--tk-accent);
+  text-decoration: underline;
+}
+table.tk-analytics-table a.tk-link-external {
+  color: var(--tk-text-muted);
+  text-decoration: none;
+}
+table.tk-analytics-table a.tk-link-external:hover {
+  color: var(--tk-accent);
+  text-decoration: underline;
+}
+.tk-metric {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  color: var(--tk-text);
+}
+.tk-metric-muted {
+  font-variant-numeric: tabular-nums;
+  color: var(--tk-text-muted);
+}
+
 /* Zona principal tipo dashboard (contraste suave com o fundo da página) */
 .tk-page-body {
   flex: 1;

@@ -505,7 +505,7 @@ export default function HandsOnPage() {
                         background: "#111820",
                         display: "grid",
                         gridTemplateColumns: "1fr auto",
-                        gap: "0.5rem",
+                        gap: "0.8rem",
                         alignItems: "stretch"
                       }}
                     >
@@ -697,7 +697,7 @@ export default function HandsOnPage() {
                         background: "#111820",
                         display: "grid",
                         gridTemplateColumns: "1fr auto",
-                        gap: "0.5rem",
+                        gap: "0.8rem",
                         alignItems: "stretch"
                       }}
                     >
