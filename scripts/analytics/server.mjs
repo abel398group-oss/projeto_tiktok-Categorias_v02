@@ -295,6 +295,40 @@ function safeSlug(s) {
   return slug || "produto";
 }
 
+function ticketTierFromPrice(price) {
+  if (price == null || !Number.isFinite(Number(price))) return null;
+  const p = Number(price);
+  if (p < 30) return "baixo";
+  if (p < 80) return "medio";
+  return "alto";
+}
+
+function categoryLabelFromUrl(categoryUrl) {
+  const raw = typeof categoryUrl === "string" ? categoryUrl.trim() : "";
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const cIdx = parts.indexOf("c");
+    if (cIdx < 0) return null;
+    const slug = parts[cIdx + 1] || "";
+    if (!slug) return null;
+    const label = slug
+      .replace(/[-_]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (!label) return null;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+function fmtPtPriceBRL(price) {
+  if (price == null || !Number.isFinite(Number(price))) return "—";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(price));
+}
+
 async function pickDocumentsDir() {
   const home = os.homedir();
   const candidates = [
@@ -505,20 +539,98 @@ fastify.post("/analytics/export-local", async (req, reply) => {
 
   const linkTxtName = `link_${productIdRaw}.txt`;
   const urlName = `produto_${productIdRaw}.url`;
+  const produtoTxtName = `produto_${productIdRaw}.txt`;
   const metaName = `metadata_${productIdRaw}.json`;
 
   await fsp.writeFile(path.join(productDir, linkTxtName), `${linkOut}\r\n`, "utf8");
   await fsp.writeFile(path.join(productDir, urlName), `[InternetShortcut]\r\nURL=${linkOut}\r\n`, "utf8");
 
+  /** @type {number | null} */
+  const price = typeof snap.price === "number" && Number.isFinite(snap.price) ? snap.price : null;
+  /** @type {number | null} */
+  const rating = typeof snap.ratingAverage === "number" && Number.isFinite(snap.ratingAverage) ? snap.ratingAverage : null;
+  /** @type {number | null} */
+  const sales = typeof snap.salesCount === "number" && Number.isFinite(snap.salesCount) ? snap.salesCount : null;
+  const ticket = ticketTierFromPrice(price);
+
+  /** @type {number | null} */
+  let score = null;
+  try {
+    const ws = await getProductWorkspaceDetail(prisma, productIdRaw);
+    if (!("error" in ws)) {
+      const n = ws.score;
+      if (typeof n === "number" && Number.isFinite(n)) score = n;
+    }
+  } catch {
+    // ignore
+  }
+
+  const categoriaUrl = product.categoryUrl ?? null;
+  const categoriaLabel = categoryLabelFromUrl(categoriaUrl);
+
   const meta = {
     productId: productIdRaw,
     sellerId: product.seller?.sellerId ?? null,
     nome: nome || "—",
-    categoria: product.categoryUrl ?? null,
+    categoria: categoriaUrl,
+    link: linkOut,
     exportedAt: ts,
-    images: { total: list.length, saved: written.length, failed: failed.length, files: written }
+    images: { total: list.length, saved: written.length, failed: failed.length, files: written },
+    analytics: {
+      price,
+      rating,
+      sales,
+      score,
+      ticket
+    },
+    assets: {
+      images: { total: list.length, saved: written.length, failed: failed.length }
+    },
+    content: {
+      description: null,
+      hooks: [],
+      hashtags: [],
+      cta: [],
+      ugcIdeas: []
+    },
+    context: {
+      categoriaLabel
+    }
   };
   await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
+
+  const lines = [];
+  lines.push("Produto:");
+  lines.push(nome || "—");
+  lines.push("");
+  lines.push("Preço:");
+  lines.push(price != null ? fmtPtPriceBRL(price) : "—");
+  lines.push("");
+  lines.push("Vendas:");
+  lines.push(sales != null ? String(sales) : "—");
+  lines.push("");
+  lines.push("Avaliação:");
+  lines.push(rating != null ? String(rating) : "—");
+  lines.push("");
+  lines.push("Categoria:");
+  lines.push(categoriaLabel ?? "—");
+  lines.push("");
+  lines.push("Score:");
+  lines.push(score != null ? String(score) : "—");
+  lines.push("");
+  lines.push("Ticket:");
+  lines.push(ticket ?? "—");
+  lines.push("");
+  lines.push("Link:");
+  lines.push(linkOut);
+  lines.push("");
+  lines.push("Arquivos:");
+  lines.push("imagens/");
+  lines.push("");
+  lines.push("Observações:");
+  lines.push("Descrição completa ainda não coletada.");
+  lines.push("");
+  await fsp.writeFile(path.join(productDir, produtoTxtName), `${lines.join("\r\n")}\r\n`, "utf8");
 
   return reply.send({
     ok: true,
