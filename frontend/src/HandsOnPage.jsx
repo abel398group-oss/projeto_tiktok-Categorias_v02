@@ -490,6 +490,11 @@ export default function HandsOnPage() {
                   /** @type {import("./productStatusStorage.js").ProductStatusKey} */
                   const rowStatus = normalizeProductStatusKey(statusMap[r.productId]);
                   const nome = (d?.nome || r.nome || "—").trim() || "—";
+                  const exportState = exportById[r.productId];
+                  const exportDone =
+                    exportState?.kind === "ok" &&
+                    typeof exportState.text === "string" &&
+                    exportState.text.startsWith("Exportação concluída");
                   const tiktokUrl =
                     (typeof d?.link === "string" && d.link.trim()) ||
                     (typeof r.tiktokUrl === "string" && r.tiktokUrl.trim()) ||
@@ -578,11 +583,12 @@ export default function HandsOnPage() {
                         <PdpEnrichButton productId={r.productId} />
                         <button
                           type="button"
+                          aria-busy={exportingId === r.productId}
                           style={{
                             ...btnOpen,
                             borderRadius: 8,
-                            border: "1px solid #567138",
-                            background: "#203014",
+                            border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
+                            background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
                             color: "#dcedc8",
                             fontWeight: 700,
                             opacity: exportingId === r.productId ? 0.6 : 1,
@@ -592,7 +598,7 @@ export default function HandsOnPage() {
                           onClick={() => void onExport(r.productId)}
                           title="Exporta imagens para o DigitalOcean Spaces (não faz scraping)"
                         >
-                          {exportingId === r.productId ? "Exportando…" : "Exportar"}
+                          {exportingId === r.productId ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
                         </button>
                         {exportById[r.productId] ? (
                           <div

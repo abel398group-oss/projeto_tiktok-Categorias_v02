@@ -135,6 +135,11 @@ export default function ShortlistPage() {
               const statusKey = getProductStatusForProduct(e.productId);
               const note = notePreview(e.productId);
               const tiktokUrl = `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(pidStr)}`;
+              const exportState = exportById[pidStr];
+              const exportDone =
+                exportState?.kind === "ok" &&
+                typeof exportState.text === "string" &&
+                exportState.text.startsWith("Exportação concluída");
               return (
                 <li
                   key={e.productId}
@@ -238,6 +243,7 @@ export default function ShortlistPage() {
                     />
                     <button
                       type="button"
+                       aria-busy={exportingId === pidStr}
                       disabled={exportingId != null}
                       onClick={() => void onExport(e.productId)}
                       title="Exportar (upload para DigitalOcean Spaces). Não faz scraping."
@@ -247,13 +253,13 @@ export default function ShortlistPage() {
                         fontWeight: 700,
                         cursor: exportingId != null ? "wait" : "pointer",
                         borderRadius: 6,
-                        border: "1px solid #567138",
-                        background: "#203014",
+                         border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
+                         background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
                         color: "#dcedc8",
                         opacity: exportingId === pidStr ? 0.65 : 1
                       }}
                     >
-                      {exportingId === pidStr ? "Exportando…" : "Exportar"}
+                       {exportingId === pidStr ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
                     </button>
                     {exportById[pidStr] ? (
                       <div
