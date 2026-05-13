@@ -97,9 +97,6 @@ const btnBase = {
 
 const btnOpen = {
   ...btnBase,
-  border: "1px solid #2978b8",
-  background: "#1d6fa5",
-  color: "#fff",
   textAlign: "center"
 };
 
@@ -572,10 +569,10 @@ export default function HandsOnPage() {
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
-                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
+                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" className="tk-btn-primary" style={btnOpen}>
                           Abrir workspace
                         </Link>
-                        <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" style={btnOpen}>
+                        <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" className="tk-btn-neutral" style={btnOpen}>
                           Abrir no TikTok
                         </a>
                         <PdpEnrichButton productId={r.productId} />
@@ -583,6 +580,7 @@ export default function HandsOnPage() {
                           type="button"
                           style={{
                             ...btnOpen,
+                            borderRadius: 8,
                             border: "1px solid #567138",
                             background: "#203014",
                             color: "#dcedc8",
@@ -609,17 +607,7 @@ export default function HandsOnPage() {
                             {exportById[r.productId].text}
                           </div>
                         ) : null}
-                        <button
-                          type="button"
-                          style={{
-                            ...btnOpen,
-                            border: "1px solid #6b3b3b",
-                            background: "#2a1515",
-                            color: "#ffd6d6",
-                            fontWeight: 700
-                          }}
-                          onClick={() => onRemoveChosen(r.productId)}
-                        >
+                        <button type="button" className="tk-btn-danger" style={{ ...btnOpen, fontWeight: 700 }} onClick={() => onRemoveChosen(r.productId)}>
                           Remover
                         </button>
                       </div>
@@ -854,7 +842,7 @@ export default function HandsOnPage() {
                           minWidth: "8.25rem"
                         }}
                       >
-                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
+                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" className="tk-btn-primary" style={btnOpen}>
                           Abrir workspace
                         </Link>
                         <PdpEnrichButton productId={r.productId} />
@@ -977,7 +965,7 @@ export default function HandsOnPage() {
                               </div>
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", minWidth: "7.5rem" }}>
-                              <Link to={`/produto/${encodeURIComponent(row.productId)}`} style={btnOpen}>
+                              <Link to={`/produto/${encodeURIComponent(row.productId)}`} className="tk-btn-primary" style={btnOpen}>
                                 Abrir
                               </Link>
                               <button

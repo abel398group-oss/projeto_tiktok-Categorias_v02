@@ -179,16 +179,13 @@ export default function ShortlistPage() {
                     <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                       <Link
                         to={`/produto/${encodeURIComponent(pidStr)}`}
+                        className="tk-btn-primary"
                         style={{
                           padding: "0.28rem 0.55rem",
                           fontSize: "0.68rem",
                           fontWeight: 600,
                           borderRadius: 6,
-                          border: "1px solid #3978a8",
-                          background: "#1e4a63",
-                          color: "#eaf6ff",
-                          textAlign: "center",
-                          textDecoration: "none"
+                          textAlign: "center"
                         }}
                       >
                         Abrir workspace
@@ -197,21 +194,23 @@ export default function ShortlistPage() {
                         href={tiktokUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        className="tk-btn-neutral"
                         style={{
                           padding: "0.28rem 0.55rem",
                           fontSize: "0.68rem",
                           fontWeight: 600,
                           borderRadius: 6,
-                          border: "1px solid #3978a8",
-                          background: "#1e4a63",
-                          color: "#eaf6ff",
-                          textAlign: "center",
-                          textDecoration: "none"
+                          textAlign: "center"
                         }}
                       >
                         Abrir no TikTok
                       </a>
-                      <SendToAnalysisButton productId={String(e.productId)} nome={typeof e.nome === "string" ? e.nome : undefined} tiktokUrl={tiktokUrl} />
+                      <SendToAnalysisButton
+                        productId={String(e.productId)}
+                        nome={typeof e.nome === "string" ? e.nome : undefined}
+                        tiktokUrl={tiktokUrl}
+                        className="tk-btn-primary"
+                      />
                       <button
                         type="button"
                         disabled={exportingId != null}
@@ -248,15 +247,13 @@ export default function ShortlistPage() {
                       <button
                         type="button"
                         onClick={() => onRemove(e.productId)}
+                        className="tk-btn-danger"
                         style={{
                           padding: "0.28rem 0.55rem",
                           fontSize: "0.68rem",
                           fontWeight: 600,
                           cursor: "pointer",
-                          borderRadius: 6,
-                          border: "1px solid #6b3030",
-                          background: "#2a1515",
-                          color: "#fca5a5"
+                          borderRadius: 6
                         }}
                       >
                         Remover

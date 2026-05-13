@@ -1111,7 +1111,16 @@ export default function ProductWorkspacePage() {
                   href={workspace.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "#6ec4ff", alignSelf: "center", fontSize: "0.78rem" }}
+                  className="tk-btn-neutral"
+                  style={{
+                    padding: "0.28rem 0.55rem",
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    alignSelf: "center",
+                    textAlign: "center",
+                    whiteSpace: "nowrap"
+                  }}
                 >
                   Abrir no TikTok
                 </a>

@@ -1670,6 +1670,7 @@ function TableTop({ data }) {
                       productId={pidStr}
                       nome={typeof row.nome === "string" ? row.nome : undefined}
                       tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                      className="tk-btn-primary"
                     />
                   ) : (
                     "—"
@@ -2191,6 +2192,7 @@ function TableOpp({ data }) {
                     productId={pidStr}
                     nome={typeof row.nome === "string" ? row.nome : undefined}
                     tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    className="tk-btn-primary"
                   />
                 ) : (
                   "—"
@@ -2821,6 +2823,7 @@ function TableScore({ data }) {
                     productId={pidStr}
                     nome={typeof row.nome === "string" ? row.nome : undefined}
                     tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    className="tk-btn-primary"
                   />
                 ) : (
                   "—"
@@ -3755,6 +3758,7 @@ function TableCategoryMap({ data }) {
                       productId={pid}
                       nome={typeof row.nome === "string" ? row.nome : undefined}
                       tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                      className="tk-btn-primary"
                     />
                   ) : (
                     "—"
@@ -4019,6 +4023,7 @@ function TableScalableSections({ data }) {
               productId={pid}
               nome={typeof row.nome === "string" ? row.nome : undefined}
               tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+              className="tk-btn-primary"
             />
           ) : (
             "—"
