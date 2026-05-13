@@ -211,6 +211,10 @@ export default function ProductWorkspacePage() {
 
   const [exportBusy, setExportBusy] = useState(false);
   const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
+  const [localExportBusy, setLocalExportBusy] = useState(false);
+  const [localExportMsg, setLocalExportMsg] = useState(
+    /** @type {{ kind: "ok" | "err", text: string } | null} */ (null)
+  );
 
   const [selectedUrls, setSelectedUrls] = useState(() => new Set());
   const [zipBusy, setZipBusy] = useState(false);
@@ -318,8 +322,36 @@ export default function ProductWorkspacePage() {
     }
   }, [decodedId]);
 
+  const onExportLocal = useCallback(async () => {
+    if (!decodedId) return;
+    setLocalExportBusy(true);
+    setLocalExportMsg({ kind: "ok", text: "Exportação local iniciada" });
+    try {
+      const res = await apiPost("/analytics/export-local", { productId: decodedId });
+      const dir = res && typeof res === "object" && typeof res.dir === "string" ? res.dir.trim() : "";
+      const saved = res && typeof res === "object" && Number.isFinite(Number(res.imagesSaved)) ? Number(res.imagesSaved) : null;
+      const failed = res && typeof res === "object" && Number.isFinite(Number(res.imagesFailed)) ? Number(res.imagesFailed) : null;
+      const bits = [];
+      if (saved != null) bits.push(`imagens: ${saved.toLocaleString("pt-BR")}`);
+      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
+      setLocalExportMsg({
+        kind: "ok",
+        text: `Exportação local concluída${bits.length ? " · " + bits.join(" · ") : ""}${dir ? ` · ${dir}` : ""}`
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setLocalExportMsg({ kind: "err", text: `Falha ao exportar local: ${msg}` });
+    } finally {
+      setLocalExportBusy(false);
+    }
+  }, [decodedId]);
+
   const exportDone =
     exportMsg?.kind === "ok" && typeof exportMsg.text === "string" && exportMsg.text.startsWith("Exportação concluída");
+  const localExportDone =
+    localExportMsg?.kind === "ok" &&
+    typeof localExportMsg.text === "string" &&
+    localExportMsg.text.startsWith("Exportação local concluída");
 
   const briefing = useMemo(
     () => (isWorkspace(workspace) ? buildProductBriefingFromWorkspace(/** @type {WorkspacePayload & Record<string, unknown>} */ (workspace)) : null),
@@ -1066,7 +1098,7 @@ export default function ProductWorkspacePage() {
               </button>
               <button
                 type="button"
-                disabled={exportBusy || loading || !decodedId}
+                disabled={exportBusy || localExportBusy || loading || !decodedId}
                 onClick={() => void onExportImagesToSpaces()}
                 title="Exporta imagens deste produto para o DigitalOcean Spaces (não faz scraping)"
                 aria-busy={exportBusy}
@@ -1088,6 +1120,31 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {exportBusy ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
+              </button>
+              <button
+                type="button"
+                disabled={localExportBusy || exportBusy || importBusy || loading || !decodedId}
+                onClick={() => void onExportLocal()}
+                title="Exporta um kit local do produto no Windows (não faz scraping)"
+                aria-busy={localExportBusy}
+                style={{
+                  padding: "0.28rem 0.55rem",
+                  fontSize: "0.68rem",
+                  cursor: localExportBusy ? "wait" : "pointer",
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                  display: "inline-block",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                  border: localExportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #45515c",
+                  background: localExportDone ? "rgba(34, 197, 94, 0.12)" : "#1a2733",
+                  color: localExportDone ? "#dcedc8" : "#e7e9ea",
+                  opacity: localExportBusy ? 0.7 : 1,
+                  alignSelf: "center"
+                }}
+              >
+                {localExportBusy ? "Exportando local…" : localExportDone ? "Exportar local ✓" : "Exportar local"}
               </button>
               <button
                 type="button"
@@ -1158,6 +1215,20 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {exportMsg.text}
+              </p>
+            ) : null}
+            {localExportMsg ? (
+              <p
+                role="status"
+                style={{
+                  marginTop: "0.35rem",
+                  marginBottom: 0,
+                  fontSize: "0.71rem",
+                  color: localExportMsg.kind === "ok" ? "#9ed9b0" : "#f97373",
+                  lineHeight: 1.45
+                }}
+              >
+                {localExportMsg.text}
               </p>
             ) : null}
             {workspace.scrapeRun ? (

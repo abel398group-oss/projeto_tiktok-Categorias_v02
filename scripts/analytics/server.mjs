@@ -9,7 +9,13 @@
  */
 import { PrismaClient } from "@prisma/client";
 import Fastify from "fastify";
-import { requireDatabaseUrl } from "./_common.mjs";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getLatestAndPreviousRun, requireDatabaseUrl } from "./_common.mjs";
 import { getGrowthReport } from "./lib/growth.mjs";
 import { getNewProductsReport } from "./lib/new-products.mjs";
 import {
@@ -23,6 +29,7 @@ import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
+import { extractOrderedImageUrls } from "../lib/extract-image-urls.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
 import { registerImagesUploadRoute } from "./images-upload-route.mjs";
@@ -44,6 +51,9 @@ const host = process.env.ANALYTICS_API_HOST || "127.0.0.1";
 
 const prisma = new PrismaClient();
 const fastify = Fastify({ logger: false });
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.join(__dirname, "..", "..");
 
 function extractBearer(req) {
   const h = req.headers.authorization;
@@ -264,6 +274,260 @@ fastify.post("/analytics/product-workspace/:productId/images-zip", async (req, r
     const msg = e instanceof Error ? e.message : String(e);
     return reply.code(502).send({ error: "zip_failed", message: msg });
   }
+});
+
+function isDigitsOnly(s) {
+  return /^[0-9]+$/.test(String(s || "").trim());
+}
+
+function safeSlug(s) {
+  const raw = typeof s === "string" ? s : "";
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const slug = normalized
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .trim();
+  return slug || "produto";
+}
+
+async function pickDocumentsDir() {
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, "Documents"),
+    path.join(home, "OneDrive", "Documents"),
+    path.join(home, "Documentos"),
+    path.join(home, "OneDrive", "Documentos")
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+    }
+  }
+  return candidates[0];
+}
+
+async function ensureDir(p) {
+  await fsp.mkdir(p, { recursive: true });
+}
+
+function pickImageExt(contentType, url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const m = pathname.match(/\.(webp|jpe?g|png|gif)(?:\?|$)/i);
+    if (m) {
+      const e = m[1].toLowerCase();
+      return e === "jpeg" ? "jpg" : e;
+    }
+  } catch {
+  }
+  const c = String(contentType || "").toLowerCase();
+  if (c.includes("webp")) return "webp";
+  if (c.includes("jpeg")) return "jpg";
+  if (c.includes("png")) return "png";
+  if (c.includes("gif")) return "gif";
+  return "bin";
+}
+
+async function fetchImageBuffer(url) {
+  const ctrl = new AbortController();
+  const timeoutMs = 25000;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: "follow",
+      headers: { "User-Agent": "tiktok-shop-export-local/1.0 (analytics-api)" }
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { buf, contentType: res.headers.get("content-type") || "application/octet-stream" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runNpmScript(script, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("npm", ["run", script, ...(args.length ? ["--", ...args] : [])], {
+      cwd: repoRoot,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let combined = "";
+    child.stdout?.on("data", (d) => {
+      combined += typeof d === "string" ? d : d.toString();
+    });
+    child.stderr?.on("data", (d) => {
+      combined += typeof d === "string" ? d : d.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const exitCode = typeof code === "number" ? code : signal ? 1 : 1;
+      resolve({ exitCode, log: combined });
+    });
+  });
+}
+
+async function resolveProductSnapshotForExport(tiktokProductId) {
+  const { latest } = await getLatestAndPreviousRun(prisma);
+  if (!latest) {
+    return { error: "no_run", message: "Sem dados: nenhum ScrapeRun. Importe primeiro (npm run db:import:output)." };
+  }
+  const product = await prisma.product.findUnique({
+    where: { productId: tiktokProductId },
+    include: {
+      seller: true,
+      snapshots: {
+        where: { scrapeRunId: latest.id },
+        orderBy: { capturedAt: "desc" },
+        take: 1
+      }
+    }
+  });
+  if (!product) {
+    return { error: "not_found", message: `Produto não encontrado: productId=${tiktokProductId}` };
+  }
+  let snap = product.snapshots[0] ?? null;
+  if (!snap) {
+    snap = await prisma.productSnapshot.findFirst({
+      where: { productRefId: product.id },
+      orderBy: [{ scrapeRun: { collectedAt: "desc" } }, { capturedAt: "desc" }]
+    });
+  }
+  if (!snap) {
+    return {
+      error: "no_snapshot",
+      message: "Este produto não tem nenhum snapshot na base (importe dados primeiro)."
+    };
+  }
+  return { product, snap };
+}
+
+fastify.post("/analytics/export-local", async (req, reply) => {
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const productIdRaw = body.productId != null ? String(body.productId).trim() : "";
+  if (!productIdRaw || !isDigitsOnly(productIdRaw)) {
+    return reply.code(400).send({
+      ok: false,
+      error: "bad_request",
+      message: "productId deve conter apenas dígitos."
+    });
+  }
+
+  const docsDir = await pickDocumentsDir();
+  const baseDir = path.join(docsDir, "Scraper-TikTok-Produtos");
+
+  let resolved = await resolveProductSnapshotForExport(productIdRaw);
+  if ("error" in resolved) {
+    const { error, message } = resolved;
+    if (error === "bad_request") return reply.code(400).send({ ok: false, error, message });
+    if (error === "not_found" || error === "no_snapshot") return reply.code(404).send({ ok: false, error, message });
+    return reply.code(503).send({ ok: false, error, message });
+  }
+
+  const { product, snap } = resolved;
+  let urls = extractOrderedImageUrls(snap);
+  const hasAny = urls.some((u) => typeof u === "string" && u.trim().startsWith("http"));
+  if (!hasAny) {
+    const r1 = await runNpmScript("pdp:enrich", [`--ids=${productIdRaw}`]);
+    if (r1.exitCode !== 0) {
+      const tail = r1.log.replace(/\r\n/g, "\n").trimEnd().split("\n").slice(-12).join("\n");
+      return reply.code(502).send({
+        ok: false,
+        error: "pdp_enrich_failed",
+        message: "PDP enrich falhou.",
+        logTail: tail
+      });
+    }
+    const r2 = await runNpmScript("db:import:output", []);
+    if (r2.exitCode !== 0) {
+      const tail = r2.log.replace(/\r\n/g, "\n").trimEnd().split("\n").slice(-12).join("\n");
+      return reply.code(502).send({
+        ok: false,
+        error: "import_failed",
+        message: "Import falhou após PDP enrich.",
+        logTail: tail
+      });
+    }
+    resolved = await resolveProductSnapshotForExport(productIdRaw);
+    if ("error" in resolved) {
+      return reply.code(503).send({ ok: false, error: resolved.error, message: resolved.message });
+    }
+    urls = extractOrderedImageUrls(resolved.snap);
+  }
+
+  const list = urls.filter((u) => typeof u === "string" && u.trim().startsWith("http")).map((u) => u.trim());
+  if (list.length === 0) {
+    return reply.code(409).send({
+      ok: false,
+      error: "no_images",
+      message: "Não há imagens disponíveis para exportar localmente (pdpImages vazio)."
+    });
+  }
+
+  await ensureDir(baseDir);
+
+  const nome = typeof product.name === "string" ? product.name.trim() : "";
+  const slug = safeSlug(nome);
+  const productDir = path.join(baseDir, `${slug}_${productIdRaw}`);
+  const imagesDir = path.join(productDir, "imagens");
+  await ensureDir(imagesDir);
+
+  const link = typeof product.productUrl === "string" && product.productUrl.trim() ? product.productUrl.trim() : null;
+  const linkOut = link || `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(productIdRaw)}`;
+
+  const ts = new Date().toISOString();
+  const written = [];
+  const failed = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const url = list[i];
+    try {
+      const { buf, contentType } = await fetchImageBuffer(url);
+      const ext = pickImageExt(contentType, url);
+      const slot = String(i + 1).padStart(3, "0");
+      const fname = `imagem-${slot}.${ext}`;
+      const outPath = path.join(imagesDir, fname);
+      await fsp.writeFile(outPath, buf);
+      written.push({ file: fname, url });
+    } catch (e) {
+      failed.push({ url, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  const linkTxtName = `link_${productIdRaw}.txt`;
+  const urlName = `produto_${productIdRaw}.url`;
+  const metaName = `metadata_${productIdRaw}.json`;
+
+  await fsp.writeFile(path.join(productDir, linkTxtName), `${linkOut}\r\n`, "utf8");
+  await fsp.writeFile(path.join(productDir, urlName), `[InternetShortcut]\r\nURL=${linkOut}\r\n`, "utf8");
+
+  const meta = {
+    productId: productIdRaw,
+    sellerId: product.seller?.sellerId ?? null,
+    nome: nome || "—",
+    categoria: product.categoryUrl ?? null,
+    exportedAt: ts,
+    images: { total: list.length, saved: written.length, failed: failed.length, files: written }
+  };
+  await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
+
+  return reply.send({
+    ok: true,
+    productId: productIdRaw,
+    dir: productDir,
+    imagesSaved: written.length,
+    imagesFailed: failed.length,
+    link: linkOut
+  });
 });
 
 registerPdpEnrichRoute(fastify);
