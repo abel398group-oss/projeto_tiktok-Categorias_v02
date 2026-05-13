@@ -321,12 +321,13 @@ export default function HandsOnPage() {
   const onExport = useCallback(async (productId) => {
     const pid = String(productId ?? "").trim();
     if (!pid) return;
-    setExportFlash(null);
     setExportById((prev) => {
       const next = { ...prev };
       delete next[pid];
       return next;
     });
+    setExportFlash({ kind: "ok", text: "Exportação iniciada" });
+    setExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: "Exportação iniciada" } }));
     setExportingId(pid);
     try {
       const res = await apiPost("/analytics/images-upload", { productId: pid });
@@ -344,13 +345,14 @@ export default function HandsOnPage() {
 
       setProductStatus(pid, "conteudo_produzido");
       setStatusMap(getProductStatuses());
-      const msg = `Exportação concluída.${bits.length ? " " + bits.join(" · ") : ""}`;
-      setExportFlash({ kind: "ok", text: `productId=${pid} · ${msg}` });
+      const msg = `Exportação concluída${bits.length ? " · " + bits.join(" · ") : ""}`;
+      setExportFlash({ kind: "ok", text: msg });
       setExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: msg } }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setExportFlash({ kind: "err", text: `productId=${pid} · Falha ao exportar: ${msg}` });
-      setExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: msg } }));
+      const errMsg = `Falha ao exportar: ${msg}`;
+      setExportFlash({ kind: "err", text: errMsg });
+      setExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: errMsg } }));
     } finally {
       setExportingId(null);
     }
@@ -359,6 +361,7 @@ export default function HandsOnPage() {
   const onRemoveChosen = useCallback((productId) => {
     removeChosenProduct(productId);
     setChosenProducts(getChosenProducts());
+    setExportFlash({ kind: "ok", text: "Produto removido" });
   }, []);
 
   const rowsSorted = useMemo(() => recentPages, [recentPages]);
@@ -445,7 +448,10 @@ export default function HandsOnPage() {
           <strong>Workspace operacional</strong> — lista manual de produtos <strong>escolhidos</strong> a partir do <strong>Product Score</strong>.
         </p>
         <p style={{ fontSize: "0.78rem", opacity: 0.78, margin: "0 0 1rem", maxWidth: "44rem", lineHeight: 1.5 }}>
-          Esta página não executa scraping nem abre navegador. As ações disponíveis são: abrir workspace, abrir no TikTok, iniciar PDP enrich e exportar imagens para Spaces.
+          Esta página não executa scraping nem abre navegador. As ações disponíveis são: Abrir workspace, Abrir no TikTok, Enriquecer PDP e Exportar.
+        </p>
+        <p style={{ fontSize: "0.75rem", opacity: 0.65, margin: "0 0 0.75rem", maxWidth: "44rem", lineHeight: 1.45 }}>
+          Dados salvos apenas neste navegador.
         </p>
 
         {tabBar}
@@ -523,7 +529,7 @@ export default function HandsOnPage() {
                           ) : null}
                           {d?.hasPdpImages ? (
                             <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(168, 85, 247, 0.16)", color: "#f0d7ff" }}>
-                              PDP ENRIQUECIDO
+                              PDP enriquecido
                             </span>
                           ) : null}
                         </div>
@@ -567,7 +573,7 @@ export default function HandsOnPage() {
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
                         <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
-                          Abrir produto
+                          Abrir workspace
                         </Link>
                         <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" style={btnOpen}>
                           Abrir no TikTok
@@ -849,7 +855,7 @@ export default function HandsOnPage() {
                         }}
                       >
                         <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
-                          Abrir produto
+                          Abrir workspace
                         </Link>
                         <PdpEnrichButton productId={r.productId} />
                       </div>

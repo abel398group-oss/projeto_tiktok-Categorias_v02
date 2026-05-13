@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { apiPost } from "./api.js";
+import SendToAnalysisButton from "./SendToAnalysisButton.jsx";
 import { badgeTextForProductStatus, getProductStatusForProduct } from "./productStatusStorage.js";
 import {
   CREATOR_SHORTLIST_CHANGED_EVENT,
@@ -36,9 +38,13 @@ function fmtAddedAt(iso) {
 
 export default function ShortlistPage() {
   const [entries, setEntries] = useState(() => getCreatorShortlist());
+  const [exportingId, setExportingId] = useState(null);
+  const [exportById, setExportById] = useState(/** @type {Record<string, { kind: "ok" | "err", text: string }>} */ ({}));
+  const [actionFlash, setActionFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
   const refresh = useCallback(() => {
     setEntries(getCreatorShortlist());
+    setActionFlash(null);
   }, []);
 
   useEffect(() => {
@@ -62,8 +68,28 @@ export default function ShortlistPage() {
     (productId) => {
       removeFromCreatorShortlist(productId);
       refresh();
+      setActionFlash({ kind: "ok", text: "Produto removido" });
     },
     [refresh]
+  );
+
+  const onExport = useCallback(
+    async (productId) => {
+      const pid = String(productId ?? "").trim();
+      if (!pid) return;
+      if (exportingId != null) return;
+      setExportingId(pid);
+      setExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: "Exportação iniciada" } }));
+      try {
+        await apiPost("/analytics/images-upload", { productId: pid });
+        setExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: "Exportação concluída" } }));
+      } catch (err) {
+        setExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: `Falha ao exportar: ${String(err?.message ?? err)}` } }));
+      } finally {
+        setExportingId(null);
+      }
+    },
+    [exportingId]
   );
 
   return (
@@ -76,9 +102,27 @@ export default function ShortlistPage() {
         </p>
 
         <h1 style={{ fontSize: "1.15rem", fontWeight: 600, margin: "0 0 0.35rem" }}>Minha shortlist</h1>
-        <p style={{ fontSize: "0.82rem", opacity: 0.85, margin: "0 0 1rem", maxWidth: "40rem", lineHeight: 1.55 }}>
-          Produtos que marcou com <strong>Favoritar</strong> no workspace. Dados só neste browser (não sincronizam com o servidor).
+        <p style={{ fontSize: "0.82rem", opacity: 0.85, margin: "0 0 0.65rem", maxWidth: "40rem", lineHeight: 1.55 }}>
+          Produtos que marcou com <strong>Favoritar</strong> no workspace.
         </p>
+        <p style={{ fontSize: "0.75rem", opacity: 0.65, margin: "0 0 0.75rem", maxWidth: "40rem", lineHeight: 1.45 }}>
+          Dados salvos apenas neste navegador.
+        </p>
+        {actionFlash ? (
+          <p
+            role="status"
+            style={{
+              fontSize: "0.7rem",
+              marginBottom: "0.65rem",
+              padding: "0.35rem 0.5rem",
+              borderRadius: 6,
+              background: actionFlash.kind === "ok" ? "rgba(40, 120, 80, 0.2)" : "rgba(180, 60, 60, 0.18)",
+              color: actionFlash.kind === "ok" ? "#b8e6c8" : "#ffb3b3"
+            }}
+          >
+            {actionFlash.text}
+          </p>
+        ) : null}
 
         {entries.length === 0 ? (
           <p style={{ fontSize: "0.85rem", opacity: 0.82, lineHeight: 1.6, maxWidth: "32rem" }}>
@@ -87,8 +131,10 @@ export default function ShortlistPage() {
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.55rem" }}>
             {entries.map((e) => {
+              const pidStr = String(e.productId ?? "").trim();
               const statusKey = getProductStatusForProduct(e.productId);
               const note = notePreview(e.productId);
+              const tiktokUrl = `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(pidStr)}`;
               return (
                 <li
                   key={e.productId}
@@ -102,7 +148,7 @@ export default function ShortlistPage() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-start", justifyContent: "space-between" }}>
                     <div style={{ minWidth: 0, flex: "1 1 12rem" }}>
                       <Link
-                        to={`/produto/${encodeURIComponent(e.productId)}`}
+                        to={`/produto/${encodeURIComponent(pidStr)}`}
                         style={{
                           fontWeight: 600,
                           fontSize: "0.88rem",
@@ -132,7 +178,7 @@ export default function ShortlistPage() {
                     </div>
                     <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                       <Link
-                        to={`/produto/${encodeURIComponent(e.productId)}`}
+                        to={`/produto/${encodeURIComponent(pidStr)}`}
                         style={{
                           padding: "0.28rem 0.55rem",
                           fontSize: "0.68rem",
@@ -147,6 +193,58 @@ export default function ShortlistPage() {
                       >
                         Abrir workspace
                       </Link>
+                      <a
+                        href={tiktokUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "0.28rem 0.55rem",
+                          fontSize: "0.68rem",
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          border: "1px solid #3978a8",
+                          background: "#1e4a63",
+                          color: "#eaf6ff",
+                          textAlign: "center",
+                          textDecoration: "none"
+                        }}
+                      >
+                        Abrir no TikTok
+                      </a>
+                      <SendToAnalysisButton productId={String(e.productId)} nome={typeof e.nome === "string" ? e.nome : undefined} tiktokUrl={tiktokUrl} />
+                      <button
+                        type="button"
+                        disabled={exportingId != null}
+                        onClick={() => void onExport(e.productId)}
+                        title="Exportar (upload para DigitalOcean Spaces). Não faz scraping."
+                        style={{
+                          padding: "0.28rem 0.55rem",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          cursor: exportingId != null ? "wait" : "pointer",
+                          borderRadius: 6,
+                          border: "1px solid #567138",
+                          background: "#203014",
+                          color: "#dcedc8",
+                          opacity: exportingId === pidStr ? 0.65 : 1
+                        }}
+                      >
+                        {exportingId === pidStr ? "Exportando…" : "Exportar"}
+                      </button>
+                      {exportById[pidStr] ? (
+                        <div
+                          role="status"
+                          style={{
+                            fontSize: "0.62rem",
+                            lineHeight: 1.35,
+                            opacity: 0.92,
+                            color: exportById[pidStr].kind === "ok" ? "#9dd4b8" : "#f0a08a",
+                            maxWidth: "12rem"
+                          }}
+                        >
+                          {exportById[pidStr].text}
+                        </div>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onRemove(e.productId)}

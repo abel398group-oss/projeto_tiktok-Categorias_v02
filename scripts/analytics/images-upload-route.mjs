@@ -1,12 +1,13 @@
 /* eslint-disable no-console -- logs operacionais no terminal da API */
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..", "..");
 const loadEnvScript = path.join(repoRoot, "scripts", "load-root-env.mjs");
 const uploadScript = path.join(repoRoot, "scripts", "images-upload.mjs");
+const loadEnvImport = pathToFileURL(loadEnvScript).href;
 
 const TAIL_MAX = 18_000;
 
@@ -111,7 +112,7 @@ export function registerImagesUploadRoute(fastify) {
     });
 
     try {
-      const child = spawn(process.execPath, ["--import", loadEnvScript, uploadScript, ...args], {
+      const child = spawn(process.execPath, ["--import", loadEnvImport, uploadScript, ...args], {
         cwd: repoRoot,
         env: { ...process.env },
         stdio: ["ignore", "pipe", "pipe"]
@@ -167,4 +168,3 @@ export function registerImagesUploadRoute(fastify) {
     }
   });
 }
-
