@@ -24,12 +24,12 @@ Scraper de **categoria** (grelha) no **TikTok Shop** com **Puppeteer**: intercep
 - `setRequestInterception(true)` com `request.continue()` em todos os pedidos
 - `page.on('response')` para ler corpos de respostas alvo
 - **Persistência:** **PostgreSQL** + **Prisma** (modelo produto / loja / snapshots por `ScrapeRun`).
-- **Analytics HTTP:** **Fastify** (`scripts/analytics/server.mjs`) — relatórios read-only sobre a BD (`scripts/analytics/lib/`), export para **DigitalOcean Spaces** com credenciais só no servidor.
+- **Analytics HTTP:** **Fastify** (`scripts/analytics/server.mjs`) — relatórios read-only sobre a BD (`scripts/analytics/lib/`).
 - **Painel:** **Vite + React** (`frontend/`), proxy `/analytics/*` para a API em desenvolvimento; autenticação ao API com **`ANALYTICS_API_KEY`** (Bearer / `x-api-key`).
 
 ## Diagrama — dados ↔ API ↔ interface
 
-Visão macro: a **coleta** alimenta a base; **API** e **UI** leem a mesma BD; export e jobs opcionais saem pela API.
+Visão macro: a **coleta** alimenta a base; **API** e **UI** leem a mesma BD.
 
 ```mermaid
 flowchart TB
@@ -52,16 +52,9 @@ flowchart TB
     DB --> LIB --> API
     API <-->|Bearer / proxy dev| UI
   end
-
-  subgraph externo["Serviços externos"]
-    SPD[DigitalOcean Spaces]
-    JOB[Opcional PDP enrich spawn]
-    API -->|POST SPACES_*| SPD
-    API -.->|background| JOB
-  end
 ```
 
-**Notas:** Em **desenvolvimento**, API e frontend costumam ser dois processos (`npm run dev:all`). A coleta pode correr na **mesma máquina** ou noutra; desde que **`DATABASE_URL`** seja comum ou o **`input_hash`** alinhe imports, não é obrigatório o scraper estar no servidor do painel. Ver **`FLUXO.md`** para comandos e **`docs/ANALYTICS-API.md`** para endpoints exactos.
+**Notas:** Em **desenvolvimento**, API e frontend costumam ser dois processos (`npm run dev:all`). A coleta pode correr na **mesma máquina**. Ver **`FLUXO.md`** para comandos e **`docs/ANALYTICS-API.md`** para endpoints exactos.
 
 ## Ponto de entrada
 

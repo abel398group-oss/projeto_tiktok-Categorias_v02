@@ -2,15 +2,9 @@
  * Detalhe de produto para a página «workspace».
  * Preferência: snapshot no **último** ScrapeRun global (alinha ao product-score na faixa principal).
  * Se não existir nesse run (produto aparece só noutras importações ou em visão por categoria), usa o
- * **snapshot mais recente** do mesmo produto — mesmo critério do export Spaces (`export-product-to-spaces-core`).
+ * **snapshot mais recente** do mesmo produto.
  */
 import { extractOrderedImageUrls } from "../../lib/extract-image-urls.mjs";
-import {
-  buildProductExportPrefix,
-  deriveCategorySlugFromUrl,
-  DEFAULT_PLATFORM,
-  resolvedExportRoot
-} from "../../lib/spaces-export-paths.mjs";
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { computeProductScoreLine } from "./product-score.mjs";
 
@@ -101,6 +95,20 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
 
   const line = computeProductScoreLine(s, ctx);
   const imageUrls = extractOrderedImageUrls(snap).slice(0, MAX_PREVIEW_IMAGES);
+  const hasPdpImages = (() => {
+    const b = snap?.pdpImages;
+    if (typeof b === "string") {
+      return b.trim().startsWith("http");
+    }
+    if (Array.isArray(b)) {
+      return b.some((x) => {
+        if (typeof x === "string") return x.trim().startsWith("http");
+        if (x && typeof x === "object" && typeof x.url === "string") return x.url.trim().startsWith("http");
+        return false;
+      });
+    }
+    return false;
+  })();
 
   /** @type {string | null} */
   let deltaHint = null;
@@ -115,16 +123,6 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
         "Δ vendas indisponível: vendas em falta no run anterior para este produto (ou apenas neste snapshot).";
     }
   }
-
-  const categorySlug = deriveCategorySlugFromUrl(product.categoryUrl);
-  const exportRoot = resolvedExportRoot();
-  const exportPrefix = buildProductExportPrefix({
-    root: exportRoot,
-    platform: process.env.SPACES_EXPORT_PLATFORM?.trim() || DEFAULT_PLATFORM,
-    categorySlug,
-    productName: product.name,
-    productId: product.productId
-  });
 
   /** @param {unknown} j */
   const jsonSnippet = (j) => (j != null && typeof j === "object" ? j : null);
@@ -157,9 +155,8 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     motivos: line.motivos,
     link: line.link,
     categoryUrl: product.categoryUrl ?? null,
-    categorySlug,
-    exportPrefix: `${exportPrefix}/`,
     imageUrls,
+    hasPdpImages,
 
     currency: product.currency ?? null,
     sourcePlatform: product.sourcePlatform ?? null,

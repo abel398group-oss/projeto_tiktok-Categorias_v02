@@ -9,7 +9,7 @@ Ver também **`docs/ANALYTICS.md`** (métricas v1 mais detalhadas, sobretodo Pro
 ## Definições comuns
 
 - **Último run:** `ScrapeRun` ordenado por `created_at` descendente (`scripts/analytics/_common.mjs` → `getLatestAndPreviousRun`).
-- Os **GET** de relatório são só leitura (`items`/`top`/etc.). O painel também pode invocar **`POST /analytics/export-product-to-spaces`** (gravar produto no DigitalOcean Spaces, sem mudar Postgres) — ver **`docs/ANALYTICS-API.md`** e `scripts/lib/export-product-to-spaces-core.mjs`.
+- Os **GET** de relatório são só leitura (`items`/`top`/etc.).
 
 ---
 

@@ -1,52 +1,117 @@
-/**
- * Cliente S3 mínimo para DigitalOcean Spaces (mesmas env que `test-spaces-upload.mjs`).
- */
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
-/**
- * @param {{
- *   endpoint: string,
- *   region: string,
- *   accessKeyId: string,
- *   secretAccessKey: string,
- * }} cfg
- */
+function truthy(v) {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "y";
+}
+
+function mustString(env, key) {
+  const v = env[key];
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!s) {
+    throw new Error(`${key} não definido (obrigatório).`);
+  }
+  return s;
+}
+
+function normalizePrefix(prefix) {
+  const s = String(prefix ?? "").trim();
+  if (!s) return "";
+  return s.replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function joinS3Key(...parts) {
+  const clean = parts
+    .flatMap((p) => String(p ?? "").split("/"))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return clean.join("/");
+}
+
+function normalizePublicBaseUrl(v) {
+  const s = String(v ?? "").trim().replace(/\/+$/, "");
+  return s || null;
+}
+
+export function readSpacesConfigFromEnv(env = process.env) {
+  const endpoint = mustString(env, "SPACES_ENDPOINT");
+  const region = mustString(env, "SPACES_REGION");
+  const bucket = mustString(env, "SPACES_BUCKET");
+  const accessKeyId = mustString(env, "SPACES_ACCESS_KEY_ID");
+  const secretAccessKey = mustString(env, "SPACES_SECRET_ACCESS_KEY");
+  const publicBaseUrl = normalizePublicBaseUrl(env.SPACES_PUBLIC_BASE_URL);
+  const prefix = normalizePrefix(env.SPACES_PREFIX ?? "analytics/tiktok/products");
+  const publicRead = truthy(env.SPACES_OBJECTS_PUBLIC_READ);
+  const forcePathStyle = truthy(env.SPACES_FORCE_PATH_STYLE);
+  return {
+    endpoint,
+    region,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    publicBaseUrl,
+    prefix,
+    publicRead,
+    forcePathStyle
+  };
+}
+
 export function createSpacesS3Client(cfg) {
   return new S3Client({
-    endpoint: cfg.endpoint,
     region: cfg.region,
+    endpoint: cfg.endpoint,
+    forcePathStyle: Boolean(cfg.forcePathStyle),
     credentials: {
       accessKeyId: cfg.accessKeyId,
       secretAccessKey: cfg.secretAccessKey
-    },
-    forcePathStyle: true
+    }
   });
 }
 
-/**
- * Leitura pública no URL (CDN/origin) — sem isto, objectos privados devolvem AccessDenied no browser.
- * Defina `SPACES_OBJECTS_PUBLIC_READ=1` no .env quando quiser abrir imagens/JSON pelo link.
- */
-export function spacesPutExtrasFromEnv() {
-  const v = process.env.SPACES_OBJECTS_PUBLIC_READ?.trim().toLowerCase();
-  if (v === "1" || v === "true" || v === "yes") {
-    return /** @type {const} */ ({ ACL: "public-read" });
+export function buildSpacesObjectKey(cfg, productId, leafName) {
+  const pid = String(productId ?? "").trim();
+  const safePid = pid !== "" ? pid.replace(/[^a-zA-Z0-9._-]/g, "_") : "unknown";
+  const leaf = String(leafName ?? "").trim().replace(/^\/+/, "");
+  if (!leaf) {
+    throw new Error("leafName vazio ao construir objectKey.");
   }
-  return {};
+  return joinS3Key(cfg.prefix, safePid, leaf);
 }
 
-/**
- * @param {InstanceType<typeof S3Client>} client
- * @param {Record<string, unknown>} [extra] ex. ACL (ver `spacesPutExtrasFromEnv`)
- */
-export async function putSpacesObject(client, bucket, key, body, contentType, extra = {}) {
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ...extra
-    })
-  );
+export function buildSpacesPublicUrl(cfg, objectKey) {
+  if (!cfg.publicBaseUrl) return null;
+  const key = String(objectKey ?? "").replace(/^\/+/, "");
+  return `${cfg.publicBaseUrl}/${key}`;
 }
+
+export async function headObjectExists(s3, bucket, key) {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (e) {
+    const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
+    const http = e && typeof e === "object" && "$metadata" in e ? e.$metadata : null;
+    const code = http && typeof http === "object" && "httpStatusCode" in http ? Number(http.httpStatusCode) : NaN;
+    if (name === "NotFound" || code === 404) return false;
+    throw e;
+  }
+}
+
+export async function putObjectBuffer(
+  s3,
+  bucket,
+  key,
+  buf,
+  { contentType, cacheControl, publicRead }
+) {
+  const params = {
+    Bucket: bucket,
+    Key: key,
+    Body: buf,
+    ContentType: contentType || "application/octet-stream",
+    CacheControl: cacheControl || undefined,
+    ACL: publicRead ? "public-read" : undefined
+  };
+  await s3.send(new PutObjectCommand(params));
+}
+

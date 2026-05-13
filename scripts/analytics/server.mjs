@@ -23,11 +23,10 @@ import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
-import { exportProductToSpaces } from "../lib/export-product-to-spaces-core.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
+import { registerImagesUploadRoute } from "./images-upload-route.mjs";
 import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
-import { registerImportRemoteScrapeRoute } from "./import-remote-scrape-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
@@ -267,35 +266,10 @@ fastify.post("/analytics/product-workspace/:productId/images-zip", async (req, r
   }
 });
 
-/** Exporta um produto (ID TikTok) para Spaces; valida credenciais SPACES na primeira execução real. */
-fastify.post("/analytics/export-product-to-spaces", async (req, reply) => {
-  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-  const productId = typeof body.productId === "string" ? body.productId.trim() : "";
-  const skipImages = Boolean(body.skipImages);
-  if (!productId) {
-    return reply
-      .code(400)
-      .send({ error: "bad_request", message: "Corpo JSON com productId (string) obrigatório." });
-  }
-  try {
-    const result = await exportProductToSpaces(prisma, productId, { skipImages, dryRun: false });
-    return reply.send(result);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.startsWith("Produto não encontrado") || msg.startsWith("Sem ProductSnapshot")) {
-      return reply.code(404).send({ error: "not_found", message: msg });
-    }
-    if (msg.includes("em falta no .env")) {
-      return reply.code(503).send({ error: "spaces_unconfigured", message: msg });
-    }
-    return reply.code(500).send({ error: "export_failed", message: msg });
-  }
-});
-
 registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
+registerImagesUploadRoute(fastify);
 registerScrapeRunRoute(fastify);
-registerImportRemoteScrapeRoute(fastify, prisma);
 
 const graceful = async () => {
   await fastify.close();

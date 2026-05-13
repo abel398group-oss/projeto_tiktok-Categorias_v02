@@ -9,6 +9,7 @@
  * Pasta alternativa sem alterar o parser: `OUTPUT_DIR=output/categorias/meu-slug` (caminho relativo ao repositório ou absoluto).
  * Teste do loader: `output/extra/modern_router_peek.json` (amostra `__MODERN_ROUTER_DATA__`); `ROUTER_PEEK_LEN=0` desliga a amostra.
  * **Sem produtos (0):** `status=no_products`, `process.exit(1)` na CLI, campo `diagnostic` + ficheiros em `extra/` (`final_page*.png`, `final_page.html`, `xhr_debug.json`, `browser_env.json`, …). `SCRAPE_DIAGNOSTIC=1`: captura intermédia após pós-goto (`post_goto_diagnostic.json`). `SCRAPE_POST_GOTO_RELOAD=0` desliga o reload `networkidle2` após o primeiro goto (headless).
+ * **`HEADED=1`:** por defeito usa **Chrome instalado** (`Puppeteer channel=chrome`), não só o Chromium embebido — melhor para login TikTok (QR, Google). `PUPPETEER_USE_BUNDLED_CHROMIUM=1` força o Chromium do Puppeteer; `PUPPETEER_EXECUTABLE_PATH` / `PUPPETEER_CHANNEL` — ver `.env.example`.
  * Grelha: após scroll, até `VIEW_MORE_MAX_CLICKS` (1–10, default 8) cliques em **View more** / **Ver mais** (desligar: `VIEW_MORE_MAX_CLICKS=0` ou `VIEW_MORE=0`); só dispara UI — XHR/merge/router inalterados.
  * Regressão do normalizador: `npm test` (não regredir preço grelha, dedupe por id, filtro de review, loja).
  *
@@ -29,8 +30,8 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
-puppeteer.use(StealthPlugin());
-/** Stealth activo globalmente (`puppeteer-extra-plugin-stealth` + `puppeteer.use` acima). */
+// puppeteer.use(StealthPlugin());
+/** Stealth desativado temporariamente para permitir login no Google */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2471,7 +2472,20 @@ function shouldInspectUrl(url) {
 }
 
 async function humanPause(page, min = 200, max = 600) {
-  const ms = min + Math.random() * (max - min);
+  // Simula uma pausa humana ocasionalmente mais longa (ex: parou para ler algo)
+  const extraChance = Math.random();
+  let actualMax = max;
+  let actualMin = min;
+
+  if (extraChance > 0.95) {
+    actualMin = 2000;
+    actualMax = 5000;
+  } else if (extraChance > 0.8) {
+    actualMin = 800;
+    actualMax = 1500;
+  }
+
+  const ms = actualMin + Math.random() * (actualMax - actualMin);
   await new Promise((r) => setTimeout(r, ms));
 }
 
@@ -2505,36 +2519,105 @@ async function waitForStableProductFeed(getProductCount) {
 }
 
 async function gentleMouseJiggle(page) {
-  const vp = page.viewport() || { width: 1366, height: 768 };
-  const n = 4 + Math.floor(Math.random() * 2);
+  const vp = page.viewport() || { width: 1600, height: 900 };
+  const n = 3 + Math.floor(Math.random() * 3);
   for (let i = 0; i < n; i++) {
-    const x = 80 + Math.random() * (vp.width - 160);
-    const y = 120 + Math.random() * (vp.height - 200);
-    await page.mouse.move(x, y, { steps: 14 + Math.floor(Math.random() * 12) });
-    await humanPause(page, 120, 380);
+    const x = 100 + Math.random() * (vp.width - 200);
+    const y = 150 + Math.random() * (vp.height - 300);
+    // Movimento com velocidade variável
+    await page.mouse.move(x, y, { steps: 20 + Math.floor(Math.random() * 25) });
+    
+    // Pequena chance de um clique inofensivo em área vazia para simular interação
+    if (Math.random() > 0.9) {
+      await page.mouse.click(x, y, { delay: 50 + Math.random() * 100 });
+    }
+    
+    await humanPause(page, 200, 500);
+  }
+}
+
+function isTiktokMainHostname(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return false;
+  try {
+    const h = new URL(urlStr).hostname.toLowerCase();
+    return h === "www.tiktok.com" || h === "tiktok.com";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Host real da página tem de ser `shop.tiktok.com`.
+ * `www.tiktok.com/login?redirect_url=...shop.tiktok.com...` contém o texto no query — não é Shop.
+ * @param {string} urlStr
+ */
+function isShopTiktokHostname(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return false;
+  try {
+    return new URL(urlStr).hostname.toLowerCase() === "shop.tiktok.com";
+  } catch {
+    return false;
   }
 }
 
 /**
  * Com HEADED=1, se ainda não estiver no domínio do Shop, aguarda login sem fechar o browser.
+ * O QR / OAuth pode abrir o Shop noutra aba — esta função vê **todas** as abas e, se o Shop
+ * estiver só na outra, faz `goto(startUrl)` na aba instrumentada (mesmo contexto = mesmos cookies).
  * Ajuste o tempo: LOGIN_WAIT_MAX_MS (milissegundos, padrão 15 min).
+ *
+ * @param {import("puppeteer").Browser} browser
+ * @param {import("puppeteer").Page} page aba com handlers XHR (não trocar de aba no Puppeteer)
+ * @param {{ maxMs: number, startUrl: string }} opts
+ * @returns {Promise<{ ok: boolean, url: string, navigatedInsideWait: boolean }>}
  */
-async function waitForShopOrTimeout(page, { maxMs }) {
+async function waitForShopOrTimeout(browser, page, { maxMs, startUrl }) {
   // eslint-disable-next-line no-console
   console.log(
-    `[TikTok] Tela de login ou redirecionamento. Faça o login; o script fica aberto por até ${Math.round(maxMs / 60_000)} min (env LOGIN_WAIT_MAX_MS).`
+    `[TikTok] MODO PACIENTE ATIVADO: Aguardando login manual. A janela NÃO vai fechar sozinha.`
   );
   const t0 = Date.now();
-  while (Date.now() - t0 < maxMs) {
+  let lastBeat = Date.now();
+  
+  // Aumentamos o tempo para quase infinito (1 hora) se estiver em modo headed
+  const actualMaxMs = process.env.HEADED === "1" ? 3600000 : maxMs;
+
+  while (Date.now() - t0 < actualMaxMs) {
     await new Promise((r) => setTimeout(r, 2000));
-    const u = page.url();
-    if (/shop\.tiktok\.com/i.test(u)) {
+
+    if (Date.now() - lastBeat > 15_000) {
+      lastBeat = Date.now();
       // eslint-disable-next-line no-console
-      console.log(`[TikTok] Shop detectado: ${u.slice(0, 120)}...`);
-      return { ok: true, url: u };
+      console.log(`[TikTok] Ainda aguardando login... (Pode levar o tempo que precisar)`);
+      
+      // Tira foto para o assistente ver o progresso
+      try {
+        const loginSnapPath = path.join(OUT_AUX, "login_atual.png");
+        await page.screenshot({ path: loginSnapPath }).catch(() => {});
+      } catch { /* noop */ }
+    }
+
+    let u = "";
+    try {
+      u = page.url();
+    } catch {
+      return { ok: false, url: "", navigatedInsideWait: false };
+    }
+
+    if (isShopTiktokHostname(u)) {
+      console.log(`[TikTok] SUCESSO! Login detectado no Shop. Iniciando coleta...`);
+      return { ok: true, url: u, navigatedInsideWait: false };
+    }
+    
+    // Se logou e caiu no For You, a gente redireciona
+    if (isTiktokMainHostname(u) && !u.includes("/login") && !u.includes("/passport")) {
+       console.log(`[TikTok] Login feito! Redirecionando para o Shop em 3 segundos...`);
+       await new Promise(r => setTimeout(r, 3000));
+       await page.goto(startUrl, { waitUntil: "networkidle2" });
+       return { ok: true, url: page.url(), navigatedInsideWait: true };
     }
   }
-  return { ok: false, url: page.url() };
+  return { ok: false, url: "", navigatedInsideWait: false };
 }
 
 /**
@@ -2670,17 +2753,34 @@ function mergeProductsFromModernRouter(rootData, byProductId, categoriaUrl) {
 async function scrollToLoadGrid(page) {
   let lastHeight = 0;
   let stable = 0;
-  for (let i = 0; i < 12; i++) {
-    await page.evaluate(() => window.scrollBy(0, 700));
-    await humanPause(page, 250, 550);
+  // eslint-disable-next-line no-console
+  console.log("[scrape] Iniciando scroll progressivo e aleatório...");
+
+  for (let i = 0; i < 15; i++) {
+    // Scroll com valor aleatório para não ser sempre o mesmo salto
+    const scrollAmount = 400 + Math.floor(Math.random() * 500);
+    await page.evaluate((amt) => window.scrollBy(0, amt), scrollAmount);
+
+    // Pausa humana após cada scroll
+    await humanPause(page, 400, 900);
+
+    // Movimento aleatório do mouse ocasional durante o scroll
+    if (Math.random() > 0.7) {
+      await gentleMouseJiggle(page);
+    }
+
     const h = await page.evaluate(() => document.body?.scrollHeight ?? 0);
     if (h === lastHeight) stable += 1;
     else stable = 0;
     lastHeight = h;
-    if (stable >= 2) break;
+
+    if (stable >= 3) break;
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await humanPause(page, 150, 300);
+  // Volta ao topo de forma suave
+  await page.evaluate(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  await humanPause(page, 1000, 2000);
 }
 
 /**
@@ -2708,60 +2808,67 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
   let noGrowthStreak = 0;
 
   for (let i = 0; i < maxClicks; i++) {
-    const found = await page.evaluate(() => {
-      const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
-      const matches = (t) => {
-        const s = norm(t).toLowerCase();
-        if (!s) return false;
-        if (s === "view more" || s === "ver mais" || s === "see more" || s === "mostrar mais") return true;
-        return /^(view more|ver mais|see more|mostrar mais)\b/i.test(s) && s.length <= 52;
-      };
-      const visible = (el) => {
-        if (!el || !(el instanceof HTMLElement)) return false;
-        const st = window.getComputedStyle(el);
-        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
-        const r = el.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
-      };
+    let found;
+    try {
+      found = await page.evaluate(() => {
+        const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+        const matches = (t) => {
+          const s = norm(t).toLowerCase();
+          if (!s) return false;
+          if (s === "view more" || s === "ver mais" || s === "see more" || s === "mostrar mais") return true;
+          return /^(view more|ver mais|see more|mostrar mais)\b/i.test(s) && s.length <= 52;
+        };
+        const visible = (el) => {
+          if (!el || !(el instanceof HTMLElement)) return false;
+          const st = window.getComputedStyle(el);
+          if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+          const r = el.getBoundingClientRect();
+          return r.width > 2 && r.height > 2;
+        };
 
-      const nodes = Array.from(
-        document.querySelectorAll(
-          'button,[role="button"],a[class*="cursor-pointer"],div[role="button"],span[role="button"]'
-        )
-      );
-      /** @type {HTMLElement | null} */
-      let best = null;
-      for (const el of nodes) {
-        const t = norm(el.textContent);
-        if (!matches(t)) continue;
-        if (!visible(el)) continue;
+        const nodes = Array.from(
+          document.querySelectorAll(
+            'button,[role="button"],a[class*="cursor-pointer"],div[role="button"],span[role="button"]'
+          )
+        );
         /** @type {HTMLElement | null} */
-        let hx = el;
-        if (hx != null && (hx.tagName === "SPAN" || hx.tagName === "I")) {
-          hx = hx.closest('button,[role="button"],a,[role="link"]');
+        let best = null;
+        for (const el of nodes) {
+          const t = norm(el.textContent);
+          if (!matches(t)) continue;
+          if (!visible(el)) continue;
+          /** @type {HTMLElement | null} */
+          let hx = el;
+          if (hx != null && (hx.tagName === "SPAN" || hx.tagName === "I")) {
+            hx = hx.closest('button,[role="button"],a,[role="link"]');
+          }
+          const target = hx && visible(hx) ? hx : el;
+          best = /** @type {HTMLElement} */ (target);
+          break;
         }
-        const target = hx && visible(hx) ? hx : el;
-        best = /** @type {HTMLElement} */ (target);
-        break;
-      }
-      if (!best) {
-        return { ok: false, label: "" };
-      }
-      const lbl = norm(best.textContent).slice(0, 72);
-      try {
+        if (!best) {
+          return { ok: false, label: "" };
+        }
+        const lbl = norm(best.textContent).slice(0, 72);
         try {
-          best.scrollIntoView({ block: "center", behavior: "instant" });
-        } catch {
-          /* noop */
+          try {
+            best.scrollIntoView({ block: "center", behavior: "instant" });
+          } catch {
+            /* noop */
+          }
+          best.click();
+          return { ok: true, label: lbl };
+        } catch (e) {
+          return { ok: false, label: lbl || "", err: String(e?.message ?? e) };
         }
-        best.click();
-        return { ok: true, label: lbl };
-      } catch (e) {
-        return { ok: false, label: lbl || "", err: String(e?.message ?? e) };
-      }
-    });
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log(`[view-more] erro de execução (possível reload da página): ${e.message}`);
+      break;
+    }
 
-    if (!found.ok) {
+    if (!found || !found.ok) {
       // eslint-disable-next-line no-console
       console.log(
         found.err
@@ -2936,6 +3043,7 @@ async function detectTiktokSecurityChallenge(page) {
     return false;
   }
   if (title.includes("security check")) return true;
+  if (title.includes("verificação de segurança") || title.includes("verificacao de seguranca")) return true;
   let body = "";
   try {
     body = await page.evaluate(() =>
@@ -2947,7 +3055,34 @@ async function detectTiktokSecurityChallenge(page) {
     return false;
   }
   if (body.includes("security check")) return true;
+  if (body.includes("verificação de segurança") || body.includes("verificacao de seguranca")) return true;
   if (body.includes("verify to continue") && (body.includes("puzzle") || body.includes("drag"))) return true;
+  return false;
+}
+
+/**
+ * Com janela visível: espera o utilizador concluir o puzzle / Security Check (polling).
+ * Usa o mesmo teto que o login: `LOGIN_WAIT_MAX_MS`.
+ * @param {import("puppeteer").Page} page
+ * @param {{ maxMs: number }} opts
+ * @returns {Promise<boolean>} true se deixou de detetar challenge
+ */
+async function waitForSecurityChallengeResolved(page, { maxMs }) {
+  // eslint-disable-next-line no-console
+  console.log(
+    `[TikTok] Security Check / puzzle detetado. Conclua a verificação na janela do browser; o script espera até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
+  );
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise((r) => setTimeout(r, 2000));
+    if (!(await detectTiktokSecurityChallenge(page))) {
+      // eslint-disable-next-line no-console
+      console.log("[TikTok] Security Check aparentemente concluído; a continuar a coleta.");
+      return true;
+    }
+  }
+  // eslint-disable-next-line no-console
+  console.warn("[TikTok] Tempo esgotado: Security Check ainda visível (aumente LOGIN_WAIT_MAX_MS se precisar).");
   return false;
 }
 
@@ -2997,26 +3132,47 @@ async function launchTikTokBrowser() {
   }
   if (userDataDir) {
     // eslint-disable-next-line no-console
-    console.log(`[Perfil] ${path.resolve(userDataDir)} (login fica salvo. Sessão limpa: FRESH_SESSION=1)`);
+    console.log(
+      `[Perfil] ${path.resolve(userDataDir)} (cookies nesta pasta. FRESH_SESSION=${fresh ? "1 — não reutiliza o perfil predefinido nesta execução" : "0 — reutiliza o perfil"})`
+    );
   }
   const isHeaded = process.env.HEADED === "1";
   /** Navegador visível: em muitos casos evita redirecionamento forçado à página de login (headless). */
   const headless = isHeaded ? false : "new";
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
+  /** Forçar Chromium embebido (ex.: Docker só com `chromium` Debian). */
+  const useBundledChromium = /^1|true|yes$/i.test(String(process.env.PUPPETEER_USE_BUNDLED_CHROMIUM || ""));
+  /** `chrome` | `chrome-beta` | `msedge` | … — ver Puppeteer LaunchOptions. */
+  const channelEnv = process.env.PUPPETEER_CHANNEL?.trim() || "";
   const launchOpts = {
     headless,
     env: { ...process.env, TZ: BRAZIL_TIMEZONE_ID },
+    ignoreDefaultArgs: ["--enable-automation"],
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
-      "--window-size=1366,768"
+      "--window-size=1600,900",
+      "--disable-blink-features=AutomationControlled",
+      "--use-fake-ui-for-media-stream",
+      "--disable-infobars"
     ],
-    defaultViewport: { width: 1366, height: 768, deviceScaleFactor: 1 }
+    defaultViewport: { width: 1600, height: 900, deviceScaleFactor: 1 }
   };
   if (execPath) {
     launchOpts.executablePath = execPath;
+  } else if (!useBundledChromium) {
+    // Se for modo login, vamos tentar o Edge para ver se o Google aceita melhor
+    const isLoginOnly = process.env.LOGIN_ONLY === "1";
+    const channel = isLoginOnly ? "msedge" : (channelEnv || (isHeaded ? "chrome" : ""));
+    if (channel) {
+      launchOpts.channel = channel;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[scrape] Navegador: channel=${channel} (Chrome/Edge instalado). Headless sem channel usa Chromium embebido. Forçar embebido: PUPPETEER_USE_BUNDLED_CHROMIUM=1. Caminho fixo: PUPPETEER_EXECUTABLE_PATH=...`
+      );
+    }
   }
   if (userDataDir) {
     launchOpts.userDataDir = userDataDir;
@@ -3025,7 +3181,11 @@ async function launchTikTokBrowser() {
 }
 
 /**
- * Fecha abas extra do perfil e impede popups — chamar após `browser.newPage()` da coleta.
+ * Fecha abas extra do perfil ao arranque. Em headless, fecha popups (anúncios / ruído).
+ * Com `HEADED=1` **não** fecha popups: login TikTok (Google / Apple / Facebook) abre janela OAuth —
+ * fechá-la destrói o login e gera `Target closed` no stealth.
+ *
+ * Opcional: `SCRAPE_ALLOW_LOGIN_POPUPS=1` permite popups também em headless (raro).
  * @param {import("puppeteer").Browser} browser
  * @param {import("puppeteer").Page} page
  */
@@ -3034,6 +3194,15 @@ async function installAntiPopupGuards(browser, page) {
     if (p !== page) {
       await p.close().catch(() => {});
     }
+  }
+  const allowLoginPopups =
+    process.env.HEADED === "1" || /^true$/i.test(String(process.env.SCRAPE_ALLOW_LOGIN_POPUPS || ""));
+  if (allowLoginPopups) {
+    // eslint-disable-next-line no-console
+    console.log(
+      "[scrape] Popups de login OAuth permitidos (HEADED=1 ou SCRAPE_ALLOW_LOGIN_POPUPS=1). Não feche a janela do Google/Facebook à mão até concluir."
+    );
+    return;
   }
   page.on("popup", (popup) => {
     void popup.close().catch(() => {});
@@ -3237,12 +3406,20 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
   const xhrPath = path.join(outAux, "xhr_debug.json");
   const envPath = path.join(outAux, "browser_env.json");
 
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await new Promise((r) => setTimeout(r, 600));
-  await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
-  await progressiveScrollPageToBottom(page);
-  await new Promise((r) => setTimeout(r, 800));
-  await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  const assisted = isAssistedModeEnabled();
+  if (!assisted) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
+    await progressiveScrollPageToBottom(page);
+    await new Promise((r) => setTimeout(r, 800));
+    await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  } else {
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: png1, fullPage: true }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 250));
+    await page.screenshot({ path: png2, fullPage: true }).catch(() => {});
+  }
 
   const html = await page.content();
   await fs.writeFile(htmlPath, html, "utf8");
@@ -3342,12 +3519,14 @@ async function writeScrapeDiagnosticsToExtra(page, outAux, buckets, meta) {
  * @param {string} startUrl
  * @returns {Promise<number>} 0 ok · 1 sem produtos (`no_products`) · 2 `TIKTOK_SECURITY_CHECK`
  */
-async function runCategoryHarvest(browser, page, startUrl) {
+async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const pdpGalleryEnv =
     process.env.PDP_GALLERY === "1" || /^true$/i.test(String(process.env.PDP_GALLERY || ""));
   await ensureOutAuxDir();
   const outFile = path.join(OUT_AUX, "teste_categoria.json");
   const debugFile = path.join(OUT_AUX, "debug_responses.log");
+  const skipGoto = opts && opts.skipGoto === true;
+  const passive = opts && opts.passive === true;
   const isHeaded = process.env.HEADED === "1";
   const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
 
@@ -3798,24 +3977,39 @@ async function runCategoryHarvest(browser, page, startUrl) {
 
   let reloadedCategoryAfterLogin = false;
 
-  await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-  await humanPause(page, 1250, 2250);
-  await syncBrazilEnvToLivePage(page);
-  finalUrl = page.url();
+  if (!skipGoto) {
+    console.log(`[scrape] Abrindo diretamente no TikTok Shop: ${startUrl}`);
+    await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+    await humanPause(page, 2000, 4000);
+    await syncBrazilEnvToLivePage(page);
+    finalUrl = page.url();
+  } else {
+    console.log(`[scrape] ASSISTED_MODE: usando página atual (sem page.goto). startUrl=${startUrl}`);
+    await syncBrazilEnvToLivePage(page);
+    finalUrl = page.url();
+  }
 
-  if (!/shop\.tiktok\.com/i.test(finalUrl) && isHeaded) {
-    const w = await waitForShopOrTimeout(page, { maxMs: loginWaitMaxMs });
+  if (!skipGoto && !isShopTiktokHostname(finalUrl) && isHeaded) {
+    console.log("[TikTok] Não estamos no Shop. Aguardando login manual ou redirecionamento...");
+    const w = await waitForShopOrTimeout(browser, page, { maxMs: loginWaitMaxMs, startUrl });
     finalUrl = w.url;
     if (w.ok) {
       reloadedCategoryAfterLogin = true;
-      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-      await humanPause(page, 1000, 2000);
+      if (!w.navigatedInsideWait) {
+        await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+      }
+      await humanPause(page, 2000, 4000);
       await syncBrazilEnvToLivePage(page);
       finalUrl = page.url();
+    } else {
+      // TRAVA DE SEGURANÇA: Se não logou, não tenta coletar e não fecha sozinho rápido.
+      console.error("[TikTok] Erro: Login não detectado a tempo. Mantendo janela aberta por 1 minuto para inspeção...");
+      await new Promise(r => setTimeout(r, 60000));
+      return { status: "not_logged_in" };
     }
   }
 
-    if (!/shop\.tiktok\.com/i.test(finalUrl)) {
+    if (!isShopTiktokHostname(finalUrl)) {
       status = "not_shop";
       note = isHeaded
         ? `Ainda fora de shop.tiktok.com após ${Math.round(loginWaitMaxMs / 60_000)} min. Aumente LOGIN_WAIT_MAX_MS ou conclua o login a tempo. Perfil: CHROME_USER_DATA=...`
@@ -3833,14 +4027,30 @@ async function runCategoryHarvest(browser, page, startUrl) {
     } else {
       let securityChallenge = await detectTiktokSecurityChallenge(page);
       if (!securityChallenge) {
-        await postGotoShopStabilize(page, isHeaded);
+        if (!passive) {
+          await postGotoShopStabilize(page, isHeaded);
+        } else {
+          await humanPause(page, 800, 1600);
+        }
         securityChallenge = await detectTiktokSecurityChallenge(page);
+      }
+      if (securityChallenge && isHeaded) {
+        await waitForSecurityChallengeResolved(page, { maxMs: loginWaitMaxMs });
+        securityChallenge = await detectTiktokSecurityChallenge(page);
+        if (!securityChallenge) {
+          if (!passive) {
+            await postGotoShopStabilize(page, isHeaded);
+          } else {
+            await humanPause(page, 800, 1600);
+          }
+          securityChallenge = await detectTiktokSecurityChallenge(page);
+        }
       }
       if (securityChallenge) {
         status = "tiktok_security_check";
         failureCode = "TIKTOK_SECURITY_CHECK";
         note =
-          "TIKTOK_SECURITY_CHECK: TikTok exibiu Security Check / puzzle (anti-bot). Não há dados de produto para importar nesta execução. Opções: HEADED=1 com o mesmo `userDataDir` para resolver manualmente; alterar IP/rede (ex. sair de datacenter); sem solver automático.";
+          "TIKTOK_SECURITY_CHECK: TikTok exibiu Security Check / puzzle (anti-bot). Com HEADED=1 o script esperou LOGIN_WAIT_MAX_MS; ainda visível ou IP bloqueado. Tente resolver na janela antes do timeout, outra rede, ou aguardar.";
         // eslint-disable-next-line no-console
         console.warn(`[scrape] ${note}`);
       } else {
@@ -3864,16 +4074,19 @@ async function runCategoryHarvest(browser, page, startUrl) {
         }
       }
 
-      if (reloadedCategoryAfterLogin) {
-        // já recarregou a categoria acima; só ajusta ritmo
-        await humanPause(page, 500, 1000);
+      if (!passive) {
+        if (reloadedCategoryAfterLogin) {
+          await humanPause(page, 500, 1000);
+        } else {
+          await humanPause(page, 750, 1500);
+        }
+        await gentleMouseJiggle(page);
+        await scrollToLoadGrid(page);
+        await humanPause(page, 1000, 2000);
+        await clickViewMoreWhileNeeded(page, () => byProductId.size);
       } else {
-        await humanPause(page, 750, 1500);
+        await humanPause(page, 1000, 1800);
       }
-      await gentleMouseJiggle(page);
-      await scrollToLoadGrid(page);
-      await humanPause(page, 1000, 2000);
-      await clickViewMoreWhileNeeded(page, () => byProductId.size);
       // Handlers `response` são assíncronos: drena até o mapa estabilizar (teto ~5s como antes)
       await waitForStableProductFeed(() => byProductId.size);
 
@@ -3952,7 +4165,32 @@ async function runCategoryHarvest(browser, page, startUrl) {
   /** @type {object | null} */
   let diagnostic = null;
 
-  if (failureCode === "TIKTOK_SECURITY_CHECK") {
+  try {
+    const nowUrl = page.url();
+    if (nowUrl && nowUrl !== finalUrl) {
+      finalUrl = nowUrl;
+    }
+  } catch {
+    /* noop */
+  }
+
+  if (!isShopTiktokHostname(finalUrl)) {
+    status = "not_shop";
+    note =
+      "A sessão saiu de shop.tiktok.com durante a coleta (possível redirecionamento para login). Reabra o Shop, conclua login/puzzle e tente novamente.";
+    exitCode = 1;
+    try {
+      diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
+        finalUrl,
+        startUrl,
+        status: "not_shop"
+      });
+    } catch (e) {
+      diagnostic = { erro_escrita_diagnostico: String(e?.message || e) };
+    }
+  }
+
+  if (exitCode === 0 && failureCode === "TIKTOK_SECURITY_CHECK") {
     exitCode = 2;
     try {
       diagnostic = await writeScrapeDiagnosticsToExtra(page, OUT_AUX, diagBuckets, {
@@ -3983,7 +4221,7 @@ async function runCategoryHarvest(browser, page, startUrl) {
     } catch (e) {
       diagnostic = { erro_escrita_diagnostico: String(e?.message || e), failure_code: "TIKTOK_SECURITY_CHECK" };
     }
-  } else if (byProductId.size === 0 && status === "ok") {
+  } else if (exitCode === 0 && byProductId.size === 0 && status === "ok") {
     status = "no_products";
     note =
       "Nenhum produto (XHR + loader). Campo `diagnostic` + ficheiros em extra/ (final_page*.png, final_page.html, xhr_debug.json, browser_env.json, empty_harvest_diagnostic.json). Processo termina com código 1.";
@@ -4162,13 +4400,119 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
   return exitCode;
 }
 
+function isAssistedModeEnabled() {
+  const v = String(process.env.ASSISTED_MODE || "").trim();
+  return v === "1" || /^true$/i.test(v);
+}
+
+function isBrazilCategoryUrl(urlStr) {
+  try {
+    const u = new URL(String(urlStr));
+    if (u.hostname.toLowerCase() !== "shop.tiktok.com") return false;
+    return /\/br\/c\/[^/]+/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function waitForEnter(prompt) {
+  if (!process.stdin.isTTY) {
+    throw new Error("stdin não é TTY (sem ENTER). Rode este modo num terminal.");
+  }
+  process.stdout.write(prompt);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+  await new Promise((resolve) => {
+    const onData = (chunk) => {
+      if (String(chunk).includes("\n")) {
+        process.stdin.off("data", onData);
+        resolve();
+      }
+    };
+    process.stdin.on("data", onData);
+  });
+}
+
+async function assistedWaitForCategoryUrl(page) {
+  while (true) {
+    console.log(
+      '[ASSISTED_MODE] Resolva login/security check manualmente e navegue até uma categoria /br/c/... Depois pressione ENTER aqui para começar a coleta.'
+    );
+    await waitForEnter("> ");
+    const currentUrl = page.url();
+    console.log(`[ASSISTED_MODE] URL após navegação manual: ${currentUrl}`);
+
+    const isShop = isShopTiktokHostname(currentUrl);
+    const isCategory = isBrazilCategoryUrl(currentUrl);
+    const hasSecurity = isShop ? await detectTiktokSecurityChallenge(page) : false;
+
+    const status = hasSecurity ? "security_check" : isCategory ? "category_page" : isShop ? "logged_in" : "not_shop";
+    console.log(`[ASSISTED_MODE] status=${status}`);
+
+    if (hasSecurity) {
+      console.error(
+        "[ASSISTED_MODE] Security Check ainda ativo. Conclua no browser e pressione ENTER novamente."
+      );
+      continue;
+    }
+    if (!isCategory) {
+      console.error(
+        "[ASSISTED_MODE] A URL atual não parece ser uma categoria TikTok Shop. Navegue até uma URL /br/c/... e pressione ENTER novamente."
+      );
+      continue;
+    }
+    return currentUrl;
+  }
+}
+
 async function main() {
   initOutputPaths();
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
+  const assistedMode = isAssistedModeEnabled();
+  if (assistedMode && process.env.HEADED !== "1") {
+    console.error("[ASSISTED_MODE] Requer HEADED=1 (janela visível).");
+    return 1;
+  }
   const browser = await launchTikTokBrowser();
   const page = await browser.newPage();
+  
+  if (!assistedMode) {
+    await page.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    );
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => false });
+    });
+  }
+
+  if (!assistedMode) {
+    console.log("[scrape] Aquecendo navegador no Google...");
+    await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+  }
+  
+  if (process.env.LOGIN_ONLY === "1") {
+    console.log("\n[LOGIN MODE] Navegador aberto no Google.");
+    console.log("1. Faça login no Google e no TikTok Shop nesta janela.");
+    console.log("2. Verifique se o login foi concluído com sucesso.");
+    console.log("3. FECHE o navegador manualmente quando terminar para salvar a sessão.\n");
+    
+    // Aguarda o navegador ser fechado manualmente
+    await new Promise((resolve) => {
+      browser.on("disconnected", resolve);
+    });
+    return 0;
+  }
+
+  await new Promise(r => setTimeout(r, 2000));
+
   await installAntiPopupGuards(browser, page);
   try {
+    if (assistedMode) {
+      console.log(`[ASSISTED_MODE] URL inicial: ${startUrl}`);
+      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      const catUrl = await assistedWaitForCategoryUrl(page);
+      return await runCategoryHarvest(browser, page, catUrl, { skipGoto: true, passive: true });
+    }
     return await runCategoryHarvest(browser, page, startUrl);
   } finally {
     await browser.close();

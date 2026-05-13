@@ -18,11 +18,9 @@
     "db:docker:up": "docker compose -f docker-compose.postgres-local.yml up -d",
     "db:docker:down": "docker compose -f docker-compose.postgres-local.yml down",
     "db:docker:wait": "node scripts/wait-tcp.mjs 127.0.0.1 5433",
-    "db:docker:bootstrap":
-      "node scripts/ensure-local-database-url.mjs && docker compose -f docker-compose.postgres-local.yml up -d && node scripts/wait-tcp.mjs 127.0.0.1 5433 && npx prisma migrate deploy && npx prisma generate",
+    "db:docker:bootstrap": "node scripts/ensure-local-database-url.mjs && docker compose -f docker-compose.postgres-local.yml up -d && node scripts/wait-tcp.mjs 127.0.0.1 5433 && npx prisma migrate deploy && npx prisma generate",
     "pdp:enrich": "node scripts/pdp-enrich-products.mjs",
-    "test:spaces": "node --import ./scripts/load-root-env.mjs scripts/test-spaces-upload.mjs",
-    "export:product-spaces": "node --import ./scripts/load-root-env.mjs scripts/export-product-to-spaces.mjs",
+    "images:upload": "node --import ./scripts/load-root-env.mjs scripts/images-upload.mjs",
     "validate:db-vs-json": "node --import ./scripts/load-root-env.mjs scripts/validate-db-vs-json.mjs",
     "analytics:top-products": "node --import ./scripts/load-root-env.mjs scripts/analytics/top-products.mjs",
     "analytics:new-products": "node --import ./scripts/load-root-env.mjs scripts/analytics/new-products.mjs",
@@ -60,10 +58,11 @@
     "scrape:category:caca": "cross-env HEADED=1 HUNT_LOG=1 NET_LOG=1 node src/scrapeCategory.mjs --hunt",
     "scrape:category:peek": "cross-env HEADED=1 ROUTER_PEEK_LEN=12000 node src/scrapeCategory.mjs --debug",
     "scrape:category:pdp": "cross-env PDP_GALLERY=1 PDP_GALLERY_MAX=25 node src/scrapeCategory.mjs",
+    "scrape:login": "cross-env HEADED=1 LOGIN_ONLY=1 node src/scrapeCategory.mjs",
+    "scraper:worker": "node --import ./scripts/load-root-env.mjs src/scrapeCategory.mjs --debug",
     "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
     "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
-    "scrape:categories:sample": "node scripts/scrape-both.mjs",
-    "scraper:worker": "node --import ./scripts/load-root-env.mjs scripts/scraper-local-worker.mjs"
+    "scrape:categories:sample": "node scripts/scrape-both.mjs"
   },
   "devDependencies": {
     "ajv": "^8.20.0",
@@ -72,7 +71,7 @@
     "prisma": "5.22.0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.787.0",
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@prisma/client": "5.22.0",
     "dotenv": "^17.4.2",
     "fastify": "^4.29.1",
