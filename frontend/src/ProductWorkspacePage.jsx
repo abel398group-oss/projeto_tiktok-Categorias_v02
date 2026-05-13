@@ -290,7 +290,7 @@ export default function ProductWorkspacePage() {
   const onExportImagesToSpaces = useCallback(async () => {
     if (!decodedId) return;
     setExportBusy(true);
-    setExportMsg(null);
+    setExportMsg({ kind: "ok", text: "Exportação iniciada" });
     try {
       const res = await apiPost("/analytics/images-upload", { productId: decodedId });
       const stats = res && typeof res === "object" && res.stats && typeof res.stats === "object" ? res.stats : null;
@@ -308,7 +308,7 @@ export default function ProductWorkspacePage() {
       setProductStatus(decodedId, "conteudo_produzido");
       setExportMsg({
         kind: "ok",
-        text: `Exportação concluída.${bits.length ? " " + bits.join(" · ") : ""}`
+        text: `Exportação concluída${bits.length ? " · " + bits.join(" · ") : ""}`
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -619,7 +619,10 @@ export default function ProductWorkspacePage() {
               🎯 Pipeline do Produto
             </h2>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.74rem", lineHeight: 1.5, opacity: 0.88, color: "var(--tk-text)" }}>
-              Onde está o produto no fluxo creator (só neste browser). Igual em <strong>Produtos em análise</strong> (<code>/a-mao</code>).
+              Onde está o produto no fluxo creator.
+            </p>
+            <p style={{ margin: "-0.25rem 0 0.55rem", fontSize: "0.72rem", lineHeight: 1.45, opacity: 0.65 }}>
+              Dados salvos apenas neste navegador.
             </p>
             <div
               style={{
@@ -1308,7 +1311,7 @@ export default function ProductWorkspacePage() {
           <section style={{ ...box, marginTop: "1rem" }}>
             <div style={{ ...labelMuted, marginBottom: "0.25rem", fontWeight: 600, opacity: 0.88, color: "#c4b8a8" }}>Minhas notas</div>
             <p style={{ margin: "0 0 0.4rem", fontSize: "0.7rem", opacity: 0.68, lineHeight: 1.45 }}>
-              Gravadas só neste browser — não são enviadas ao servidor.
+              Dados salvos apenas neste navegador.
               {!notesLoaded ? null : (
                 <span style={{ opacity: 0.75, marginLeft: "0.35rem" }}>· máx. {NOTES_MAX.toLocaleString()} caracteres</span>
               )}

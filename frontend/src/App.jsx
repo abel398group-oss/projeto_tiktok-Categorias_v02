@@ -1259,7 +1259,11 @@ function asArray(x) {
 function isInteractiveTableCellClick(ev) {
   const el = ev.target;
   if (!(el instanceof Element)) return false;
-  return Boolean(el.closest("a, button, input, select, textarea, label, [role='button']"));
+  return Boolean(
+    el.closest(
+      "a, button, input, select, textarea, label, summary, details, [role='button'], [role='link'], [role='checkbox'], [role='menuitem'], [data-no-row-click='true']"
+    )
+  );
 }
 
 /** Texto de categoria/subcategoria da API → rótulo PT quando mapeado (sitemap TikTok). */
