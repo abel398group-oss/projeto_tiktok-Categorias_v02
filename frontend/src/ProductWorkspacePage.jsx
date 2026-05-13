@@ -318,6 +318,9 @@ export default function ProductWorkspacePage() {
     }
   }, [decodedId]);
 
+  const exportDone =
+    exportMsg?.kind === "ok" && typeof exportMsg.text === "string" && exportMsg.text.startsWith("Exportação concluída");
+
   const briefing = useMemo(
     () => (isWorkspace(workspace) ? buildProductBriefingFromWorkspace(/** @type {WorkspacePayload & Record<string, unknown>} */ (workspace)) : null),
     [workspace]
@@ -1066,6 +1069,7 @@ export default function ProductWorkspacePage() {
                 disabled={exportBusy || loading || !decodedId}
                 onClick={() => void onExportImagesToSpaces()}
                 title="Exporta imagens deste produto para o DigitalOcean Spaces (não faz scraping)"
+                aria-busy={exportBusy}
                 style={{
                   padding: "0.28rem 0.55rem",
                   fontSize: "0.68rem",
@@ -1076,14 +1080,14 @@ export default function ProductWorkspacePage() {
                   display: "inline-block",
                   textAlign: "center",
                   whiteSpace: "nowrap",
-                  border: "1px solid #567138",
-                  background: "#203014",
+                  border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
+                  background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
                   color: "#dcedc8",
                   opacity: exportBusy ? 0.7 : 1,
                   alignSelf: "center"
                 }}
               >
-                {exportBusy ? "Exportando…" : "Exportar"}
+                {exportBusy ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
               </button>
               <button
                 type="button"
@@ -1111,7 +1115,16 @@ export default function ProductWorkspacePage() {
                   href={workspace.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "#6ec4ff", alignSelf: "center", fontSize: "0.78rem" }}
+                  className="tk-btn-neutral"
+                  style={{
+                    padding: "0.28rem 0.55rem",
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    alignSelf: "center",
+                    textAlign: "center",
+                    whiteSpace: "nowrap"
+                  }}
                 >
                   Abrir no TikTok
                 </a>

@@ -97,9 +97,6 @@ const btnBase = {
 
 const btnOpen = {
   ...btnBase,
-  border: "1px solid #2978b8",
-  background: "#1d6fa5",
-  color: "#fff",
   textAlign: "center"
 };
 
@@ -493,6 +490,11 @@ export default function HandsOnPage() {
                   /** @type {import("./productStatusStorage.js").ProductStatusKey} */
                   const rowStatus = normalizeProductStatusKey(statusMap[r.productId]);
                   const nome = (d?.nome || r.nome || "—").trim() || "—";
+                  const exportState = exportById[r.productId];
+                  const exportDone =
+                    exportState?.kind === "ok" &&
+                    typeof exportState.text === "string" &&
+                    exportState.text.startsWith("Exportação concluída");
                   const tiktokUrl =
                     (typeof d?.link === "string" && d.link.trim()) ||
                     (typeof r.tiktokUrl === "string" && r.tiktokUrl.trim()) ||
@@ -508,7 +510,7 @@ export default function HandsOnPage() {
                         background: "#111820",
                         display: "grid",
                         gridTemplateColumns: "1fr auto",
-                        gap: "0.5rem",
+                        gap: "0.8rem",
                         alignItems: "stretch"
                       }}
                     >
@@ -572,19 +574,21 @@ export default function HandsOnPage() {
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
-                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
+                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" className="tk-btn-primary" style={btnOpen}>
                           Abrir workspace
                         </Link>
-                        <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" style={btnOpen}>
+                        <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" className="tk-btn-neutral" style={btnOpen}>
                           Abrir no TikTok
                         </a>
                         <PdpEnrichButton productId={r.productId} />
                         <button
                           type="button"
+                          aria-busy={exportingId === r.productId}
                           style={{
                             ...btnOpen,
-                            border: "1px solid #567138",
-                            background: "#203014",
+                            borderRadius: 8,
+                            border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
+                            background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
                             color: "#dcedc8",
                             fontWeight: 700,
                             opacity: exportingId === r.productId ? 0.6 : 1,
@@ -594,7 +598,7 @@ export default function HandsOnPage() {
                           onClick={() => void onExport(r.productId)}
                           title="Exporta imagens para o DigitalOcean Spaces (não faz scraping)"
                         >
-                          {exportingId === r.productId ? "Exportando…" : "Exportar"}
+                          {exportingId === r.productId ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
                         </button>
                         {exportById[r.productId] ? (
                           <div
@@ -609,17 +613,7 @@ export default function HandsOnPage() {
                             {exportById[r.productId].text}
                           </div>
                         ) : null}
-                        <button
-                          type="button"
-                          style={{
-                            ...btnOpen,
-                            border: "1px solid #6b3b3b",
-                            background: "#2a1515",
-                            color: "#ffd6d6",
-                            fontWeight: 700
-                          }}
-                          onClick={() => onRemoveChosen(r.productId)}
-                        >
+                        <button type="button" className="tk-btn-danger" style={{ ...btnOpen, fontWeight: 700 }} onClick={() => onRemoveChosen(r.productId)}>
                           Remover
                         </button>
                       </div>
@@ -709,7 +703,7 @@ export default function HandsOnPage() {
                         background: "#111820",
                         display: "grid",
                         gridTemplateColumns: "1fr auto",
-                        gap: "0.5rem",
+                        gap: "0.8rem",
                         alignItems: "stretch"
                       }}
                     >
@@ -854,7 +848,7 @@ export default function HandsOnPage() {
                           minWidth: "8.25rem"
                         }}
                       >
-                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
+                        <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" className="tk-btn-primary" style={btnOpen}>
                           Abrir workspace
                         </Link>
                         <PdpEnrichButton productId={r.productId} />
@@ -977,7 +971,7 @@ export default function HandsOnPage() {
                               </div>
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", minWidth: "7.5rem" }}>
-                              <Link to={`/produto/${encodeURIComponent(row.productId)}`} style={btnOpen}>
+                              <Link to={`/produto/${encodeURIComponent(row.productId)}`} className="tk-btn-primary" style={btnOpen}>
                                 Abrir
                               </Link>
                               <button

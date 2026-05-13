@@ -99,6 +99,92 @@ button.tk-btn-soft:disabled:hover {
   color: var(--tk-text);
 }
 
+/* Botão primário (ações principais) */
+button.tk-btn-primary,
+a.tk-btn-primary {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid var(--tk-btn-primary-hover);
+  background: var(--tk-btn-primary);
+  color: #eaf6ff;
+  box-shadow: var(--tk-shadow-sm);
+}
+button.tk-btn-primary:hover,
+a.tk-btn-primary:hover {
+  border-color: var(--tk-btn-primary-hover);
+  background: var(--tk-btn-primary-hover);
+  color: #eaf6ff;
+}
+button.tk-btn-primary:focus-visible,
+a.tk-btn-primary:focus-visible {
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 2px;
+}
+button.tk-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+button.tk-btn-primary:disabled:hover {
+  border-color: var(--tk-btn-primary-hover);
+  background: var(--tk-btn-primary);
+  color: #eaf6ff;
+}
+
+/* Botão neutro (ações externas / links) */
+button.tk-btn-neutral,
+a.tk-btn-neutral {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid var(--tk-border);
+  background: var(--tk-surface-raised);
+  color: var(--tk-text);
+  box-shadow: none;
+}
+button.tk-btn-neutral:hover,
+a.tk-btn-neutral:hover {
+  border-color: rgb(148 163 184 / 0.28);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--tk-text);
+}
+button.tk-btn-neutral:focus-visible,
+a.tk-btn-neutral:focus-visible {
+  outline: 2px solid var(--tk-accent-ring);
+  outline-offset: 2px;
+}
+
+/* Botão de risco (remoções) */
+button.tk-btn-danger,
+a.tk-btn-danger {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--tk-radius-md);
+  border: 1px solid rgb(248 113 113 / 0.55);
+  background: rgb(248 113 113 / 0.12);
+  color: #ffd6d6;
+  box-shadow: none;
+}
+button.tk-btn-danger:hover,
+a.tk-btn-danger:hover {
+  border-color: rgb(248 113 113 / 0.7);
+  background: rgb(248 113 113 / 0.18);
+  color: #ffd6d6;
+}
+button.tk-btn-danger:focus-visible,
+a.tk-btn-danger:focus-visible {
+  outline: 2px solid rgb(248 113 113 / 0.55);
+  outline-offset: 2px;
+}
+
+a.tk-btn-primary,
+a.tk-btn-neutral,
+a.tk-btn-danger {
+  display: inline-block;
+  text-decoration: none !important;
+}
+
 /* Navegação principal — estados tipo painel TMS (ativo / hover claros) */
 nav.tk-app-nav {
   border-bottom: 1px solid var(--tk-border);
@@ -238,6 +324,54 @@ th {
 
 tbody td {
   background: var(--tk-surface);
+}
+
+/* Tabelas do analytics — leitura rápida (densidade + hover + links discretos) */
+table.tk-analytics-table {
+  font-size: 0.84rem;
+}
+table.tk-analytics-table th,
+table.tk-analytics-table td {
+  padding: 0.36rem 0.5rem;
+  border-color: var(--tk-border-soft);
+}
+table.tk-analytics-table tbody tr.tk-row-clickable td {
+  transition: background 0.12s ease;
+}
+table.tk-analytics-table tbody tr.tk-row-clickable {
+  cursor: pointer;
+}
+table.tk-analytics-table tbody tr.tk-row-clickable:hover td {
+  background: rgb(255 255 255 / 0.045);
+}
+table.tk-analytics-table tbody tr.tk-row-clickable:active td {
+  background: rgb(56 189 248 / 0.08);
+}
+table.tk-analytics-table a.tk-link-workspace {
+  color: var(--tk-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+table.tk-analytics-table a.tk-link-workspace:hover {
+  color: var(--tk-accent);
+  text-decoration: underline;
+}
+table.tk-analytics-table a.tk-link-external {
+  color: var(--tk-text-muted);
+  text-decoration: none;
+}
+table.tk-analytics-table a.tk-link-external:hover {
+  color: var(--tk-accent);
+  text-decoration: underline;
+}
+.tk-metric {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  color: var(--tk-text);
+}
+.tk-metric-muted {
+  font-variant-numeric: tabular-nums;
+  color: var(--tk-text-muted);
 }
 
 /* Zona principal tipo dashboard (contraste suave com o fundo da página) */

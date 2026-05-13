@@ -563,7 +563,7 @@ const productLabelsChipWrap = {
   maxWidth: "100%"
 };
 const productLabelChipStyle = {
-  fontSize: "0.68rem",
+  fontSize: "0.62rem",
   lineHeight: 1.35,
   padding: "0.12rem 0.42rem",
   borderRadius: "var(--tk-radius-sm)",
@@ -571,7 +571,8 @@ const productLabelChipStyle = {
   background: "var(--tk-surface-inset)",
   color: "var(--tk-text-muted)",
   fontWeight: 500,
-  whiteSpace: "nowrap"
+  whiteSpace: "nowrap",
+  opacity: 0.9
 };
 
 /**
@@ -1446,7 +1447,7 @@ function TableTop({ data }) {
             : null}
         </p>
       ) : null}
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+      <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
@@ -1619,6 +1620,7 @@ function TableTop({ data }) {
             return (
               <tr
                 key={`${row.productId}-${pos}`}
+                className={hasProductId ? "tk-row-clickable" : undefined}
                 style={{
                   borderBottom: "1px solid var(--tk-border)",
                   cursor: hasProductId ? "pointer" : "default"
@@ -1636,7 +1638,7 @@ function TableTop({ data }) {
                     <Link
                       to={`/produto/${encodeURIComponent(pidStr)}`}
                       title={nomeTitle ?? "Abrir workspace deste produto"}
-                      style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                      className="tk-link-workspace"
                     >
                       {row.nome ?? "—"}
                     </Link>
@@ -1655,13 +1657,19 @@ function TableTop({ data }) {
                 </td>
                 <td>{row.preco ?? "—"}</td>
                 <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
-                <td>{row.vendas ?? "—"}</td>
+                <td>
+                  <span className="tk-metric">{row.vendas ?? "—"}</span>
+                </td>
                 <td>
                   {typeof row.avaliacao === "number" && Number.isFinite(row.avaliacao)
-                    ? row.avaliacao.toLocaleString("pt-BR", {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 2
-                      })
+                    ? (
+                        <span className="tk-metric">
+                          {row.avaliacao.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 2
+                          })}
+                        </span>
+                      )
                     : "—"}
                 </td>
                 <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
@@ -1670,6 +1678,7 @@ function TableTop({ data }) {
                       productId={pidStr}
                       nome={typeof row.nome === "string" ? row.nome : undefined}
                       tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                      className="tk-btn-primary"
                     />
                   ) : (
                     "—"
@@ -1677,7 +1686,7 @@ function TableTop({ data }) {
                 </td>
                 <td>
                   {row.link ? (
-                    <a href={row.link} target="_blank" rel="noopener noreferrer">
+                    <a href={row.link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
                       Abrir no TikTok
                     </a>
                   ) : (
@@ -1958,7 +1967,7 @@ function TableOpp({ data }) {
         </p>
       ) : null}
       <>
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+      <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
@@ -2143,6 +2152,7 @@ function TableOpp({ data }) {
                 return (
                   <tr
                     key={`${row.productId}-${pos}`}
+                    className={hasProductId ? "tk-row-clickable" : undefined}
                     style={{
                       borderBottom: "1px solid var(--tk-border)",
                       cursor: hasProductId ? "pointer" : "default"
@@ -2161,7 +2171,7 @@ function TableOpp({ data }) {
                           <Link
                             to={`/produto/${encodeURIComponent(pidStr)}`}
                             title={nomeTitle ?? "Abrir workspace deste produto"}
-                            style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                            className="tk-link-workspace"
                           >
                             {row.nome ?? "—"}
                           </Link>
@@ -2180,9 +2190,18 @@ function TableOpp({ data }) {
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
                     <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
-              <td>{row.vendas ?? "—"}</td>
               <td>
-                {row.avalMed != null ? `${row.avalMed} (${row.avalTot ?? "—"} aval)` : "—"}
+                <span className="tk-metric">{row.vendas ?? "—"}</span>
+              </td>
+              <td>
+                {row.avalMed != null ? (
+                  <>
+                    <span className="tk-metric">{row.avalMed}</span>{" "}
+                    <span className="tk-metric-muted">({row.avalTot ?? "—"} aval)</span>
+                  </>
+                ) : (
+                  "—"
+                )}
               </td>
               <td>{row.motivo ?? "—"}</td>
               <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
@@ -2191,6 +2210,7 @@ function TableOpp({ data }) {
                     productId={pidStr}
                     nome={typeof row.nome === "string" ? row.nome : undefined}
                     tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    className="tk-btn-primary"
                   />
                 ) : (
                   "—"
@@ -2198,7 +2218,7 @@ function TableOpp({ data }) {
               </td>
               <td>
                 {row.link ? (
-                  <a href={row.link} target="_blank" rel="noopener noreferrer">
+                  <a href={row.link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
                     Abrir no TikTok
                   </a>
                 ) : (
@@ -2555,7 +2575,7 @@ function TableScore({ data }) {
           </button>
         </p>
       ) : (
-        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+        <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colW.colElements}</colgroup>
         <thead>
           <tr>
@@ -2777,6 +2797,7 @@ function TableScore({ data }) {
             return (
             <tr
               key={`${row.productId}-${i}`}
+              className={pidStr ? "tk-row-clickable" : undefined}
               style={{
                 borderBottom: "1px solid var(--tk-border)",
                 cursor: pidStr ? "pointer" : "default"
@@ -2789,14 +2810,16 @@ function TableScore({ data }) {
               }}
             >
               <td style={tdPosStyle}>{i + 1}</td>
-              <td>{row.score}</td>
+              <td>
+                <span className="tk-metric">{row.score}</span>
+              </td>
               <td>{row.classific}</td>
               <td style={{ verticalAlign: "middle" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
                 <Link
                   to={`/produto/${encodeURIComponent(row.productId)}`}
                   title="Abrir workspace deste produto"
-                  style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
+                  className="tk-link-workspace"
                 >
                   {row.nome}
                 </Link>
@@ -2812,8 +2835,12 @@ function TableScore({ data }) {
               <td>{row.loja}</td>
               <td>{row.preco ?? "—"}</td>
               <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} />
-              <td>{row.vendas ?? "—"}</td>
-              <td>{row.rating ?? "—"}</td>
+              <td>
+                <span className="tk-metric">{row.vendas ?? "—"}</span>
+              </td>
+              <td>
+                <span className="tk-metric">{row.rating ?? "—"}</span>
+              </td>
               <td>{row.deltaVendas ?? "—"}</td>
               <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
                 {pidStr ? (
@@ -2821,6 +2848,7 @@ function TableScore({ data }) {
                     productId={pidStr}
                     nome={typeof row.nome === "string" ? row.nome : undefined}
                     tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                    className="tk-btn-primary"
                   />
                 ) : (
                   "—"
@@ -2829,7 +2857,7 @@ function TableScore({ data }) {
               <td style={{ padding: "0.35rem 0.3rem", opacity: 0.85 }}>—</td>
               <td>
                 {row.link ? (
-                  <a href={row.link} target="_blank" rel="noopener noreferrer">
+                  <a href={row.link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
                     Abrir no TikTok
                   </a>
                 ) : (
@@ -2922,7 +2950,7 @@ function TableGrowth({ data }) {
           Após filtro Ticket: <strong>{growthRowsTicket.length}</strong> de {allRows.length} linha(s).
         </p>
       ) : null}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+      <table className="tk-analytics-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--tk-border)", textAlign: "left" }}>
             <th style={{ padding: "0.4rem 0.45rem", fontWeight: 600 }}>#</th>
@@ -2953,6 +2981,7 @@ function TableGrowth({ data }) {
             return (
               <tr
                 key={key}
+                className={pid ? "tk-row-clickable" : undefined}
                 style={{
                   borderBottom: "1px solid var(--tk-border)",
                   cursor: pid ? "pointer" : "default"
@@ -2978,17 +3007,17 @@ function TableGrowth({ data }) {
                   {row.vendasAnt != null ? Number(row.vendasAnt).toLocaleString("pt-BR") : "—"}
                 </td>
                 <td style={{ padding: "0.35rem 0.45rem" }}>
-                  {row.vendasAtual != null ? Number(row.vendasAtual).toLocaleString("pt-BR") : "—"}
+                  {row.vendasAtual != null ? <span className="tk-metric">{Number(row.vendasAtual).toLocaleString("pt-BR")}</span> : "—"}
                 </td>
                 <td style={{ padding: "0.35rem 0.45rem" }}>
-                  {row.delta != null ? Number(row.delta).toLocaleString("pt-BR") : "—"}
+                  {row.delta != null ? <span className="tk-metric">{Number(row.delta).toLocaleString("pt-BR")}</span> : "—"}
                 </td>
                 <td style={{ padding: "0.35rem 0.45rem" }}>
                   {row.deltaPct != null && String(row.deltaPct).trim() !== "" ? String(row.deltaPct) : "—"}
                 </td>
                 <td style={{ padding: "0.35rem 0.45rem" }}>
                   {link ? (
-                    <a href={link} target="_blank" rel="noopener noreferrer">
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
                       Abrir no TikTok
                     </a>
                   ) : (
@@ -3251,7 +3280,7 @@ function TableCategoryMap({ data }) {
           Filtros ▾ (tabela subcategorias): <strong>{flatSubFiltered.length}</strong> de {flatSubcats.length} linha(s).
         </p>
       ) : null}
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
+      <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", marginBottom: "1.35rem" }}>
         <colgroup>{colWSub.colElements}</colgroup>
         <thead>
           <tr>
@@ -3493,7 +3522,7 @@ function TableCategoryMap({ data }) {
           Filtros ▾ (SKU destacados): <strong>{flatTopFiltered.length}</strong> de {flatTops.length} linha(s).
         </p>
       ) : null}
-      <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+      <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
         <colgroup>{colWTop.colElements}</colgroup>
         <thead>
           <tr>
@@ -3724,6 +3753,7 @@ function TableCategoryMap({ data }) {
             return (
               <tr
                 key={row.rowKey || i}
+                className={pid ? "tk-row-clickable" : undefined}
                 style={{
                   cursor: pid ? "pointer" : "default"
                 }}
@@ -3744,9 +3774,15 @@ function TableCategoryMap({ data }) {
                 <td style={{ ...tdStyle, ...tdEllipsis }} title={String(row.subcategoria ?? "")}>
                   {catCellPt(row.subcategoria)}
                 </td>
-                <td style={tdStyle}>{row.score}</td>
-                <td style={tdStyle}>{row.vendas ?? "—"}</td>
-                <td style={tdStyle}>{row.rating != null ? row.rating : "—"}</td>
+                <td style={tdStyle}>
+                  <span className="tk-metric">{row.score}</span>
+                </td>
+                <td style={tdStyle}>
+                  <span className="tk-metric">{row.vendas ?? "—"}</span>
+                </td>
+                <td style={tdStyle}>
+                  <span className="tk-metric">{row.rating != null ? row.rating : "—"}</span>
+                </td>
                 <td style={tdStyle}>{row.preco != null ? row.preco : "—"}</td>
                 <td style={tdStyle}>{row.delta != null ? row.delta : "—"}</td>
                 <td style={tdStyle}>
@@ -3755,6 +3791,7 @@ function TableCategoryMap({ data }) {
                       productId={pid}
                       nome={typeof row.nome === "string" ? row.nome : undefined}
                       tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+                      className="tk-btn-primary"
                     />
                   ) : (
                     "—"
@@ -3762,7 +3799,7 @@ function TableCategoryMap({ data }) {
                 </td>
                 <td style={tdStyle}>
                   {row.link ? (
-                    <a href={row.link} target="_blank" rel="noopener noreferrer">
+                    <a href={row.link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
                       Abrir no TikTok
                     </a>
                   ) : (
@@ -3990,6 +4027,7 @@ function TableScalableSections({ data }) {
       return (
         <tr
           key={`${row.productId}-${i}`}
+          className={pid ? "tk-row-clickable" : undefined}
           style={{
             borderBottom: "1px solid var(--tk-border)",
             cursor: pid ? "pointer" : "default"
@@ -4009,9 +4047,15 @@ function TableScalableSections({ data }) {
         <td style={tdEllipsis} title={typeof row.subcategoria === "string" ? row.subcategoria : undefined}>
           {catCellPt(row.subcategoria)}
         </td>
-        <td>{row.score}</td>
-        <td>{row.vendas ?? "—"}</td>
-        <td>{row.rating ?? "—"}</td>
+        <td>
+          <span className="tk-metric">{row.score}</span>
+        </td>
+        <td>
+          <span className="tk-metric">{row.vendas ?? "—"}</span>
+        </td>
+        <td>
+          <span className="tk-metric">{row.rating ?? "—"}</span>
+        </td>
           <TicketBadgeCell row={/** @type {Record<string, unknown>} */ (row)} tdExtra={{ padding: "0.35rem 0.45rem" }} />
         <td style={{ verticalAlign: "top", padding: "0.35rem 0.3rem", overflow: "visible" }}>
           {pid ? (
@@ -4019,6 +4063,7 @@ function TableScalableSections({ data }) {
               productId={pid}
               nome={typeof row.nome === "string" ? row.nome : undefined}
               tiktokUrl={typeof row.link === "string" ? row.link : undefined}
+              className="tk-btn-primary"
             />
           ) : (
             "—"
@@ -4026,7 +4071,7 @@ function TableScalableSections({ data }) {
         </td>
         <td>
           {row.link ? (
-            <a href={row.link} target="_blank" rel="noopener noreferrer">
+            <a href={row.link} target="_blank" rel="noopener noreferrer" className="tk-link-external">
               Abrir no TikTok
             </a>
           ) : (
@@ -4079,7 +4124,7 @@ function TableScalableSections({ data }) {
                   Filtros ▾ nesta lista: <strong>{rawVFiltered.length}</strong> de {rawV.length} linha(s).
                 </p>
               ) : null}
-            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+            <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>
@@ -4260,7 +4305,7 @@ function TableScalableSections({ data }) {
                   Filtros ▾ nesta lista: <strong>{rawPFiltered.length}</strong> de {rawP.length} linha(s).
                 </p>
               ) : null}
-            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
+            <table className="tk-analytics-table" style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>{colW.colElements}</colgroup>
               <thead>
                 <tr>

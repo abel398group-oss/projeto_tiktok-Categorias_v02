@@ -135,133 +135,160 @@ export default function ShortlistPage() {
               const statusKey = getProductStatusForProduct(e.productId);
               const note = notePreview(e.productId);
               const tiktokUrl = `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(pidStr)}`;
+              const exportState = exportById[pidStr];
+              const exportDone =
+                exportState?.kind === "ok" &&
+                typeof exportState.text === "string" &&
+                exportState.text.startsWith("Exportação concluída");
               return (
                 <li
                   key={e.productId}
                   style={{
                     border: "1px solid #2f3f4d",
                     borderRadius: 8,
-                    padding: "0.65rem 0.75rem",
-                    background: "#151e27"
+                    padding: "0.55rem 0.65rem",
+                    background: "#111820",
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto",
+                    gap: "0.8rem",
+                    alignItems: "stretch"
                   }}
                 >
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-start", justifyContent: "space-between" }}>
-                    <div style={{ minWidth: 0, flex: "1 1 12rem" }}>
-                      <Link
-                        to={`/produto/${encodeURIComponent(pidStr)}`}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "0.35rem", flexWrap: "wrap" }}>
+                      <div
                         style={{
                           fontWeight: 600,
-                          fontSize: "0.88rem",
-                          color: "#8ecdfa",
-                          textDecoration: "none",
+                          fontSize: "0.82rem",
+                          color: "#e7e9ea",
                           lineHeight: 1.35,
                           wordBreak: "break-word"
                         }}
                       >
                         {e.nome}
-                      </Link>
-                      <p style={{ margin: "0.28rem 0 0", fontSize: "0.68rem", fontFamily: "ui-monospace, monospace", opacity: 0.75, wordBreak: "break-all" }}>
-                        {e.productId}
-                      </p>
-                      <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", opacity: 0.78 }}>
-                        Adicionado: <strong>{fmtAddedAt(e.addedAt)}</strong>
-                      </p>
-                      <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", opacity: 0.85 }}>
-                        Pipeline: <strong>{badgeTextForProductStatus(statusKey)}</strong>
-                      </p>
-                      {note ? (
-                        <p style={{ margin: "0.4rem 0 0", fontSize: "0.7rem", opacity: 0.8, lineHeight: 1.45, color: "#e8dcc8" }}>
-                          <span style={{ fontWeight: 700 }}>Minhas notas · </span>
-                          <span style={{ fontStyle: "italic" }}>{note}</span>
-                        </p>
-                      ) : null}
+                      </div>
+                      <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(100, 116, 139, 0.18)", color: "#e2e8f0" }}>
+                        {badgeTextForProductStatus(statusKey)}
+                      </span>
                     </div>
-                    <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                      <Link
-                        to={`/produto/${encodeURIComponent(pidStr)}`}
+                    <p style={{ margin: "0.2rem 0 0", fontSize: "0.66rem", opacity: 0.75, fontFamily: "ui-monospace, monospace", wordBreak: "break-all" }}>
+                      {e.productId}
+                    </p>
+                    <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", opacity: 0.78 }}>
+                      Adicionado: <strong>{fmtAddedAt(e.addedAt)}</strong>
+                    </p>
+                    {note ? (
+                      <div
                         style={{
-                          padding: "0.28rem 0.55rem",
-                          fontSize: "0.68rem",
-                          fontWeight: 600,
+                          margin: "0.4rem 0 0",
+                          padding: "0.4rem 0.5rem",
                           borderRadius: 6,
-                          border: "1px solid #3978a8",
-                          background: "#1e4a63",
-                          color: "#eaf6ff",
-                          textAlign: "center",
-                          textDecoration: "none"
+                          border: "1px solid rgba(56, 189, 248, 0.22)",
+                          background: "rgba(14, 165, 233, 0.06)"
                         }}
                       >
-                        Abrir workspace
-                      </Link>
-                      <a
-                        href={tiktokUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          padding: "0.28rem 0.55rem",
-                          fontSize: "0.68rem",
-                          fontWeight: 600,
-                          borderRadius: 6,
-                          border: "1px solid #3978a8",
-                          background: "#1e4a63",
-                          color: "#eaf6ff",
-                          textAlign: "center",
-                          textDecoration: "none"
-                        }}
-                      >
-                        Abrir no TikTok
-                      </a>
-                      <SendToAnalysisButton productId={String(e.productId)} nome={typeof e.nome === "string" ? e.nome : undefined} tiktokUrl={tiktokUrl} />
-                      <button
-                        type="button"
-                        disabled={exportingId != null}
-                        onClick={() => void onExport(e.productId)}
-                        title="Exportar (upload para DigitalOcean Spaces). Não faz scraping."
-                        style={{
-                          padding: "0.28rem 0.55rem",
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          cursor: exportingId != null ? "wait" : "pointer",
-                          borderRadius: 6,
-                          border: "1px solid #567138",
-                          background: "#203014",
-                          color: "#dcedc8",
-                          opacity: exportingId === pidStr ? 0.65 : 1
-                        }}
-                      >
-                        {exportingId === pidStr ? "Exportando…" : "Exportar"}
-                      </button>
-                      {exportById[pidStr] ? (
-                        <div
-                          role="status"
-                          style={{
-                            fontSize: "0.62rem",
-                            lineHeight: 1.35,
-                            opacity: 0.92,
-                            color: exportById[pidStr].kind === "ok" ? "#9dd4b8" : "#f0a08a",
-                            maxWidth: "12rem"
-                          }}
-                        >
-                          {exportById[pidStr].text}
+                        <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em", opacity: 0.88, color: "#7dd3fc", marginBottom: "0.2rem" }}>
+                          Minhas notas
                         </div>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => onRemove(e.productId)}
+                        <p style={{ margin: 0, fontSize: "0.63rem", opacity: 0.82, color: "#b8d4e8", lineHeight: 1.42 }}>
+                          {note}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
+                    <Link
+                      to={`/produto/${encodeURIComponent(pidStr)}`}
+                      className="tk-btn-primary"
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 600,
+                        borderRadius: 6,
+                        textAlign: "center",
+                        textDecoration: "none"
+                      }}
+                    >
+                      Abrir workspace
+                    </Link>
+                    <a
+                      href={tiktokUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tk-btn-neutral"
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 600,
+                        borderRadius: 6,
+                        textAlign: "center",
+                        textDecoration: "none"
+                      }}
+                    >
+                      Abrir no TikTok
+                    </a>
+                    <SendToAnalysisButton
+                      productId={String(e.productId)}
+                      nome={typeof e.nome === "string" ? e.nome : undefined}
+                      tiktokUrl={tiktokUrl}
+                      className="tk-btn-primary"
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 600,
+                        borderRadius: 6,
+                        textAlign: "center",
+                        textDecoration: "none"
+                      }}
+                    />
+                    <button
+                      type="button"
+                       aria-busy={exportingId === pidStr}
+                      disabled={exportingId != null}
+                      onClick={() => void onExport(e.productId)}
+                      title="Exportar (upload para DigitalOcean Spaces). Não faz scraping."
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        cursor: exportingId != null ? "wait" : "pointer",
+                        borderRadius: 6,
+                         border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
+                         background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
+                        color: "#dcedc8",
+                        opacity: exportingId === pidStr ? 0.65 : 1
+                      }}
+                    >
+                       {exportingId === pidStr ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
+                    </button>
+                    {exportById[pidStr] ? (
+                      <div
+                        role="status"
                         style={{
-                          padding: "0.28rem 0.55rem",
-                          fontSize: "0.68rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          borderRadius: 6,
-                          border: "1px solid #6b3030",
-                          background: "#2a1515",
-                          color: "#fca5a5"
+                          fontSize: "0.62rem",
+                          lineHeight: 1.35,
+                          opacity: 0.92,
+                          color: exportById[pidStr].kind === "ok" ? "#9dd4b8" : "#f0a08a",
+                          maxWidth: "12rem"
                         }}
                       >
-                        Remover
-                      </button>
-                    </div>
+                        {exportById[pidStr].text}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onRemove(e.productId)}
+                      className="tk-btn-danger"
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        borderRadius: 6
+                      }}
+                    >
+                      Remover
+                    </button>
                   </div>
                 </li>
               );
