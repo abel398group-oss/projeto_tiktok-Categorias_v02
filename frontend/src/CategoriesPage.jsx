@@ -5,6 +5,8 @@ import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
 
 const EMPTY_LIST_MSG =
   "Nenhuma categoria importada ainda. Rode uma coleta e importe os dados para começar.";
+const ASSISTED_COMMAND =
+  "npx cross-env ASSISTED_MODE=1 HEADED=1 KEEP_BROWSER_OPEN=1 npm run scraper:worker";
 
 /**
  * Segmento estável para a rota `/categoria/:categorySlug`.
@@ -103,47 +105,6 @@ function linesFromImportDetail(detail) {
   return lines;
 }
 
-/** Resumo curto do `POST /scrape/run` para ver pasta e consolidação. */
-function scrapeRunSummary(body) {
-  if (body == null || typeof body !== "object") return "";
-  const b = /** @type {Record<string, unknown>} */ (body);
-  const od = typeof b.outputDir === "string" ? b.outputDir.trim() : "";
-  if (!od) return "";
-  const cons = Boolean(b.consolidated);
-  return ` · OUTPUT_DIR=${od}${cons ? " · depois consolidate → output/dados_*.json" : ""}`;
-}
-
-/** Ícone cadeado (toolbar) quando scrape/import corre noutro sítio — alinhado ao bloqueio dos cartões. */
-function ScrapeLockGlyph() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      style={{ flexShrink: 0, opacity: 0.88 }}
-    >
-      <path d="M7 11V8a5 5 0 0 1 10 0v3" />
-      <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
-    </svg>
-  );
-}
-
-/** Alinhado à validação do POST `/scrape/run` na API (hostname exacto). */
-function isShopTikTokCategoryUrl(s) {
-  try {
-    const u = new URL(s.trim());
-    return u.protocol === "https:" && u.hostname === "shop.tiktok.com";
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Página inicial — categorias em grelha de cartões (layout inspirado em dashboards tipo HiperTMS).
  * Dados: GET `/analytics/categories`.
@@ -153,28 +114,12 @@ export default function CategoriesPage() {
   const [categories, setCategories] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
   const [error, setError] = useState("");
 
-  /** `categoryKey` do cartão enquanto corre o scrape, ou `null`. */
-  const [scrapingKey, setScrapingKey] = useState(/** @type {string | null} */ (null));
-  /** Mesmo cartão enquanto corre import JSON → Postgres após scrape OK. */
-  const [importingKey, setImportingKey] = useState(/** @type {string | null} */ (null));
+  /** Import JSON → Postgres (não executa TikTok/Puppeteer). */
+  const [importBusy, setImportBusy] = useState(false);
   /** Mensagem global (sucesso / erro / aviso, ex. import ignorado por input_hash). */
-  const [scrapeFlash, setScrapeFlash] = useState(
+  const [flash, setFlash] = useState(
     /** @type {{ kind: "ok" | "err" | "info"; text: string; detailLines?: string[] } | null} */ (null)
   );
-  /** Cartão que acabou o fluxo completo (pulse curto no botão). */
-  const [doneKey, setDoneKey] = useState(/** @type {string | null} */ (null));
-  /** Fluxo `scrape-both` + consolidate + import (duas categorias fixas do repo). */
-  const [bulkBothBusy, setBulkBothBusy] = useState(false);
-
-  const workflowBusy = scrapingKey !== null || importingKey !== null || bulkBothBusy;
-  /** Toolbar «duas categorias» bloqueada por scrape/import num cartão (não pelo próprio fluxo bulk). */
-  const bulkLockedByCard = (scrapingKey !== null || importingKey !== null) && !bulkBothBusy;
-
-  useEffect(() => {
-    if (!doneKey) return undefined;
-    const t = window.setTimeout(() => setDoneKey(null), 2800);
-    return () => window.clearTimeout(t);
-  }, [doneKey]);
 
   const reloadCategories = useCallback(async () => {
     const body = await apiFetch("/analytics/categories");
@@ -182,92 +127,11 @@ export default function CategoriesPage() {
     setCategories(list);
   }, []);
 
-  /**
-   * @param {string} categoryUrl URL da categoria (ex.: `row.categoryUrl`).
-   * @param {string} rowKey `categoryKey` estável do cartão.
-   */
-  const runScrapeForUrl = useCallback(
-    async (categoryUrl, rowKey) => {
-      const u = String(categoryUrl ?? "").trim();
-      if (!isShopTikTokCategoryUrl(u)) {
-        setScrapeFlash({
-          kind: "err",
-          text: "Esta categoria não tem uma URL https://shop.tiktok.com/… válida na base — não é possível scrapear daqui."
-        });
-        return;
-      }
-      setScrapingKey(rowKey);
-      setImportingKey(null);
-      setScrapeFlash(null);
-      setDoneKey(null);
-      try {
-        const body = await apiPost("/scrape/run", { categoryUrl: u });
-        const hint =
-          typeof body?.message === "string" && body.message.trim() !== "" ? body.message.trim() : "Coleta concluída.";
-        setScrapeFlash({
-          kind: "ok",
-          text: `${hint}${scrapeRunSummary(body)} A sincronizar JSON → Postgres (import)…`
-        });
-      } catch (err) {
-        setScrapeFlash({ kind: "err", text: err instanceof Error ? err.message : String(err) });
-        return;
-      } finally {
-        setScrapingKey(null);
-      }
-
-      setImportingKey(rowKey);
-      try {
-        const imp = await apiPost("/analytics/import-output", {});
-        await reloadCategories();
-        const impObj = /** @type {Record<string, unknown>} */ (imp);
-        const skipped = Boolean(impObj?.skipped);
-        const impMsg =
-          typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
-        const detailLines = linesFromImportDetail(impObj?.detail);
-        if (skipped) {
-          setScrapeFlash({
-            kind: "info",
-            text:
-              impMsg ||
-              "Import ignorado: o JSON é idêntico ao último import (input_hash). A coleta correu, mas a base e os cartões não mudam até haver dados novos.",
-            detailLines: detailLines.length ? detailLines : undefined
-          });
-        } else {
-          setScrapeFlash({
-            kind: "ok",
-            text: "Coleta gravada, base actualizada e lista de categorias recarregada.",
-            detailLines: detailLines.length ? detailLines : undefined
-          });
-          setDoneKey(rowKey);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setScrapeFlash({
-          kind: "err",
-          text: `Coleta terminou, mas o import falhou: ${msg} Corra na raiz: npm run db:import:output`
-        });
-      } finally {
-        setImportingKey(null);
-      }
-    },
-    [reloadCategories]
-  );
-
-  /** Mesmas URLs que `npm run coleta` (grelha): `scripts/scrape-both.mjs` + consolidação + import. */
-  const runBothCategories = useCallback(async () => {
-    setBulkBothBusy(true);
-    setScrapeFlash(null);
-    setDoneKey(null);
+  const runImportOnly = useCallback(async () => {
+    if (importBusy) return;
+    setImportBusy(true);
+    setFlash(null);
     try {
-      setScrapeFlash({
-        kind: "ok",
-        text: "A correr as duas coletas (script scrape-both) e a consolidar output/dados_*.json…"
-      });
-      const bothBody = await apiPost("/scrape/run-both", {});
-      setScrapeFlash({
-        kind: "ok",
-        text: `Colectas e consolidação concluídas.${scrapeRunSummary(bothBody)} A sincronizar JSON → Postgres (import)…`
-      });
       const imp = await apiPost("/analytics/import-output", {});
       await reloadCategories();
       const impObj = /** @type {Record<string, unknown>} */ (imp);
@@ -275,31 +139,27 @@ export default function CategoriesPage() {
       const impMsg = typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
       const detailLines = linesFromImportDetail(impObj?.detail);
       if (skipped) {
-        setScrapeFlash({
+        setFlash({
           kind: "info",
           text:
             impMsg ||
-            "Import ignorado (mesmo input_hash): as duas coletas e a consolidação terminaram, mas a base não mudou — os números/datas dos cartões ficam iguais.",
+            "Import ignorado: o JSON é idêntico ao último import (input_hash). A base e os cartões não mudam até haver dados novos.",
           detailLines: detailLines.length ? detailLines : undefined
         });
       } else {
-        setScrapeFlash({
+        setFlash({
           kind: "ok",
-          text: "Duas categorias colectadas, consolidadas, base actualizada e lista recarregada.",
+          text: "Base actualizada a partir do JSON e lista de categorias recarregada.",
           detailLines: detailLines.length ? detailLines : undefined
         });
-        setDoneKey("__both__");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setScrapeFlash({
-        kind: "err",
-        text: `Fluxo duas categorias falhou: ${msg}`
-      });
+      setFlash({ kind: "err", text: `Import falhou: ${msg} Corra na raiz: npm run db:import:output` });
     } finally {
-      setBulkBothBusy(false);
+      setImportBusy(false);
     }
-  }, [reloadCategories]);
+  }, [importBusy, reloadCategories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -350,48 +210,72 @@ export default function CategoriesPage() {
               <button
                 type="button"
                 className="tk-btn-soft"
-                disabled={workflowBusy}
-                title={
-                  bulkLockedByCard
-                    ? "Aguarde: já há um scrape ou import a correr num cartão. Este botão fica bloqueado como os outros cartões."
-                    : "Equiv. a `npm run coleta` sem passos extra: duas URLs fixas em scripts/scrape-both.mjs, depois consolidação e import."
-                }
-                onClick={() => void runBothCategories()}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem"
-                }}
+                disabled={importBusy}
+                title="Importa output/dados_*.json para Postgres (não executa TikTok/Puppeteer)."
+                onClick={() => void runImportOnly()}
               >
-                {bulkLockedByCard ? <ScrapeLockGlyph /> : null}
-                {bulkBothBusy ? "A correr duas…" : "Scrapear as duas categorias"}
+                {importBusy ? "A importar…" : "Importar JSON → BD"}
               </button>
             ) : null}
+            <button
+              type="button"
+              className="tk-btn-soft"
+              disabled={status !== "ok" || importBusy}
+              title="Recarrega os cartões a partir da API."
+              onClick={() => void reloadCategories()}
+            >
+              Recarregar
+            </button>
             <Link to="/analytics" style={{ color: "var(--tk-accent)" }}>
               Analytics global →
             </Link>
           </span>
         </div>
 
-        {scrapeFlash ? (
+        <div style={{ marginTop: "0.65rem", maxWidth: "56rem" }}>
+          <p style={{ margin: 0, fontSize: "0.82rem", opacity: 0.88, lineHeight: 1.5 }}>
+            <strong>Coleta automática desativada.</strong> Use o modo assistido pelo terminal.
+          </p>
+          <pre
+            style={{
+              margin: "0.5rem 0 0",
+              padding: "0.55rem 0.65rem",
+              fontSize: "0.78rem",
+              lineHeight: 1.4,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              color: "var(--tk-text-muted)",
+              background: "rgba(0,0,0,0.18)",
+              borderRadius: "6px",
+              border: "1px solid rgba(255,255,255,0.06)"
+            }}
+          >
+            {ASSISTED_COMMAND}
+          </pre>
+          <p style={{ margin: "0.45rem 0 0", fontSize: "0.78rem", opacity: 0.82, lineHeight: 1.5 }}>
+            O navegador abrirá em <code>/br/c</code>. Navegue manualmente até a subcategoria final, pressione ENTER no terminal e depois importe o JSON para o banco.
+          </p>
+        </div>
+
+        {flash ? (
           <div style={{ marginTop: "0.65rem", maxWidth: "52rem" }}>
             <p
-              role={scrapeFlash.kind === "err" ? "alert" : "status"}
+              role={flash.kind === "err" ? "alert" : "status"}
               style={{
                 margin: 0,
                 fontSize: "0.86rem",
                 color:
-                  scrapeFlash.kind === "err"
+                  flash.kind === "err"
                     ? "var(--tk-danger)"
-                    : scrapeFlash.kind === "info"
+                    : flash.kind === "info"
                       ? "#fbbf24"
                       : "var(--tk-accent)",
                 lineHeight: 1.45
               }}
             >
-              {scrapeFlash.text}
+              {flash.text}
             </p>
-            {scrapeFlash.detailLines && scrapeFlash.detailLines.length > 0 ? (
+            {flash.detailLines && flash.detailLines.length > 0 ? (
               <pre
                 style={{
                   margin: "0.45rem 0 0",
@@ -406,7 +290,7 @@ export default function CategoriesPage() {
                   border: "1px solid rgba(255,255,255,0.06)"
                 }}
               >
-                {scrapeFlash.detailLines.join("\n")}
+                {flash.detailLines.join("\n")}
               </pre>
             ) : null}
           </div>
@@ -448,8 +332,6 @@ export default function CategoriesPage() {
                 categoryUrl: String(row.categoryUrl ?? row.categoryKey ?? key),
                 categoryTitle: label
               };
-
-              const scrapeTargetUrl = String(row.categoryUrl ?? row.categoryKey ?? key).trim();
 
               const jt = row.lastRunJsonTotal != null ? Number(row.lastRunJsonTotal) : NaN;
               const imp = row.lastImportProductCount != null ? Number(row.lastImportProductCount) : NaN;
@@ -591,32 +473,10 @@ export default function CategoriesPage() {
                     <button
                       type="button"
                       className="tk-category-card__scrape"
-                      disabled={workflowBusy}
-                      title={
-                        workflowBusy && scrapingKey !== key && importingKey !== key
-                          ? "Outro scrape, import ou fluxo «duas categorias» está em curso — aguarde."
-                          : "Scrape (JSON) + import para Postgres; pode demorar vários minutos"
-                      }
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void runScrapeForUrl(scrapeTargetUrl, key);
-                      }}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "0.3rem"
-                      }}
+                      disabled
+                      title="Coleta automática desativada. Use o modo assistido pelo terminal."
                     >
-                      {workflowBusy && scrapingKey !== key && importingKey !== key ? <ScrapeLockGlyph /> : null}
-                      {scrapingKey === key
-                        ? "A scrapear…"
-                        : importingKey === key
-                          ? "A importar…"
-                          : doneKey === key
-                            ? "Concluído ✓"
-                            : "Scrapear"}
+                      Coleta desativada
                     </button>
                     <Link to={to} state={statePayload} className="tk-category-card__cta">
                       Abrir análise →
