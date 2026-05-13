@@ -1619,7 +1619,7 @@ function TableTop({ data }) {
                   borderBottom: "1px solid var(--tk-border)",
                   cursor: hasProductId ? "pointer" : "default"
                 }}
-                title={hasProductId ? "Clique na linha para abrir o workspace (excepto link TikTok / Exportar)" : undefined}
+                title={hasProductId ? "Clique na linha para abrir o workspace (excepto Abrir no TikTok / Exportar)" : undefined}
                 onClick={(e) => {
                   if (!hasProductId) return;
                   if (isInteractiveTableCellClick(e)) return;
@@ -1631,7 +1631,7 @@ function TableTop({ data }) {
                   {hasProductId ? (
                     <Link
                       to={`/produto/${encodeURIComponent(pidStr)}`}
-                      title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                      title={nomeTitle ?? "Abrir workspace deste produto"}
                       style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                     >
                       {row.nome ?? "—"}
@@ -1674,7 +1674,7 @@ function TableTop({ data }) {
                 <td>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
-                      abrir
+                      Abrir no TikTok
                     </a>
                   ) : (
                     "—"
@@ -2143,7 +2143,7 @@ function TableOpp({ data }) {
                       borderBottom: "1px solid var(--tk-border)",
                       cursor: hasProductId ? "pointer" : "default"
                     }}
-                    title={hasProductId ? "Clique na linha para abrir o workspace (excepto link TikTok / Exportar)" : undefined}
+                    title={hasProductId ? "Clique na linha para abrir o workspace (excepto Abrir no TikTok / Exportar)" : undefined}
                     onClick={(e) => {
                       if (!hasProductId) return;
                       if (isInteractiveTableCellClick(e)) return;
@@ -2156,7 +2156,7 @@ function TableOpp({ data }) {
                         {hasProductId ? (
                           <Link
                             to={`/produto/${encodeURIComponent(pidStr)}`}
-                            title={nomeTitle ?? "Abrir página de trabalho deste produto"}
+                            title={nomeTitle ?? "Abrir workspace deste produto"}
                             style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                           >
                             {row.nome ?? "—"}
@@ -2195,7 +2195,7 @@ function TableOpp({ data }) {
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
-                    abrir
+                    Abrir no TikTok
                   </a>
                 ) : (
                   "—"
@@ -2532,7 +2532,7 @@ function TableScore({ data }) {
         que ainda passam pelo painel de cima.{" "}
         <span style={{ opacity: 0.85 }}>Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.</span>{" "}
         <span style={{ opacity: 0.88, display: "block", marginTop: "0.25rem" }}>
-          <strong>Workspace:</strong> clique na linha (excepto nome já-link, PDP, Exportar ou link TikTok) para abrir <code>/produto/…</code>.
+          <strong>Workspace:</strong> clique na linha (excepto nome já-link, PDP, Exportar ou Abrir no TikTok) para abrir <code>/produto/…</code>.
         </span>
       </p>
       {filtersScoreExcelActive && scoreTicketFiltered.length > 0 ? (
@@ -2777,7 +2777,7 @@ function TableScore({ data }) {
                 borderBottom: "1px solid var(--tk-border)",
                 cursor: pidStr ? "pointer" : "default"
               }}
-              title={pidStr ? "Clique na linha para abrir o workspace (excepto link / Enviar)" : undefined}
+              title={pidStr ? "Clique na linha para abrir o workspace (excepto Abrir no TikTok / Enviar para análise)" : undefined}
               onClick={(e) => {
                 if (!pidStr) return;
                 if (isInteractiveTableCellClick(e)) return;
@@ -2791,7 +2791,7 @@ function TableScore({ data }) {
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
                 <Link
                   to={`/produto/${encodeURIComponent(row.productId)}`}
-                  title="Abrir página de trabalho deste produto"
+                  title="Abrir workspace deste produto"
                   style={{ color: "var(--tk-accent)", textDecoration: "none", fontWeight: 500 }}
                 >
                   {row.nome}
@@ -2826,7 +2826,7 @@ function TableScore({ data }) {
               <td>
                 {row.link ? (
                   <a href={row.link} target="_blank" rel="noopener noreferrer">
-                    abrir
+                    Abrir no TikTok
                   </a>
                 ) : (
                   "—"
@@ -2867,7 +2867,7 @@ function TableGrowth({ data }) {
         browser). Vista global ou filtrada por <code>categoryUrl</code> na API.
       </p>
       <p style={{ ...introLead, marginTop: "0.35rem", fontSize: "0.82rem", opacity: 0.9 }}>
-        <strong>Workspace:</strong> clique em qualquer ponto da linha (excepto o link «abrir» TikTok) para abrir{" "}
+        <strong>Workspace:</strong> clique em qualquer ponto da linha (excepto o link «Abrir no TikTok») para abrir{" "}
         <code>/produto/…</code> quando houver <code>productId</code>.
       </p>
       <div style={introWarn}>
@@ -2985,7 +2985,7 @@ function TableGrowth({ data }) {
                 <td style={{ padding: "0.35rem 0.45rem" }}>
                   {link ? (
                     <a href={link} target="_blank" rel="noopener noreferrer">
-                      abrir
+                      Abrir no TikTok
                     </a>
                   ) : (
                     "—"
@@ -3046,7 +3046,7 @@ function TableCategoryMap({ data }) {
       <p style={{ margin: "0.55rem 0 0", lineHeight: 1.55, fontSize: "0.82rem", opacity: 0.9 }}>
         A <strong>primeira tabela</strong> (pastas / subcategorias) é <strong>só agregação</strong> — não há um produto por linha, por isso{" "}
         <strong>não</strong> abre workspace ao clicar. Na segunda tabela (<strong>SKU em destaque</strong>), cada linha é um produto: clique na linha (excepto{" "}
-        <strong>Exportar</strong> ou link TikTok) para abrir <code>/produto/…</code>.
+        <strong>Exportar</strong> ou Abrir no TikTok) para abrir <code>/produto/…</code>.
       </p>
     </IntroCard>
   );
@@ -3481,7 +3481,7 @@ function TableCategoryMap({ data }) {
           Arraste a borda entre colunas nos cabeçalhos para ajustar a largura.
         </span>
         <span style={{ opacity: 0.88, display: "block", marginTop: "0.25rem" }}>
-          <strong>Workspace:</strong> clique na linha (excepto export ou link «abrir») quando existir <code>productId</code>.
+          <strong>Workspace:</strong> clique na linha (excepto Exportar ou link «Abrir no TikTok») quando existir <code>productId</code>.
         </span>
       </p>
       {mapTopFiltersExcelActive && flatTops.length > 0 ? (
@@ -3759,7 +3759,7 @@ function TableCategoryMap({ data }) {
                 <td style={tdStyle}>
                   {row.link ? (
                     <a href={row.link} target="_blank" rel="noopener noreferrer">
-                      abrir
+                      Abrir no TikTok
                     </a>
                   ) : (
                     "—"
@@ -3914,7 +3914,7 @@ function TableScalableSections({ data }) {
         só os ~30 primeiro da vista Product Score.
       </p>
       <p style={{ margin: "0 0 0.55rem", lineHeight: 1.55, fontSize: "0.82rem", opacity: 0.9 }}>
-        <strong>Workspace:</strong> em cada lista abaixo, clique na linha (excepto <strong>Exportar</strong> ou link «abrir») para abrir{" "}
+        <strong>Workspace:</strong> em cada lista abaixo, clique na linha (excepto <strong>Exportar</strong> ou link «Abrir no TikTok») para abrir{" "}
         <code>/produto/…</code>.
       </p>
       <div style={introWarn}>
@@ -4023,7 +4023,7 @@ function TableScalableSections({ data }) {
         <td>
           {row.link ? (
             <a href={row.link} target="_blank" rel="noopener noreferrer">
-              abrir
+              Abrir no TikTok
             </a>
           ) : (
             "—"

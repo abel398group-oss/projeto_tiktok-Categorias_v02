@@ -445,7 +445,7 @@ export default function HandsOnPage() {
           <strong>Workspace operacional</strong> — lista manual de produtos <strong>escolhidos</strong> a partir do <strong>Product Score</strong>.
         </p>
         <p style={{ fontSize: "0.78rem", opacity: 0.78, margin: "0 0 1rem", maxWidth: "44rem", lineHeight: 1.5 }}>
-          Esta página não executa scraping nem abre navegador. As ações disponíveis são: abrir workspace, abrir no TikTok, iniciar PDP enrich e exportar imagens para Spaces.
+          Esta página não executa scraping nem abre navegador. As ações disponíveis são: Abrir workspace, Abrir no TikTok, Enriquecer PDP e Exportar.
         </p>
 
         {tabBar}
@@ -567,7 +567,7 @@ export default function HandsOnPage() {
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "stretch", minWidth: "10rem" }}>
                         <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
-                          Abrir produto
+                          Abrir workspace
                         </Link>
                         <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" style={btnOpen}>
                           Abrir no TikTok
@@ -849,7 +849,7 @@ export default function HandsOnPage() {
                         }}
                       >
                         <Link to={`/produto/${encodeURIComponent(r.productId)}`} title="Abrir workspace do produto" style={btnOpen}>
-                          Abrir produto
+                          Abrir workspace
                         </Link>
                         <PdpEnrichButton productId={r.productId} />
                       </div>
