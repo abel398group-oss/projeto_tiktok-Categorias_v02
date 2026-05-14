@@ -468,9 +468,13 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   }
 
   const { product, snap } = resolved;
+  const pdpOnly = extractOrderedImageUrls({ pdpImages: snap.pdpImages }).filter(
+    (u) => typeof u === "string" && u.trim().startsWith("http")
+  );
+  const shouldEnrich = pdpOnly.length < 3;
+
   let urls = extractOrderedImageUrls(snap);
-  const hasAny = urls.some((u) => typeof u === "string" && u.trim().startsWith("http"));
-  if (!hasAny) {
+  if (shouldEnrich) {
     const r1 = await runNpmScript("pdp:enrich", [`--ids=${productIdRaw}`]);
     if (r1.exitCode !== 0) {
       const tail = r1.log.replace(/\r\n/g, "\n").trimEnd().split("\n").slice(-12).join("\n");
