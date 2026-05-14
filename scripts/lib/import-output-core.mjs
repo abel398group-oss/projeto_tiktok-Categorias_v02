@@ -228,6 +228,11 @@ export async function importOutputFromStrings(prisma, opts) {
           ? item.fotos_pdp
           : null;
 
+    const productDescription =
+      typeof item.productDescription === "string" && item.productDescription.trim()
+        ? item.productDescription.trim()
+        : null;
+
     await prisma.productSnapshot.create({
       data: {
         capturedAt: t,
@@ -244,7 +249,7 @@ export async function importOutputFromStrings(prisma, opts) {
         votesByStar: toJson(item.votos_por_estrela),
         images: toJson(snapshotImages),
         pdpImages: toJson(item.fotos_pdp),
-        dataQuality: null,
+        dataQuality: productDescription ? { productDescription } : null,
         productRefId: row.id,
         scrapeRunId
       }

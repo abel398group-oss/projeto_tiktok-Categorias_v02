@@ -473,6 +473,35 @@ fastify.post("/analytics/export-local", async (req, reply) => {
       .map((u) => u.trim())
       .filter((u) => u.startsWith("http"));
 
+  const descriptionFromSnap = (snap) => {
+    const dq = snap?.dataQuality;
+    if (!dq || typeof dq !== "object") return null;
+    const v = dq.productDescription;
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return t ? t : null;
+  };
+
+  const descriptionFromOutputJson = async () => {
+    try {
+      const p = path.join(repoRoot, "output", "dados_produtos.json");
+      const raw = await fsp.readFile(p, "utf8");
+      const payload = JSON.parse(raw);
+      const itens = Array.isArray(payload?.itens) ? payload.itens : [];
+      for (const it of itens) {
+        const id = it?.product_id != null ? String(it.product_id).trim() : "";
+        if (id !== productIdRaw) continue;
+        const v = it?.productDescription;
+        if (typeof v !== "string") return null;
+        const t = v.trim();
+        return t ? t : null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const pdpHttpUrlsFrom = (snap) =>
     asHttpUrls(extractOrderedImageUrls({ pdpImages: snap?.pdpImages ?? null }));
 
@@ -541,6 +570,12 @@ fastify.post("/analytics/export-local", async (req, reply) => {
 
   const link = typeof product.productUrl === "string" && product.productUrl.trim() ? product.productUrl.trim() : null;
   const linkOut = link || `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(productIdRaw)}`;
+  let linkMobile = linkOut;
+  try {
+    const u = new URL(linkOut);
+    linkMobile = `tiktok://www.tiktok.com${u.pathname}`;
+  } catch {
+  }
 
   const ts = new Date().toISOString();
   const written = [];
@@ -564,6 +599,7 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   const linkTxtName = `link_${productIdRaw}.txt`;
   const urlName = `produto_${productIdRaw}.url`;
   const produtoTxtName = `produto_${productIdRaw}.txt`;
+  const descricaoTxtName = `descricao_${productIdRaw}.txt`;
   const metaName = `metadata_${productIdRaw}.json`;
 
   await fsp.writeFile(path.join(productDir, linkTxtName), `${linkOut}\r\n`, "utf8");
@@ -591,6 +627,8 @@ fastify.post("/analytics/export-local", async (req, reply) => {
 
   const categoriaUrl = product.categoryUrl ?? null;
   const categoriaLabel = categoryLabelFromUrl(categoriaUrl);
+  const productDescription =
+    descriptionFromSnap(snap) ?? (await descriptionFromOutputJson());
 
   const meta = {
     productId: productIdRaw,
@@ -611,7 +649,7 @@ fastify.post("/analytics/export-local", async (req, reply) => {
       images: { total: list.length, saved: written.length, failed: failed.length }
     },
     content: {
-      description: null,
+      description: productDescription,
       hooks: [],
       hashtags: [],
       cta: [],
@@ -622,6 +660,20 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     }
   };
   await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
+  const descLines = [];
+  descLines.push("Produto:");
+  descLines.push(nome || "—");
+  descLines.push("");
+  descLines.push("Descrição:");
+  descLines.push(productDescription ?? "—");
+  descLines.push("");
+  descLines.push("Link web:");
+  descLines.push(linkOut);
+  descLines.push("");
+  descLines.push("Link mobile:");
+  descLines.push(linkMobile);
+  descLines.push("");
+  await fsp.writeFile(path.join(productDir, descricaoTxtName), `${descLines.join("\r\n")}\r\n`, "utf8");
 
   const lines = [];
   lines.push("Produto:");
