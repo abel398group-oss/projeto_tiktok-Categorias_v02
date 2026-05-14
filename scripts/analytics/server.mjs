@@ -459,21 +459,38 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   const docsDir = await pickDocumentsDir();
   const baseDir = path.join(docsDir, "Scraper-TikTok-Produtos");
 
-  let resolved = await resolveProductSnapshotForExport(productIdRaw);
-  if ("error" in resolved) {
-    const { error, message } = resolved;
+  let current = await resolveProductSnapshotForExport(productIdRaw);
+  if ("error" in current) {
+    const { error, message } = current;
     if (error === "bad_request") return reply.code(400).send({ ok: false, error, message });
     if (error === "not_found" || error === "no_snapshot") return reply.code(404).send({ ok: false, error, message });
     return reply.code(503).send({ ok: false, error, message });
   }
 
-  const { product, snap } = resolved;
-  const pdpOnly = extractOrderedImageUrls({ pdpImages: snap.pdpImages }).filter(
-    (u) => typeof u === "string" && u.trim().startsWith("http")
-  );
+  const asHttpUrls = (urls) =>
+    (Array.isArray(urls) ? urls : [])
+      .filter((u) => typeof u === "string")
+      .map((u) => u.trim())
+      .filter((u) => u.startsWith("http"));
+
+  const pdpHttpUrlsFrom = (snap) =>
+    asHttpUrls(extractOrderedImageUrls({ pdpImages: snap?.pdpImages ?? null }));
+
+  const dedupe = (urls) => {
+    const out = [];
+    const seen = new Set();
+    for (const u of urls) {
+      if (seen.has(u)) continue;
+      seen.add(u);
+      out.push(u);
+    }
+    return out;
+  };
+
+  let { product, snap } = current;
+  let pdpOnly = pdpHttpUrlsFrom(snap);
   const shouldEnrich = pdpOnly.length < 3;
 
-  let urls = extractOrderedImageUrls(snap);
   if (shouldEnrich) {
     const r1 = await runNpmScript("pdp:enrich", [`--ids=${productIdRaw}`]);
     if (r1.exitCode !== 0) {
@@ -495,19 +512,22 @@ fastify.post("/analytics/export-local", async (req, reply) => {
         logTail: tail
       });
     }
-    resolved = await resolveProductSnapshotForExport(productIdRaw);
-    if ("error" in resolved) {
-      return reply.code(503).send({ ok: false, error: resolved.error, message: resolved.message });
+    current = await resolveProductSnapshotForExport(productIdRaw);
+    if ("error" in current) {
+      return reply.code(503).send({ ok: false, error: current.error, message: current.message });
     }
-    urls = extractOrderedImageUrls(resolved.snap);
+    product = current.product;
+    snap = current.snap;
+    pdpOnly = pdpHttpUrlsFrom(snap);
   }
 
-  const list = urls.filter((u) => typeof u === "string" && u.trim().startsWith("http")).map((u) => u.trim());
+  const allUrls = asHttpUrls(extractOrderedImageUrls(snap));
+  const list = dedupe(pdpOnly.length > 0 ? pdpOnly : allUrls);
   if (list.length === 0) {
     return reply.code(409).send({
       ok: false,
       error: "no_images",
-      message: "Não há imagens disponíveis para exportar localmente (pdpImages vazio)."
+      message: "Não há imagens HTTP válidas disponíveis para exportar localmente."
     });
   }
 
