@@ -1633,18 +1633,21 @@ function TableTop({ data }) {
                 }}
               >
                 <td style={tdPosStyle}>{pos}</td>
-                <td>
-                  {hasProductId ? (
-                    <Link
-                      to={`/produto/${encodeURIComponent(pidStr)}`}
-                      title={nomeTitle ?? "Abrir workspace deste produto"}
-                      className="tk-link-workspace"
-                    >
-                      {row.nome ?? "—"}
-                    </Link>
-                  ) : (
-                    <span title={nomeTitle}>{row.nome ?? "—"}</span>
-                  )}
+                <td style={{ verticalAlign: "middle" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                    {hasProductId ? (
+                      <Link
+                        to={`/produto/${encodeURIComponent(pidStr)}`}
+                        title={nomeTitle ?? "Abrir workspace deste produto"}
+                        className="tk-link-workspace"
+                      >
+                        {row.nome ?? "—"}
+                      </Link>
+                    ) : (
+                      <span title={nomeTitle}>{row.nome ?? "—"}</span>
+                    )}
+                    <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
+                  </div>
                 </td>
                 <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
                   {catCellPt(row.categoriaPrincipal)}
@@ -4040,7 +4043,12 @@ function TableScalableSections({ data }) {
           }}
         >
         <td style={tdPosStyle}>{i + 1}</td>
-        <td>{row.nome}</td>
+        <td style={{ verticalAlign: "middle" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+            <span>{row.nome ?? "—"}</span>
+            <ProductLabelsChips row={/** @type {Record<string, unknown>} */ (row)} />
+          </div>
+        </td>
         <td style={tdEllipsis} title={typeof row.categoriaPrincipal === "string" ? row.categoriaPrincipal : undefined}>
           {catCellPt(row.categoriaPrincipal)}
         </td>

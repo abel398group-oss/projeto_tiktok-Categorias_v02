@@ -288,6 +288,7 @@ export default function HandsOnPage() {
               nome: typeof p.nome === "string" ? p.nome : undefined,
               link: typeof p.link === "string" ? p.link : null,
               hasPdpImages: Boolean(p.hasPdpImages),
+              enriched: Boolean(p.enriched),
               error: null,
               workspaceNote: note
             };
@@ -299,6 +300,7 @@ export default function HandsOnPage() {
               rating: "—",
               link: null,
               hasPdpImages: false,
+              enriched: false,
               error: typeof r.err === "string" ? r.err : "—",
               workspaceNote: null
             };
@@ -567,7 +569,7 @@ export default function HandsOnPage() {
                               EXPORTADO
                             </span>
                           ) : null}
-                          {d?.hasPdpImages ? (
+                          {d?.enriched || d?.hasPdpImages ? (
                             <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(168, 85, 247, 0.16)", color: "#f0d7ff" }}>
                               PDP enriquecido
                             </span>

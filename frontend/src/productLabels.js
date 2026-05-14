@@ -98,6 +98,10 @@ export function deriveProductLabels(row) {
     /** @type {ProductUiLabel[]} */
     const out = [];
 
+    if (r.enriched === true || r.hasPdpImages === true) {
+      out.push({ id: "enriched", emoji: "✅", label: "PDP enriquecido" });
+    }
+
     if (hasPositiveGrowth(r)) {
       out.push({ id: "crescendo", emoji: "🔥", label: "Crescendo" });
     }

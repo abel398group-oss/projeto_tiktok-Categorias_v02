@@ -10,6 +10,7 @@
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
+import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 
 export const OPPORTUNITIES_DEFAULT_LIMIT = 20;
 export const OPPORTUNITIES_MAX_LIMIT = 10000;
@@ -238,6 +239,14 @@ function snapshotMatchesBelowMedian(s, medianMap) {
  */
 function snapshotToOpportunityRow(s, motivo) {
   const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
+  const enriched =
+    s?.dataQuality &&
+    typeof s.dataQuality === "object" &&
+    s.dataQuality.enrichment &&
+    typeof s.dataQuality.enrichment === "object" &&
+    s.dataQuality.enrichment.status === "enriched"
+      ? true
+      : hasAtLeastHttpPdpImages(s, 3);
   return {
     productId: s.product.productId,
     nome: (s.product.name ?? "").slice(0, 40),
@@ -249,6 +258,7 @@ function snapshotToOpportunityRow(s, motivo) {
     avalMed: s.ratingAverage,
     avalTot: s.ratingTotal,
     motivo,
+    enriched,
     link: s.product.productUrl ?? ""
   };
 }

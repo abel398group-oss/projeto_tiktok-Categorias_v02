@@ -8,6 +8,7 @@
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
+import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 
 const TOP_LIMIT = 30;
 
@@ -26,6 +27,7 @@ function toReportShape(line) {
     deltaVendas: line.deltaVendas,
     motivos: line.motivos,
     link: line.link,
+    enriched: Boolean(line.enriched),
     productId: line.productId
   };
 }
@@ -476,6 +478,14 @@ export function computeProductScoreLine(s, ctx) {
     avg != null ? `${avg}${typeof tot === "number" ? ` (${tot} aval)` : ""}` : "";
 
   const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
+  const enriched =
+    s?.dataQuality &&
+    typeof s.dataQuality === "object" &&
+    s.dataQuality.enrichment &&
+    typeof s.dataQuality.enrichment === "object" &&
+    s.dataQuality.enrichment.status === "enriched"
+      ? true
+      : hasAtLeastHttpPdpImages(s, 3);
 
   return {
     score: totalPts,
@@ -490,6 +500,7 @@ export function computeProductScoreLine(s, ctx) {
     deltaVendas: podeDelta && delta != null ? String(delta) : "—",
     motivos: motivosStr,
     link: s.product.productUrl ?? "",
+    enriched,
     productId: s.product.productId,
     /** @type {number | null} */
     ratingAverage: avg ?? null,

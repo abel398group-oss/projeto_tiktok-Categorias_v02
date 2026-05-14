@@ -4,7 +4,7 @@
  * Se não existir nesse run (produto aparece só noutras importações ou em visão por categoria), usa o
  * **snapshot mais recente** do mesmo produto.
  */
-import { extractOrderedImageUrls } from "../../lib/extract-image-urls.mjs";
+import { extractOrderedImageUrls, hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { computeProductScoreLine } from "./product-score.mjs";
 
@@ -109,6 +109,14 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     }
     return false;
   })();
+  const enriched =
+    snap?.dataQuality &&
+    typeof snap.dataQuality === "object" &&
+    snap.dataQuality.enrichment &&
+    typeof snap.dataQuality.enrichment === "object" &&
+    snap.dataQuality.enrichment.status === "enriched"
+      ? true
+      : hasAtLeastHttpPdpImages(snap, 3);
 
   /** @type {string | null} */
   let deltaHint = null;
@@ -157,6 +165,7 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     categoryUrl: product.categoryUrl ?? null,
     imageUrls,
     hasPdpImages,
+    enriched,
 
     currency: product.currency ?? null,
     sourcePlatform: product.sourcePlatform ?? null,

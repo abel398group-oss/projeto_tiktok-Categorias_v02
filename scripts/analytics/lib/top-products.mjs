@@ -11,6 +11,7 @@
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
+import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 
 export const TOP_PRODUCTS_DEFAULT_LIMIT = 20;
 export const TOP_PRODUCTS_MAX_LIMIT = 10000;
@@ -34,6 +35,14 @@ export function clampTopProductsLimit(raw) {
  */
 function snapshotToItemRow(s) {
   const { masterCategory: categoriaPrincipal, subcategory: subcategoria } = parseCategory(s.product?.categoryUrl);
+  const enriched =
+    s?.dataQuality &&
+    typeof s.dataQuality === "object" &&
+    s.dataQuality.enrichment &&
+    typeof s.dataQuality.enrichment === "object" &&
+    s.dataQuality.enrichment.status === "enriched"
+      ? true
+      : hasAtLeastHttpPdpImages(s, 3);
   return {
     productId: s.product.productId,
     nome: (s.product.name ?? "").trim() || "—",
@@ -43,6 +52,7 @@ function snapshotToItemRow(s) {
     preco: s.price,
     vendas: s.salesCount,
     avaliacao: s.ratingAverage != null ? s.ratingAverage : null,
+    enriched,
     link: s.product.productUrl ?? ""
   };
 }

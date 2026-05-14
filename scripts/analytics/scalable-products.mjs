@@ -82,6 +82,7 @@ function toRow(item, ratingStr) {
     preco: item.preco ?? null,
     delta: item.deltaVendas ?? "",
     link: item.link ?? "",
+    enriched: Boolean(item.enriched),
     decision: ap.decision
   };
 }
