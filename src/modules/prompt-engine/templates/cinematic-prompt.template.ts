@@ -27,7 +27,7 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
 
   const lines: string[] = [];
   lines.push(
-    `A premium cinematic commercial video featuring ${productName}, physically rigid and geometrically unchanged while performing a slow controlled cinematic showcase motion.`
+    `A premium cinematic commercial video featuring ${productName} as a static hero object, perfectly rigid, physically grounded, and geometrically unchanged during the entire shot.`
   );
   lines.push("");
   lines.push(
@@ -35,7 +35,7 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   );
   lines.push("");
   lines.push(
-    "The object may gently rotate, slightly tilt, slowly float, or perform elegant premium commercial presentation movements, but it must never perform its real-world function."
+    "The object itself must never rotate, spin, tilt, float, animate, or perform any motion. All cinematic movement must come exclusively from the camera choreography around the stationary product."
   );
   lines.push("");
   if (description) {
@@ -64,13 +64,14 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   lines.push("LIGHTING:");
   lines.push(String(ai.cinematicProfile.lighting));
   lines.push("");
+  lines.push("CAMERA MOTION:");
+  lines.push(`- Type: ${ai.cinematicProfile.cameraMotion.type}`);
+  lines.push(`- Intensity: ${ai.cinematicProfile.cameraMotion.intensity}`);
+  lines.push(`- Style: ${(ai.cinematicProfile.cameraMotion.style || []).join(", ") || "-"}`);
+  lines.push("");
   lines.push("PHYSICS:");
   lines.push(`- Rigidity: ${ai.physicsProfile.rigidity}`);
   lines.push(`- Allowed motion: ${ai.physicsProfile.allowedMotion}`);
-  lines.push(`- Showcase motion enabled: ${ai.physicsProfile.showcaseMotion.enabled}`);
-  lines.push(`- Showcase motion type: ${ai.physicsProfile.showcaseMotion.type}`);
-  lines.push(`- Showcase intensity: ${ai.physicsProfile.showcaseMotion.intensity}`);
-  lines.push(`- Allowed axes: ${(ai.physicsProfile.showcaseMotion.allowedAxes || []).join(", ") || "-"}`);
   lines.push(`- Deformation allowed: ${ai.physicsProfile.deformationAllowed}`);
   lines.push("");
   lines.push(toListBlock("MUST PRESERVE", mustPreserve));
@@ -78,7 +79,7 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   if (ai.visualCategory === "industrial_tools") {
     lines.push("INDUSTRIAL SAFETY RULES:");
     lines.push(
-      "The drill bits/discs may rotate slowly for cinematic presentation only. They must never drill, cut, penetrate materials, generate sparks, or perform real industrial operations."
+      "The tool must appear as a standalone premium commercial object. No drills, grinders, rotary machines, holders, mandrels, chucks, or attached industrial devices may appear. The product itself is the only hero object in the scene."
     );
     lines.push("");
   }
@@ -88,12 +89,15 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   }
   lines.push("SCENE DIRECTION:");
   lines.push(
-    "The product remains physically rigid and geometrically unchanged while performing a slow controlled cinematic showcase motion."
+    "The product remains completely static, rigid, physically grounded, and geometrically unchanged during the entire shot."
   );
   lines.push(
-    "The motion must be slow, elegant, premium, and controlled: gentle rotation, slight tilt, subtle floating, or small presentation movements."
+    "The object itself must never rotate, spin, tilt, float, animate, or perform any motion."
   );
-  lines.push("No functional operation. No high-speed spinning. No deformation. No wobbling. No chaotic motion.");
+  lines.push(
+    "All cinematic movement must come exclusively from the camera: slow orbit shots, macro parallax, dolly movement, hero arc shots, controlled push-ins, and premium commercial camera choreography around the stationary product."
+  );
+  lines.push("No functional operation. No deformation. No wobbling. No chaotic motion. No camera shake.");
   lines.push(
     "Use a slow cinematic macro push-in, subtle parallax, controlled reflections, premium lighting, realistic shadows, and high-end commercial product photography aesthetics."
   );

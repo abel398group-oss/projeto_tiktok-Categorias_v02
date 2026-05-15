@@ -10,21 +10,21 @@ export function buildStoryboard(aiCommercial: AiCommercial): Storyboard {
           duration: "3-5s",
           camera: "slow_push_in",
           description:
-            "Premium cinematic hero shot of the drill bit set on a dark premium industrial studio surface, emphasizing black metallic finish and rigid machined geometry."
+            "Static hero shot of the drill bit set on a dark premium industrial studio surface. The product stays perfectly still while the camera performs a slow premium orbit/push-in around it, emphasizing rigid machined geometry and controlled reflections."
         },
         {
           name: "Macro Detail",
           duration: "3-5s",
           camera: "macro_parallax",
           description:
-            "Extreme macro shot highlighting sharp carbide cross tips, spiral flute design, hex shank structure, machined metal reflections, and titanium-like coating."
+            "Extreme macro camera parallax highlighting sharp carbide cross tips, spiral flute design, hex shank structure, machined metal reflections, and premium coating details. The product remains completely static."
         },
         {
           name: "Final Showcase",
           duration: "3-5s",
           camera: "slow_orbit_or_push",
           description:
-            "Clean final showcase of the complete 7-piece drill bit set, perfectly aligned, static, rigid, and grounded, with cold metallic lighting and premium industrial reflections."
+            "Final static showcase of the complete 7-piece drill bit set, perfectly aligned and grounded. Use elegant camera choreography (slow orbit/dolly) and premium industrial lighting—no tool usage, no spinning, no attached devices."
         }
       ]
     };
@@ -37,23 +37,22 @@ export function buildStoryboard(aiCommercial: AiCommercial): Storyboard {
         duration: "3-5s",
         camera: "slow_push_in",
         description:
-          "Premium cinematic hero shot of the product on a clean studio surface, with controlled reflections and realistic shadows."
+          "Static hero object on a clean premium studio surface. The product stays perfectly still while the camera performs a slow push-in/orbit with controlled reflections and realistic shadows."
       },
       {
         name: "Macro Detail",
         duration: "3-5s",
         camera: "macro_parallax",
         description:
-          "Macro detail shot highlighting the most important product materials, surface finish, geometry, and premium visual characteristics."
+          "Macro camera parallax highlighting the most important materials, surface finish, geometry, and premium visual characteristics. The object remains completely static."
       },
       {
         name: "Final Showcase",
         duration: "3-5s",
         camera: "slow_orbit_or_push",
         description:
-          "Final clean product showcase with stable framing, premium lighting, and strong commercial composition."
+          "Final clean showcase with elegant camera orbit/dolly movement, stable framing, premium lighting, and strong commercial composition around the stationary product."
       }
     ]
   };
 }
-

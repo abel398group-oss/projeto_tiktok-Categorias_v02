@@ -18,7 +18,8 @@ export const FASHION_RULES: TaxonomyRule[] = [
       cinematicProfile: {
         style: "editorial_fashion_motion",
         camera: "unknown",
-        lighting: "soft_editorial_studio"
+        lighting: "soft_editorial_studio",
+        cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
       },
       visualRules: {
         mustPreserve: [],
@@ -27,4 +28,3 @@ export const FASHION_RULES: TaxonomyRule[] = [
     })
   }
 ];
-

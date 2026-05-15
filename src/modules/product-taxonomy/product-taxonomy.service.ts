@@ -52,13 +52,13 @@ export class ProductTaxonomyService {
       subcategory: "unknown",
       materials: [],
       surfaceFinish: [],
-      cinematicProfile: { style: "unknown", camera: "unknown", lighting: "unknown" },
-      physicsProfile: {
-        rigidity: "unknown",
-        allowedMotion: "unknown",
-        showcaseMotion: { enabled: false, type: "none", intensity: "none", allowedAxes: [] },
-        deformationAllowed: false
+      cinematicProfile: {
+        style: "unknown",
+        camera: "unknown",
+        lighting: "unknown",
+        cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
       },
+      physicsProfile: { rigidity: "unknown", allowedMotion: "camera_only", deformationAllowed: false },
       visualRules: { mustPreserve: [], mustAvoid: [] }
     };
   }

@@ -7,7 +7,10 @@ const GLOBAL_NEGATIVES = [
   "no body parts",
   "no morphing",
   "no deformation",
-  "no uncontrolled floating",
+  "no rotating product",
+  "no spinning object",
+  "no floating product",
+  "no animated product",
   "no unrealistic physics",
   "no high-speed spinning",
   "no broken geometry",
@@ -50,6 +53,19 @@ function uniq(lines: string[]): string[] {
 
 export function buildNegativePrompt(aiCommercial: AiCommercial): string {
   const mustAvoid = Array.isArray(aiCommercial?.visualRules?.mustAvoid) ? aiCommercial.visualRules.mustAvoid : [];
-  const lines = uniq([...GLOBAL_NEGATIVES, ...mustAvoid]);
+  const industrialExtras =
+    aiCommercial?.visualCategory === "industrial_tools"
+      ? [
+          "no drill machine",
+          "no grinder",
+          "no rotary tool",
+          "no power tool body",
+          "no chuck",
+          "no mandrel",
+          "no industrial device attached"
+        ]
+      : [];
+
+  const lines = uniq([...GLOBAL_NEGATIVES, ...industrialExtras, ...mustAvoid]);
   return lines.join("\n");
 }

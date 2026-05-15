@@ -29,6 +29,7 @@ import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
 import { getProductWorkspaceDetail } from "./lib/product-workspace.mjs";
 import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
+import { tryGenerateCommercialPromptOutputs } from "./lib/commercial-prompt-export.mjs";
 import { extractOrderedImageUrls } from "../lib/extract-image-urls.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
@@ -683,13 +684,19 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   };
   await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
 
+  const promptGeneration = await tryGenerateCommercialPromptOutputs({ repoRoot, productDir, metadata: meta });
+  if (!promptGeneration.success) {
+    console.error("[prompt-export] failed", { productId: productIdRaw, error: promptGeneration.error });
+  }
+
   return reply.send({
     ok: true,
     productId: productIdRaw,
     dir: productDir,
     imagesSaved: written.length,
     imagesFailed: failed.length,
-    link: linkOut
+    link: linkOut,
+    promptGeneration
   });
 });
 

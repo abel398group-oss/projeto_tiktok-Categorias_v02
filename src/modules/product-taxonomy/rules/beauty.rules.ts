@@ -18,7 +18,8 @@ export const BEAUTY_RULES: TaxonomyRule[] = [
       cinematicProfile: {
         style: "luxury_beauty_soft_reflections",
         camera: "unknown",
-        lighting: "warm_soft_premium_studio"
+        lighting: "warm_soft_premium_studio",
+        cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
       },
       visualRules: {
         mustPreserve: [],

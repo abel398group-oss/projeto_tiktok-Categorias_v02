@@ -31,8 +31,26 @@ export type LightingStyle =
   | "mixed"
   | "unknown";
 
+export type CameraMotionType = "camera_orbit_showcase" | "cinematic_orbit" | "unknown";
+
+export type CameraMotionIntensity = "slow" | "unknown";
+
+export type CameraMotionStyle =
+  | "macro_parallax"
+  | "dolly_orbit"
+  | "hero_arc_shot"
+  | "cinematic_push_in"
+  | "unknown";
+
+export interface CameraMotion {
+  type: CameraMotionType;
+  intensity: CameraMotionIntensity;
+  style: CameraMotionStyle[];
+}
+
 export interface CinematicProfile {
   style: CinematicStyle;
   camera: CameraStyle;
   lighting: LightingStyle;
+  cameraMotion: CameraMotion;
 }

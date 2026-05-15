@@ -18,7 +18,8 @@ export const ELECTRONICS_RULES: TaxonomyRule[] = [
       cinematicProfile: {
         style: "premium_tech_showcase",
         camera: "unknown",
-        lighting: "dark_futuristic_reflections"
+        lighting: "dark_futuristic_reflections",
+        cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
       },
       visualRules: {
         mustPreserve: [],
@@ -27,4 +28,3 @@ export const ELECTRONICS_RULES: TaxonomyRule[] = [
     })
   }
 ];
-

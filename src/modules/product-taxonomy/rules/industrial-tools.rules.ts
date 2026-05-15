@@ -27,12 +27,12 @@ export const INDUSTRIAL_TOOLS_RULES: TaxonomyRule[] = [
       cinematicProfile: {
         style: "luxury_industrial_macro",
         camera: "slow_push_in",
-        lighting: "dark_premium_studio"
+        lighting: "dark_premium_studio",
+        cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
       },
       physicsProfile: {
         rigidity: "extreme",
-        allowedMotion: "controlled_showcase_motion",
-        showcaseMotion: { enabled: true, type: "slow_product_rotation", intensity: "low", allowedAxes: ["y_axis", "slight_tilt", "vertical_lift"] },
+        allowedMotion: "camera_only",
         deformationAllowed: false
       },
       visualRules: {
