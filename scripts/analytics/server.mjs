@@ -15,6 +15,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import { getLatestAndPreviousRun, requireDatabaseUrl } from "./_common.mjs";
 import { getGrowthReport } from "./lib/growth.mjs";
 import { getNewProductsReport } from "./lib/new-products.mjs";
@@ -369,6 +370,19 @@ function pickImageExt(contentType, url) {
   return "bin";
 }
 
+async function convertImageForAi(buf, contentType, url) {
+  const originalExt = pickImageExt(contentType, url);
+  const img = sharp(buf, { failOnError: false });
+  const meta = await img.metadata();
+  const hasAlpha = Boolean(meta?.hasAlpha);
+  if (hasAlpha) {
+    const out = await img.png({ compressionLevel: 9 }).toBuffer();
+    return { buf: out, ext: "png", originalExt };
+  }
+  const out = await img.jpeg({ quality: 90 }).toBuffer();
+  return { buf: out, ext: "jpg", originalExt };
+}
+
 async function fetchImageBuffer(url) {
   const ctrl = new AbortController();
   const timeoutMs = 25000;
@@ -585,8 +599,8 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   for (let i = 0; i < list.length; i++) {
     const url = list[i];
     try {
-      const { buf, contentType } = await fetchImageBuffer(url);
-      const ext = pickImageExt(contentType, url);
+      const { buf: rawBuf, contentType } = await fetchImageBuffer(url);
+      const { buf, ext } = await convertImageForAi(rawBuf, contentType, url);
       const slot = String(i + 1).padStart(3, "0");
       const fname = `imagem-${slot}.${ext}`;
       const outPath = path.join(imagesDir, fname);

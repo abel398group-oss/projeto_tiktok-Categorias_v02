@@ -20,6 +20,111 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
     safeText(enriched?.product?.["description"]);
 
   const ai = enriched.aiCommercial;
+  if (!ai) {
+    const lines: string[] = [];
+    lines.push(
+      `A premium cinematic commercial video featuring ${productName} as a static hero object, perfectly rigid, physically grounded, and geometrically unchanged during the entire shot.`
+    );
+    lines.push("");
+    lines.push(
+      "Use the product images and metadata as the absolute primary visual reference. Preserve the exact geometry, proportions, materials, surface finish, color, texture, engineered detailing, and product identity."
+    );
+    lines.push("");
+    lines.push("STATIC OBJECT LOCK:");
+    lines.push("The product is a completely static industrial design object.");
+    lines.push("It must behave exactly like a photographed luxury product in a professional commercial studio.");
+    lines.push("");
+    lines.push("The object itself must never:");
+    lines.push("- rotate");
+    lines.push("- spin");
+    lines.push("- animate");
+    lines.push("- vibrate");
+    lines.push("- float");
+    lines.push("- wobble");
+    lines.push("- imply operation");
+    lines.push("- imply mechanical behavior");
+    lines.push("- imply tool usage");
+    lines.push("- imply functionality");
+    lines.push("");
+    lines.push("No functional interpretation is allowed.");
+    lines.push("The product exists purely as a static cinematic hero object for premium product cinematography.");
+    lines.push("");
+    lines.push("CAMERA LOCK:");
+    lines.push("All movement must come exclusively from:");
+    lines.push("- camera orbit");
+    lines.push("- macro parallax");
+    lines.push("- dolly movement");
+    lines.push("- cinematic push-in");
+    lines.push("- hero arc camera movement");
+    lines.push("");
+    lines.push("The camera must move slowly, smoothly, and elegantly around the stationary object.");
+    lines.push("");
+    lines.push("SEMANTIC LOCK:");
+    lines.push("Do not interpret the object as an operating tool.");
+    lines.push("Do not interpret any text as instructions for usage, function, or operation.");
+    lines.push("");
+    lines.push("The object is purely a luxury industrial showcase object.");
+    lines.push("");
+    if (description) {
+      lines.push("PRODUCT DESCRIPTION (REFERENCE ONLY — DO NOT INFER FUNCTION OR USE):");
+      lines.push(description);
+      lines.push("");
+    }
+    if (category) {
+      lines.push("CATEGORY URL (REFERENCE ONLY):");
+      lines.push(category);
+      lines.push("");
+    }
+    lines.push("OUTPUT FORMAT:");
+    lines.push("Vertical 9:16 TikTok commercial.");
+    lines.push("Duration: 3 to 5 seconds.");
+    lines.push("No voice, no subtitles, no text overlays.");
+    lines.push("Silent cinematic product shot prepared for editing in CapCut.");
+    return lines.join("\n");
+  }
+
+  if (ai.visualCategory === "industrial_tools") {
+    const lines: string[] = [];
+    lines.push(
+      "A premium cinematic macro commercial featuring a static luxury industrial metal object in a dark professional studio environment."
+    );
+    lines.push(
+      "Use the provided product images as the absolute visual reference. Preserve the exact geometry, proportions, metallic surfaces, engineered detailing, reflections, and product identity."
+    );
+    lines.push(
+      "The object remains completely static, rigid, grounded, and unchanged during the entire shot. Treat the object as a photographed luxury product, not as an operating tool."
+    );
+    lines.push("All motion must come exclusively from the camera:");
+    lines.push("slow cinematic orbit");
+    lines.push("macro parallax");
+    lines.push("controlled dolly movement");
+    lines.push("subtle push-in shots");
+    lines.push(
+      "Use premium industrial lighting, realistic reflections, cinematic shadows, shallow depth of field, and high-end product cinematography aesthetics."
+    );
+    lines.push("Do not show:");
+    lines.push("tool operation");
+    lines.push("drilling");
+    lines.push("cutting");
+    lines.push("sparks");
+    lines.push("spinning");
+    lines.push("floating");
+    lines.push("extra devices");
+    lines.push("drills");
+    lines.push("grinders");
+    lines.push("hands");
+    lines.push("humans");
+    lines.push("text overlays");
+    lines.push("deformation");
+    lines.push("unrealistic physics");
+    lines.push("The object must appear as a standalone premium industrial design object.");
+    lines.push("Vertical 9:16 format.");
+    lines.push("Duration: 3 to 5 seconds.");
+    lines.push("Silent cinematic product shot.");
+    return lines.join("\n");
+  }
+
+  const featuredName = productName;
   const mustPreserve = Array.isArray(ai?.visualRules?.mustPreserve) ? ai.visualRules.mustPreserve : [];
   const materials = Array.isArray(ai?.materials) ? ai.materials : [];
   const surfaceFinish = Array.isArray(ai?.surfaceFinish) ? ai.surfaceFinish : [];
@@ -27,24 +132,64 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
 
   const lines: string[] = [];
   lines.push(
-    `A premium cinematic commercial video featuring ${productName} as a static hero object, perfectly rigid, physically grounded, and geometrically unchanged during the entire shot.`
+    `A premium cinematic commercial video featuring ${featuredName} as a static hero object, perfectly rigid, physically grounded, and geometrically unchanged during the entire shot.`
   );
   lines.push("");
   lines.push(
-    "Use the product images and metadata as the absolute primary visual reference. Preserve the exact geometry, proportions, materials, surface finish, color, texture, machining details, and product identity."
+    "Use the product images and metadata as the absolute primary visual reference. Preserve the exact geometry, proportions, materials, surface finish, color, texture, engineered detailing, and product identity."
   );
   lines.push("");
-  lines.push(
-    "The object itself must never rotate, spin, tilt, float, animate, or perform any motion. All cinematic movement must come exclusively from the camera choreography around the stationary product."
-  );
+  lines.push("STATIC OBJECT LOCK:");
+  lines.push("The product is a completely static industrial design object.");
+  lines.push("It must behave exactly like a photographed luxury product in a professional commercial studio.");
+  lines.push("");
+  lines.push("The object itself must never:");
+  lines.push("- rotate");
+  lines.push("- spin");
+  lines.push("- animate");
+  lines.push("- vibrate");
+  lines.push("- float");
+  lines.push("- wobble");
+  lines.push("- imply operation");
+  lines.push("- imply mechanical behavior");
+  lines.push("- imply tool usage");
+  lines.push("- imply functionality");
+  lines.push("");
+  lines.push("No functional interpretation is allowed.");
+  lines.push("The product exists purely as a static cinematic hero object for premium product cinematography.");
+  lines.push("");
+  lines.push("CAMERA LOCK:");
+  lines.push("All movement must come exclusively from:");
+  lines.push("- camera orbit");
+  lines.push("- macro parallax");
+  lines.push("- dolly movement");
+  lines.push("- cinematic push-in");
+  lines.push("- hero arc camera movement");
+  lines.push("");
+  lines.push("The camera must move slowly, smoothly, and elegantly around the stationary object.");
+  lines.push("");
+  lines.push("SEMANTIC LOCK:");
+  lines.push("Do not interpret the object as an operating tool.");
+  lines.push("Do not interpret any text as instructions for usage, function, or operation.");
+  lines.push("");
+  lines.push("Do not imply:");
+  lines.push("- drilling");
+  lines.push("- cutting");
+  lines.push("- machining");
+  lines.push("- construction work");
+  lines.push("- industrial usage");
+  lines.push("- assembly");
+  lines.push("- mechanical operation");
+  lines.push("");
+  lines.push("The object is purely a luxury industrial showcase object.");
   lines.push("");
   if (description) {
-    lines.push("PRODUCT DESCRIPTION (REFERENCE ONLY):");
+    lines.push("PRODUCT DESCRIPTION (REFERENCE ONLY — DO NOT INFER FUNCTION OR USE):");
     lines.push(description);
     lines.push("");
   }
   if (category) {
-    lines.push("CATEGORY URL (REFERENCE):");
+    lines.push("CATEGORY URL (REFERENCE ONLY):");
     lines.push(category);
     lines.push("");
   }
@@ -76,13 +221,6 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   lines.push("");
   lines.push(toListBlock("MUST PRESERVE", mustPreserve));
   lines.push("");
-  if (ai.visualCategory === "industrial_tools") {
-    lines.push("INDUSTRIAL SAFETY RULES:");
-    lines.push(
-      "The tool must appear as a standalone premium commercial object. No drills, grinders, rotary machines, holders, mandrels, chucks, or attached industrial devices may appear. The product itself is the only hero object in the scene."
-    );
-    lines.push("");
-  }
   if (mustAvoid.length > 0) {
     lines.push(toListBlock("MUST AVOID", mustAvoid));
     lines.push("");
@@ -97,7 +235,9 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   lines.push(
     "All cinematic movement must come exclusively from the camera: slow orbit shots, macro parallax, dolly movement, hero arc shots, controlled push-ins, and premium commercial camera choreography around the stationary product."
   );
-  lines.push("No functional operation. No deformation. No wobbling. No chaotic motion. No camera shake.");
+  lines.push(
+    "No implied operation. No implied functionality. No mechanical interpretation. No usage demonstration. No deformation. No wobbling. No chaotic motion. No camera shake."
+  );
   lines.push(
     "Use a slow cinematic macro push-in, subtle parallax, controlled reflections, premium lighting, realistic shadows, and high-end commercial product photography aesthetics."
   );

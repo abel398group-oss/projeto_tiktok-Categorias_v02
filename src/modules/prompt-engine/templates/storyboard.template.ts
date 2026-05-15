@@ -10,21 +10,21 @@ export function buildStoryboard(aiCommercial: AiCommercial): Storyboard {
           duration: "3-5s",
           camera: "slow_push_in",
           description:
-            "Static hero shot of the drill bit set on a dark premium industrial studio surface. The product stays perfectly still while the camera performs a slow premium orbit/push-in around it, emphasizing rigid machined geometry and controlled reflections."
+            "Static hero shot of a precision machined metallic object set on a dark premium industrial studio surface. The objects stay perfectly still while the camera performs a slow premium orbit/push-in around them, emphasizing rigid engineered geometry and controlled reflections."
         },
         {
           name: "Macro Detail",
           duration: "3-5s",
           camera: "macro_parallax",
           description:
-            "Extreme macro camera parallax highlighting sharp carbide cross tips, spiral flute design, hex shank structure, machined metal reflections, and premium coating details. The product remains completely static."
+            "Extreme macro camera parallax highlighting engineered metallic geometry, helical metallic grooves, crisp edges and facets, premium surface reflections, and high-end coating-like finish details. The objects remain completely static."
         },
         {
           name: "Final Showcase",
           duration: "3-5s",
           camera: "slow_orbit_or_push",
           description:
-            "Final static showcase of the complete 7-piece drill bit set, perfectly aligned and grounded. Use elegant camera choreography (slow orbit/dolly) and premium industrial lighting—no tool usage, no spinning, no attached devices."
+            "Final static showcase of the full arranged set of precision machined metallic objects, perfectly aligned and grounded. Use elegant camera choreography (slow orbit/dolly) and premium industrial lighting—no implied operation, no mechanical interpretation, no spinning, no attached devices."
         }
       ]
     };
