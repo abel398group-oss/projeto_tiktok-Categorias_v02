@@ -53,9 +53,13 @@ export class ProductTaxonomyService {
       materials: [],
       surfaceFinish: [],
       cinematicProfile: { style: "unknown", camera: "unknown", lighting: "unknown" },
-      physicsProfile: { rigidity: "unknown", allowedMotion: "unknown", deformationAllowed: false },
+      physicsProfile: {
+        rigidity: "unknown",
+        allowedMotion: "unknown",
+        showcaseMotion: { enabled: false, type: "none", intensity: "none", allowedAxes: [] },
+        deformationAllowed: false
+      },
       visualRules: { mustPreserve: [], mustAvoid: [] }
     };
   }
 }
-

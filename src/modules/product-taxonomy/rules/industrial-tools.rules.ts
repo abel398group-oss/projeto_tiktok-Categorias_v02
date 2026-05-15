@@ -31,7 +31,8 @@ export const INDUSTRIAL_TOOLS_RULES: TaxonomyRule[] = [
       },
       physicsProfile: {
         rigidity: "extreme",
-        allowedMotion: "camera_only",
+        allowedMotion: "controlled_showcase_motion",
+        showcaseMotion: { enabled: true, type: "slow_product_rotation", intensity: "low", allowedAxes: ["y_axis", "slight_tilt", "vertical_lift"] },
         deformationAllowed: false
       },
       visualRules: {
@@ -41,4 +42,3 @@ export const INDUSTRIAL_TOOLS_RULES: TaxonomyRule[] = [
     })
   }
 ];
-

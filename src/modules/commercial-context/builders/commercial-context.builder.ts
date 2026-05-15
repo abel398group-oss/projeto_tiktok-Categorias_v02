@@ -8,10 +8,11 @@ const GLOBAL_MUST_AVOID = [
   "hands",
   "morphing",
   "deformation",
-  "floating_objects",
+  "uncontrolled_floating",
   "broken_geometry",
   "low_quality_textures",
-  "text_artifacts"
+  "text_artifacts",
+  "high_speed_spinning"
 ];
 
 function uniqStrings(list) {
@@ -34,7 +35,12 @@ function buildDefaults() {
     subcategory: "unknown",
     materials: [],
     surfaceFinish: [],
-    physicsProfile: { rigidity: "unknown", allowedMotion: "unknown", deformationAllowed: false },
+    physicsProfile: {
+      rigidity: "unknown",
+      allowedMotion: "unknown",
+      showcaseMotion: { enabled: false, type: "none", intensity: "none", allowedAxes: [] },
+      deformationAllowed: false
+    },
     cinematicProfile: { style: "unknown", camera: "unknown", lighting: "unknown" },
     visualRules: { mustPreserve: [], mustAvoid: [...GLOBAL_MUST_AVOID] }
   };
@@ -52,6 +58,17 @@ function mergeAiCommercial(partial) {
     physicsProfile: {
       rigidity: partial?.physicsProfile?.rigidity ?? base.physicsProfile.rigidity,
       allowedMotion: partial?.physicsProfile?.allowedMotion ?? base.physicsProfile.allowedMotion,
+      showcaseMotion: {
+        enabled:
+          typeof partial?.physicsProfile?.showcaseMotion?.enabled === "boolean"
+            ? partial.physicsProfile.showcaseMotion.enabled
+            : base.physicsProfile.showcaseMotion.enabled,
+        type: partial?.physicsProfile?.showcaseMotion?.type ?? base.physicsProfile.showcaseMotion.type,
+        intensity: partial?.physicsProfile?.showcaseMotion?.intensity ?? base.physicsProfile.showcaseMotion.intensity,
+        allowedAxes: Array.isArray(partial?.physicsProfile?.showcaseMotion?.allowedAxes)
+          ? partial.physicsProfile.showcaseMotion.allowedAxes
+          : base.physicsProfile.showcaseMotion.allowedAxes
+      },
       deformationAllowed:
         typeof partial?.physicsProfile?.deformationAllowed === "boolean"
           ? partial.physicsProfile.deformationAllowed
@@ -74,6 +91,78 @@ function mergeAiCommercial(partial) {
   return merged;
 }
 
+function applyShowcaseMotionDefaults(ai) {
+  if (ai.visualCategory === "industrial_tools") {
+    return {
+      ...ai,
+      physicsProfile: {
+        ...ai.physicsProfile,
+        allowedMotion: "controlled_showcase_motion",
+        showcaseMotion: {
+          enabled: true,
+          type: "slow_product_rotation",
+          intensity: "low",
+          allowedAxes: ["y_axis", "slight_tilt", "vertical_lift"]
+        },
+        deformationAllowed: false
+      }
+    };
+  }
+
+  if (ai.visualCategory === "beauty") {
+    return {
+      ...ai,
+      physicsProfile: {
+        ...ai.physicsProfile,
+        allowedMotion: "controlled_showcase_motion",
+        showcaseMotion: {
+          enabled: true,
+          type: "elegant_floating_showcase",
+          intensity: "low",
+          allowedAxes: ["y_axis", "vertical_lift", "slight_tilt"]
+        },
+        deformationAllowed: false
+      }
+    };
+  }
+
+  if (ai.visualCategory === "electronics") {
+    return {
+      ...ai,
+      physicsProfile: {
+        ...ai.physicsProfile,
+        allowedMotion: "controlled_showcase_motion",
+        showcaseMotion: {
+          enabled: true,
+          type: "smooth_premium_rotation",
+          intensity: "low",
+          allowedAxes: ["y_axis", "slight_tilt"]
+        },
+        deformationAllowed: false
+      }
+    };
+  }
+
+  if (ai.visualCategory === "fashion") {
+    return {
+      ...ai,
+      physicsProfile: {
+        ...ai.physicsProfile,
+        allowedMotion: "controlled_showcase_motion",
+        showcaseMotion: {
+          enabled: true,
+          type: "subtle_editorial_showcase",
+          intensity: "low",
+          allowedAxes: ["slight_tilt", "vertical_lift"]
+        },
+        deformationAllowed: false
+      }
+    };
+  }
+
+  return ai;
+}
+
 function applyIndustrialToolsOverrides(ai) {
   if (ai.visualCategory !== "industrial_tools" || ai.subcategory !== "drill_bits") return ai;
 
@@ -84,7 +173,7 @@ function applyIndustrialToolsOverrides(ai) {
     "hex_shank_shape",
     "metallic_reflections"
   ];
-  const mustAvoidExtra = ["drilling_action", "unrealistic_physics"];
+  const mustAvoidExtra = ["drilling_action", "cutting_action", "sparks", "penetration", "unrealistic_physics"];
 
   return {
     ...ai,
@@ -111,8 +200,7 @@ export class CommercialContextBuilderImpl implements CommercialContextBuilder {
    */
   build(metadata) {
     const partial = this.taxonomy.classify(metadata);
-    const normalized = applyIndustrialToolsOverrides(mergeAiCommercial(partial));
+    const normalized = applyIndustrialToolsOverrides(applyShowcaseMotionDefaults(mergeAiCommercial(partial)));
     return { ...metadata, aiCommercial: normalized };
   }
 }
-

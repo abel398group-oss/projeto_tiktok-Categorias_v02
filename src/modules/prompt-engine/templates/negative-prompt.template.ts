@@ -7,8 +7,9 @@ const GLOBAL_NEGATIVES = [
   "no body parts",
   "no morphing",
   "no deformation",
-  "no floating objects",
+  "no uncontrolled floating",
   "no unrealistic physics",
+  "no high-speed spinning",
   "no broken geometry",
   "no incorrect product shape",
   "no extra parts",
@@ -52,4 +53,3 @@ export function buildNegativePrompt(aiCommercial: AiCommercial): string {
   const lines = uniq([...GLOBAL_NEGATIVES, ...mustAvoid]);
   return lines.join("\n");
 }
-
