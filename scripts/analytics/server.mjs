@@ -596,14 +596,21 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     }
   }
 
-  const linkTxtName = `link_${productIdRaw}.txt`;
-  const urlName = `produto_${productIdRaw}.url`;
-  const produtoTxtName = `produto_${productIdRaw}.txt`;
-  const descricaoTxtName = `descricao_${productIdRaw}.txt`;
-  const metaName = `metadata_${productIdRaw}.json`;
+  const legacyLinkTxtName = `link_${productIdRaw}.txt`;
+  const legacyUrlName = `produto_${productIdRaw}.url`;
+  const legacyProdutoTxtName = `produto_${productIdRaw}.txt`;
+  const legacyDescricaoTxtName = `descricao_${productIdRaw}.txt`;
+  const legacyMetaName = `metadata_${productIdRaw}.json`;
+  const metaName = "metadata.json";
 
-  await fsp.writeFile(path.join(productDir, linkTxtName), `${linkOut}\r\n`, "utf8");
-  await fsp.writeFile(path.join(productDir, urlName), `[InternetShortcut]\r\nURL=${linkOut}\r\n`, "utf8");
+  try {
+    await fsp.rm(path.join(productDir, legacyLinkTxtName), { force: true });
+    await fsp.rm(path.join(productDir, legacyUrlName), { force: true });
+    await fsp.rm(path.join(productDir, legacyProdutoTxtName), { force: true });
+    await fsp.rm(path.join(productDir, legacyDescricaoTxtName), { force: true });
+    await fsp.rm(path.join(productDir, legacyMetaName), { force: true });
+  } catch {
+  }
 
   /** @type {number | null} */
   const price = typeof snap.price === "number" && Number.isFinite(snap.price) ? snap.price : null;
@@ -636,7 +643,22 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     nome: nome || "—",
     categoria: categoriaUrl,
     link: linkOut,
+    links: {
+      web: linkOut,
+      mobile: linkMobile
+    },
     exportedAt: ts,
+    timestamps: {
+      exportedAt: ts
+    },
+    product: {
+      productId: productIdRaw,
+      sellerId: product.seller?.sellerId ?? null,
+      nome: nome || "—",
+      categoria: categoriaUrl,
+      categoriaLabel
+    },
+    description: productDescription ?? null,
     images: { total: list.length, saved: written.length, failed: failed.length, files: written },
     analytics: {
       price,
@@ -660,53 +682,6 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     }
   };
   await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
-  const descLines = [];
-  descLines.push("Produto:");
-  descLines.push(nome || "—");
-  descLines.push("");
-  descLines.push("Descrição:");
-  descLines.push(productDescription ?? "—");
-  descLines.push("");
-  descLines.push("Link web:");
-  descLines.push(linkOut);
-  descLines.push("");
-  descLines.push("Link mobile:");
-  descLines.push(linkMobile);
-  descLines.push("");
-  await fsp.writeFile(path.join(productDir, descricaoTxtName), `${descLines.join("\r\n")}\r\n`, "utf8");
-
-  const lines = [];
-  lines.push("Produto:");
-  lines.push(nome || "—");
-  lines.push("");
-  lines.push("Preço:");
-  lines.push(price != null ? fmtPtPriceBRL(price) : "—");
-  lines.push("");
-  lines.push("Vendas:");
-  lines.push(sales != null ? String(sales) : "—");
-  lines.push("");
-  lines.push("Avaliação:");
-  lines.push(rating != null ? String(rating) : "—");
-  lines.push("");
-  lines.push("Categoria:");
-  lines.push(categoriaLabel ?? "—");
-  lines.push("");
-  lines.push("Score:");
-  lines.push(score != null ? String(score) : "—");
-  lines.push("");
-  lines.push("Ticket:");
-  lines.push(ticket ?? "—");
-  lines.push("");
-  lines.push("Link:");
-  lines.push(linkOut);
-  lines.push("");
-  lines.push("Arquivos:");
-  lines.push("imagens/");
-  lines.push("");
-  lines.push("Observações:");
-  lines.push("Descrição completa ainda não coletada.");
-  lines.push("");
-  await fsp.writeFile(path.join(productDir, produtoTxtName), `${lines.join("\r\n")}\r\n`, "utf8");
 
   return reply.send({
     ok: true,
