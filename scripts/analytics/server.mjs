@@ -684,7 +684,20 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   };
   await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
 
+  console.log("[prompt-export] before", {
+    productId: productIdRaw,
+    repoRoot,
+    productDir,
+    metaName,
+    hasMetadata: !!meta
+  });
   const promptGeneration = await tryGenerateCommercialPromptOutputs({ repoRoot, productDir, metadata: meta });
+  console.log("[prompt-export] after", {
+    productId: productIdRaw,
+    success: promptGeneration?.success === true,
+    error: promptGeneration?.success ? null : promptGeneration?.error,
+    files: promptGeneration?.success ? promptGeneration?.files : null
+  });
   if (!promptGeneration.success) {
     console.error("[prompt-export] failed", { productId: productIdRaw, error: promptGeneration.error });
   }
