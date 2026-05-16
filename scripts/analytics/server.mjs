@@ -425,6 +425,37 @@ async function runNpmScript(script, args = []) {
   });
 }
 
+async function tryGenerateStructuredPromptOutputs({ productId, productDir }) {
+  const runner = path.join(repoRoot, "scripts", "structured-prompt-export.ts");
+  return new Promise((resolve) => {
+    const child = spawn(
+      "npm",
+      ["exec", "--yes", "--package", "tsx", "--", "tsx", runner, "--dir", productDir],
+      { cwd: repoRoot, shell: true, stdio: ["ignore", "pipe", "pipe"] }
+    );
+
+    let combined = "";
+    child.stdout?.on("data", (d) => {
+      combined += typeof d === "string" ? d : d.toString();
+    });
+    child.stderr?.on("data", (d) => {
+      combined += typeof d === "string" ? d : d.toString();
+    });
+    child.on("error", (e) => {
+      resolve({ success: false, error: e instanceof Error ? e.message : String(e) });
+    });
+    child.on("close", (code, signal) => {
+      const exitCode = typeof code === "number" ? code : signal ? 1 : 1;
+      if (exitCode === 0) {
+        resolve({ success: true });
+        return;
+      }
+      const tail = combined.replace(/\r\n/g, "\n").trimEnd().split("\n").slice(-18).join("\n");
+      resolve({ success: false, error: tail || `structured_prompt_failed exitCode=${exitCode}`, productId });
+    });
+  });
+}
+
 async function resolveProductSnapshotForExport(tiktokProductId) {
   const { latest } = await getLatestAndPreviousRun(prisma);
   if (!latest) {
@@ -714,6 +745,11 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   });
   if (!promptGeneration.success) {
     console.error("[prompt-export] failed", { productId: productIdRaw, error: promptGeneration.error });
+  }
+
+  const structured = await tryGenerateStructuredPromptOutputs({ productId: productIdRaw, productDir });
+  if (!structured.success) {
+    console.warn("[structured-prompt] failed", { productId: productIdRaw, error: structured.error });
   }
 
   return reply.send({
