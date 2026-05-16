@@ -17,9 +17,9 @@ const GLOBAL_MUST_AVOID = [
   "text artifacts"
 ];
 
-function uniqStrings(list) {
+function uniqStrings(list: unknown[]): string[] {
   const seen = new Set();
-  const out = [];
+  const out: string[] = [];
   for (const v of list) {
     const s = typeof v === "string" ? v.trim() : "";
     if (!s) continue;
@@ -30,9 +30,8 @@ function uniqStrings(list) {
   return out;
 }
 
-function buildDefaults() {
-  /** @type {AiCommercial} */
-  const base = {
+function buildDefaults(): AiCommercial {
+  const base: AiCommercial = {
     visualCategory: "unknown",
     subcategory: "unknown",
     materials: [],
@@ -48,12 +47,13 @@ function buildDefaults() {
       lighting: "unknown",
       cameraMotion: { type: "camera_orbit_showcase", intensity: "slow", style: ["macro_parallax", "dolly_orbit", "hero_arc_shot", "cinematic_push_in"] }
     },
-    visualRules: { mustPreserve: [], mustAvoid: [...GLOBAL_MUST_AVOID] }
+    visualRules: { mustPreserve: [], mustAvoid: [...GLOBAL_MUST_AVOID] },
+    primaryGeometryIdentity: undefined
   };
   return base;
 }
 
-function mergeAiCommercial(partial) {
+function mergeAiCommercial(partial: Partial<AiCommercial> | undefined): AiCommercial {
   const base = buildDefaults();
   /** @type {AiCommercial} */
   const merged = {
@@ -84,7 +84,11 @@ function mergeAiCommercial(partial) {
     visualRules: {
       mustPreserve: Array.isArray(partial?.visualRules?.mustPreserve) ? partial.visualRules.mustPreserve : base.visualRules.mustPreserve,
       mustAvoid: Array.isArray(partial?.visualRules?.mustAvoid) ? partial.visualRules.mustAvoid : base.visualRules.mustAvoid
-    }
+    },
+    primaryGeometryIdentity:
+      partial?.primaryGeometryIdentity && typeof partial.primaryGeometryIdentity === "object"
+        ? partial.primaryGeometryIdentity
+        : base.primaryGeometryIdentity
   };
   merged.materials = uniqStrings(merged.materials);
   merged.surfaceFinish = uniqStrings(merged.surfaceFinish);
@@ -93,40 +97,86 @@ function mergeAiCommercial(partial) {
   return merged;
 }
 
-function applyIndustrialToolsOverrides(ai) {
-  if (ai.visualCategory !== "industrial_tools" || ai.subcategory !== "drill_bits") return ai;
+function applyIndustrialToolsOverrides(ai: AiCommercial): AiCommercial {
+  if (ai.visualCategory !== "industrial_tools") return ai;
 
-  const mustPreserve = [
-    "exact_product_geometry",
-    "sharp_cutting_tips",
-    "spiral_flute_design",
-    "hex_shank_shape",
-    "metallic_reflections"
-  ];
-  const mustAvoidExtra = [
-    "drilling action",
-    "cutting action",
-    "sparks",
-    "penetration",
-    "unrealistic physics",
-    "drill machine",
-    "grinder",
-    "rotary tool",
-    "power tool body",
-    "chuck",
-    "mandrel",
-    "industrial device attached"
-  ];
+  if (ai.subcategory === "drill_bits") {
+    const mustPreserve = [
+      "exact_product_geometry",
+      "spiral_flute_design_if_present_in_reference",
+      "cutting_tips_if_present_in_reference",
+      "hex_shank_shape_if_present_in_reference",
+      "metallic_reflections"
+    ];
+    const mustAvoidExtra = [
+      "drilling action",
+      "cutting action",
+      "sparks",
+      "penetration",
+      "unrealistic physics",
+      "drill machine",
+      "grinder",
+      "rotary tool",
+      "power tool body",
+      "chuck",
+      "mandrel",
+      "industrial device attached",
+      "geometry reinterpretation",
+      "hybrid tool geometry",
+      "object redesign"
+    ];
 
-  return {
-    ...ai,
-    materials: uniqStrings([...ai.materials, "carbide", "hardened_steel"]),
-    surfaceFinish: uniqStrings([...ai.surfaceFinish, "black_titanium_like_coating", "machined_metal"]),
-    visualRules: {
-      mustPreserve: uniqStrings([...ai.visualRules.mustPreserve, ...mustPreserve]),
-      mustAvoid: uniqStrings([...GLOBAL_MUST_AVOID, ...ai.visualRules.mustAvoid, ...mustAvoidExtra])
-    }
-  };
+    return {
+      ...ai,
+      primaryGeometryIdentity: ai.primaryGeometryIdentity ?? {
+        type: "drill_bit",
+        mustNotMorphInto: ["sds_plus_chisel", "chisel_tool", "sds_plus_pointer", "rotary_tool_body"]
+      },
+      materials: uniqStrings([...ai.materials, "carbide", "hardened_steel"]),
+      surfaceFinish: uniqStrings([...ai.surfaceFinish, "black_titanium_like_coating", "machined_metal"]),
+      visualRules: {
+        mustPreserve: uniqStrings([...ai.visualRules.mustPreserve, ...mustPreserve]),
+        mustAvoid: uniqStrings([...GLOBAL_MUST_AVOID, ...ai.visualRules.mustAvoid, ...mustAvoidExtra])
+      }
+    };
+  }
+
+  if (ai.subcategory === "sds_plus_chisel") {
+    const mustPreserve = [
+      "exact_product_geometry",
+      "sds_plus_shank_profile",
+      "chisel_tip_profile",
+      "non_spiral_body",
+      "industrial_machined_look"
+    ];
+    const mustAvoidExtra = [
+      "spiral drill geometry",
+      "helical flutes",
+      "threaded surfaces",
+      "rotary structures",
+      "secondary tool forms",
+      "invented mechanical features",
+      "geometry reinterpretation",
+      "hybrid tool geometry",
+      "object redesign"
+    ];
+
+    return {
+      ...ai,
+      primaryGeometryIdentity: ai.primaryGeometryIdentity ?? {
+        type: "sds_plus_chisel",
+        mustNotMorphInto: ["drill_bit", "spiral_flute_tool", "rotary_tool"]
+      },
+      materials: uniqStrings([...ai.materials, "hardened_steel"]),
+      surfaceFinish: uniqStrings([...ai.surfaceFinish, "machined_metal"]),
+      visualRules: {
+        mustPreserve: uniqStrings([...ai.visualRules.mustPreserve, ...mustPreserve]),
+        mustAvoid: uniqStrings([...GLOBAL_MUST_AVOID, ...ai.visualRules.mustAvoid, ...mustAvoidExtra])
+      }
+    };
+  }
+
+  return ai;
 }
 
 export class CommercialContextBuilderImpl implements CommercialContextBuilder {
@@ -141,7 +191,7 @@ export class CommercialContextBuilderImpl implements CommercialContextBuilder {
    * @param {ExportLocalMetadata} metadata
    * @returns {EnrichedMetadata}
    */
-  build(metadata) {
+  build(metadata: ExportLocalMetadata): EnrichedMetadata {
     const partial = this.taxonomy.classify(metadata);
     const normalized = applyIndustrialToolsOverrides(mergeAiCommercial(partial));
     return { ...metadata, aiCommercial: normalized };

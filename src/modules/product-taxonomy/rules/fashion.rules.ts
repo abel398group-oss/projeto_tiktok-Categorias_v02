@@ -2,7 +2,7 @@ import type { TaxonomyRule } from "../interfaces/taxonomy-rule.interface";
 
 const FASHION_KEYWORDS = ["fashion", "moda", "roupa", "vestido", "camisa", "calça", "calca", "sutiã", "sutia", "lingerie"];
 
-function hasAnyKeyword(text, keywords) {
+function hasAnyKeyword(text: string, keywords: string[]): boolean {
   const t = String(text || "").toLowerCase();
   return keywords.some((k) => t.includes(String(k).toLowerCase()));
 }

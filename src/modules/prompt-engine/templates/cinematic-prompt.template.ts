@@ -85,11 +85,45 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
 
   if (ai.visualCategory === "industrial_tools") {
     const lines: string[] = [];
+    const geoType = safeText(ai.primaryGeometryIdentity?.type);
+    const mustNotMorphInto = Array.isArray(ai.primaryGeometryIdentity?.mustNotMorphInto)
+      ? ai.primaryGeometryIdentity.mustNotMorphInto.filter((x) => typeof x === "string").map((x) => String(x))
+      : [];
+    const forbiddenFeatures =
+      geoType === "drill_bit"
+        ? ["sds-plus chisel silhouette", "flat chisel tip geometry", "non-spiral rod-like body"]
+        : [
+            "spiral drill geometry",
+            "helical flutes",
+            "threaded surfaces",
+            "rotary structures",
+            "secondary tool forms",
+            "invented mechanical features"
+          ];
     lines.push(
       "A premium cinematic macro commercial featuring a static luxury industrial metal object in a dark professional studio environment."
     );
     lines.push(
       "Use the provided product images as the absolute visual reference. Preserve the exact geometry, proportions, metallic surfaces, engineered detailing, reflections, and product identity."
+    );
+    lines.push("GEOMETRY LOCK:");
+    lines.push("Preserve the exact silhouette, structure, proportions, and physical identity of the product.");
+    lines.push("Do not reinterpret, redesign, hybridize, merge, or morph the object into another industrial tool category.");
+    if (mustNotMorphInto.length > 0) {
+      lines.push(`Do not morph into: ${mustNotMorphInto.join(", ")}.`);
+    }
+    lines.push("Do not introduce:");
+    for (const f of forbiddenFeatures) lines.push(`- ${f}`);
+    lines.push("The product geometry must remain identical to the provided reference images.");
+    lines.push("Prioritize product fidelity over cinematic stylization.");
+    lines.push(
+      "Maintain realistic industrial manufacturing appearance. Avoid excessive CGI beautification, unrealistic polishing, synthetic redesign, or exaggerated reflections."
+    );
+    lines.push(
+      "Treat the object as a photographed museum-grade industrial design piece: collectible, static, engineered, and visually observed — not operational."
+    );
+    lines.push(
+      "Use realistic premium studio cinematography with physically plausible lighting and controlled reflections. Avoid generic AI dark void environments; include a subtle studio backdrop and a real studio surface."
     );
     lines.push(
       "The object remains completely static, rigid, grounded, and unchanged during the entire shot. Treat the object as a photographed luxury product, not as an operating tool."
@@ -182,6 +216,18 @@ export function buildCommercialPrompt(enriched: EnrichedMetadata): string {
   lines.push("- mechanical operation");
   lines.push("");
   lines.push("The object is purely a luxury industrial showcase object.");
+  lines.push("");
+  lines.push("GEOMETRY LOCK:");
+  lines.push("Preserve the exact silhouette, structure, proportions, and physical identity of the product.");
+  lines.push("Do not reinterpret, redesign, hybridize, merge, or morph the object into another product category.");
+  lines.push("Do not introduce invented structural features that are not present in the reference images.");
+  lines.push("Prioritize product fidelity over cinematic stylization.");
+  lines.push(
+    "Maintain realistic manufacturing appearance. Avoid excessive CGI beautification, synthetic redesign, or exaggerated reflections."
+  );
+  lines.push(
+    "Use realistic premium studio cinematography with physically plausible lighting and controlled reflections. Avoid generic AI dark void environments."
+  );
   lines.push("");
   if (description) {
     lines.push("PRODUCT DESCRIPTION (REFERENCE ONLY — DO NOT INFER FUNCTION OR USE):");

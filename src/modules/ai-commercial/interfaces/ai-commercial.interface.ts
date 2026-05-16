@@ -4,6 +4,11 @@ import type { VisualRules } from "./visual-rules.interface";
 
 export type VisualCategory = "industrial_tools" | "beauty" | "electronics" | "fashion" | "unknown";
 
+export interface PrimaryGeometryIdentity {
+  type: string;
+  mustNotMorphInto: string[];
+}
+
 export interface AiCommercial {
   visualCategory: VisualCategory;
   subcategory: string;
@@ -12,9 +17,9 @@ export interface AiCommercial {
   physicsProfile: PhysicsProfile;
   cinematicProfile: CinematicProfile;
   visualRules: VisualRules;
+  primaryGeometryIdentity?: PrimaryGeometryIdentity;
 }
 
 export interface AiCommercialEnvelope {
   aiCommercial: AiCommercial;
 }
-

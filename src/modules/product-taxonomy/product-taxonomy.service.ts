@@ -6,18 +6,18 @@ import { ELECTRONICS_RULES } from "./rules/electronics.rules";
 import { FASHION_RULES } from "./rules/fashion.rules";
 import { INDUSTRIAL_TOOLS_RULES } from "./rules/industrial-tools.rules";
 
-function safeText(v) {
+function safeText(v: unknown): string {
   return typeof v === "string" ? v : v != null ? String(v) : "";
 }
 
-function normalizeText(s) {
+function normalizeText(s: unknown): string {
   return safeText(s)
     .replace(/\r\n/g, "\n")
     .replace(/\u00a0/g, " ")
     .trim();
 }
 
-function extractMetadataText(metadata) {
+function extractMetadataText(metadata: ExportLocalMetadata): string {
   const nome = normalizeText(metadata?.nome);
   const categoria = normalizeText(metadata?.categoria);
   const desc =
@@ -40,7 +40,7 @@ export class ProductTaxonomyService {
    * @param {ExportLocalMetadata} metadata
    * @returns {Partial<AiCommercial>}
    */
-  classify(metadata) {
+  classify(metadata: ExportLocalMetadata): Partial<AiCommercial> {
     const text = extractMetadataText(metadata);
     for (const rule of this.rules) {
       if (rule.match({ metadata, text })) {
