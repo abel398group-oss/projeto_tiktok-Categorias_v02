@@ -1,48 +1,46 @@
 import type { AiCommercial } from "../../ai-commercial/interfaces/ai-commercial.interface";
 
-const GLOBAL_NEGATIVES = [
+const BASE_NEGATIVES = [
   "no humans",
   "no hands",
-  "no faces",
-  "no body parts",
-  "no morphing",
   "no deformation",
-  "no rotating product",
-  "no spinning object",
-  "no rotating mechanics",
-  "no spinning implication",
-  "no floating product",
-  "no animated product",
+  "no morphing",
+  "no spinning",
+  "no floating",
+  "no wobbling",
   "no unrealistic physics",
-  "no high-speed spinning",
-  "no broken geometry",
-  "no incorrect product shape",
   "no extra parts",
-  "no missing parts",
-  "no low quality textures",
-  "no blurry details",
-  "no text artifacts",
-  "no subtitles",
-  "no logos invented by AI",
-  "no watermark",
-  "no implied operation",
-  "no implied functionality",
-  "no mechanical interpretation",
-  "no industrial action",
-  "no operational semantics",
-  "no active tool behavior",
-  "no usage demonstration",
+  "no broken geometry",
   "no tool usage",
+  "no mechanical operation",
+  "no text overlays",
+  "no subtitles",
+  "no watermark"
+];
+
+const INDUSTRIAL_TOOLS_NEGATIVES = [
+  "no humans",
+  "no hands",
+  "no deformation",
+  "no morphing",
+  "no spinning",
+  "no floating",
+  "no wobbling",
+  "no unrealistic physics",
+  "no extra parts",
+  "no broken geometry",
   "no drilling",
   "no cutting",
-  "no machining",
-  "no construction work",
-  "no industrial usage",
-  "no assembly",
+  "no sparks",
+  "no grinders",
+  "no drills",
+  "no rotary tools",
+  "no mandrels",
+  "no tool usage",
   "no mechanical operation",
-  "no product melting",
-  "no wobbling",
-  "no camera shake"
+  "no text overlays",
+  "no subtitles",
+  "no watermark"
 ];
 
 function normalizeNoLine(s: string): string {
@@ -69,19 +67,19 @@ function uniq(lines: string[]): string[] {
 
 export function buildNegativePrompt(aiCommercial: AiCommercial): string {
   const mustAvoid = Array.isArray(aiCommercial?.visualRules?.mustAvoid) ? aiCommercial.visualRules.mustAvoid : [];
-  const industrialExtras =
-    aiCommercial?.visualCategory === "industrial_tools"
-      ? [
-          "no drill machine",
-          "no grinder",
-          "no rotary tool",
-          "no power tool body",
-          "no chuck",
-          "no mandrel",
-          "no industrial device attached"
-        ]
-      : [];
+  const isIndustrialTools = aiCommercial?.visualCategory === "industrial_tools";
+  const base = isIndustrialTools ? INDUSTRIAL_TOOLS_NEGATIVES : BASE_NEGATIVES;
 
-  const lines = uniq([...GLOBAL_NEGATIVES, ...industrialExtras, ...mustAvoid]);
-  return lines.join("\n");
+  const baseLines = uniq(base);
+  const baseSet = new Set(baseLines.map((x) => x.toLowerCase()));
+
+  const extraCandidates = isIndustrialTools
+    ? []
+    : uniq(mustAvoid)
+        .map((x) => normalizeNoLine(x))
+        .filter((x) => x && !baseSet.has(x.toLowerCase()));
+
+  const maxExtras = isIndustrialTools ? 0 : 4;
+  const lines = [...baseLines, ...extraCandidates.slice(0, maxExtras)];
+  return lines.join(", ");
 }
