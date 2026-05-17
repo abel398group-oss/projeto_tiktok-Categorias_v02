@@ -3,6 +3,7 @@ import type { GeometryLockStrategy } from "./geometry-lock-strategy.interface";
 import type { MotionPromptStrategy } from "./motion-prompt-strategy.interface";
 import type { NegativePromptStrategy } from "./negative-prompt-strategy.interface";
 import type { SemanticPromptStrategy } from "./semantic-prompt-strategy.interface";
+import type { StyleProfileResult } from "../../style-profiles/interfaces/style-profile-result.interface";
 
 export interface PromptStrategyResult {
   semanticPromptStrategy: SemanticPromptStrategy;
@@ -10,4 +11,5 @@ export interface PromptStrategyResult {
   motionPromptStrategy: MotionPromptStrategy;
   cinematicPromptStrategy: CinematicPromptStrategy;
   negativePromptStrategy: NegativePromptStrategy;
+  styleProfileResult?: StyleProfileResult;
 }

@@ -1,4 +1,5 @@
 import type { ProductUnderstandingResult } from "../product-understanding/interfaces/product-understanding-result.interface";
+import type { StyleProfileResult } from "../style-profiles/interfaces/style-profile-result.interface";
 import type { PromptStrategyResult } from "./interfaces/prompt-strategy-result.interface";
 
 function normalizeTerm(v: unknown): string {
@@ -56,8 +57,26 @@ function buildCompactNegatives(args: {
   return { compactNegativeTerms: out, maxLengthHint: maxChars };
 }
 
+type BuildStrategyInput =
+  | ProductUnderstandingResult
+  | {
+      productUnderstanding: ProductUnderstandingResult;
+      styleProfileResult?: StyleProfileResult;
+    };
+
+function hasProductUnderstandingEnvelope(input: BuildStrategyInput): input is {
+  productUnderstanding: ProductUnderstandingResult;
+  styleProfileResult?: StyleProfileResult;
+} {
+  return typeof (input as any)?.productUnderstanding === "object" && (input as any)?.productUnderstanding != null;
+}
+
 export class PromptStrategyService {
-  buildStrategy(productUnderstanding: ProductUnderstandingResult): PromptStrategyResult {
+  buildStrategy(productUnderstanding: ProductUnderstandingResult): PromptStrategyResult;
+  buildStrategy(input: { productUnderstanding: ProductUnderstandingResult; styleProfileResult?: StyleProfileResult }): PromptStrategyResult;
+  buildStrategy(input: BuildStrategyInput): PromptStrategyResult {
+    const productUnderstanding = hasProductUnderstandingEnvelope(input) ? input.productUnderstanding : input;
+    const styleProfileResult = hasProductUnderstandingEnvelope(input) ? input.styleProfileResult : undefined;
     const risk = productUnderstanding?.semanticRiskProfile?.riskLevel || "medium";
 
     if (risk === "extreme") {
@@ -93,7 +112,7 @@ export class PromptStrategyService {
 
       const maxLengthHint = 350;
 
-      return {
+      const result: PromptStrategyResult = {
         semanticPromptStrategy: {
           safeProductDescription:
             "static precision engineered metallic object, museum-grade industrial steel form, premium machined geometry",
@@ -151,6 +170,8 @@ export class PromptStrategyService {
           })
         }
       };
+      if (styleProfileResult) result.styleProfileResult = styleProfileResult;
+      return result;
     }
 
     const maxLengthHint = 300;
@@ -158,7 +179,7 @@ export class PromptStrategyService {
       ? productUnderstanding.motionRiskProfile.forbiddenObjectMotions
       : ["rotate", "spin", "float", "wobble", "morph", "vibrate"];
 
-    return {
+    const result: PromptStrategyResult = {
       semanticPromptStrategy: {
         safeProductDescription: "premium static product object",
         forbiddenSemanticTerms: Array.isArray(productUnderstanding?.semanticRiskProfile?.dangerousTerms)
@@ -198,5 +219,7 @@ export class PromptStrategyService {
         })
       }
     };
+    if (styleProfileResult) result.styleProfileResult = styleProfileResult;
+    return result;
   }
 }
