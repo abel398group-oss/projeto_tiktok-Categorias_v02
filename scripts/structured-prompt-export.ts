@@ -2,6 +2,7 @@ import * as path from "node:path";
 import { access, readFile, writeFile } from "node:fs/promises";
 
 import { ProductUnderstandingService } from "../src/modules/ai-commercial/product-understanding/product-understanding.service";
+import { StyleProfilesService } from "../src/modules/ai-commercial/style-profiles/style-profiles.service";
 import { PromptStrategyService } from "../src/modules/ai-commercial/prompt-strategy/prompt-strategy.service";
 import { PromptCompilerService } from "../src/modules/ai-commercial/prompt-compiler/prompt-compiler.service";
 
@@ -26,8 +27,24 @@ async function main() {
   const pu = new ProductUnderstandingService();
   const understanding = pu.analyze(metadata);
 
+  const sp = new StyleProfilesService();
+  let styleProfileResult: any = null;
+  try {
+    styleProfileResult = sp.selectProfile({ productUnderstanding: understanding });
+  } catch (e) {
+    styleProfileResult = null;
+    process.stderr.write(
+      `[structured-prompt] style profile selection failed; falling back without styleProfileResult: ${
+        e instanceof Error ? e.message : String(e)
+      }\n`
+    );
+  }
+
   const ps = new PromptStrategyService();
-  const strategy = ps.buildStrategy(understanding);
+  const strategy =
+    styleProfileResult && typeof styleProfileResult === "object"
+      ? ps.buildStrategy({ productUnderstanding: understanding, styleProfileResult })
+      : ps.buildStrategy(understanding);
 
   const pc = new PromptCompilerService();
   const compiled = pc.compile(strategy);
@@ -40,7 +57,11 @@ async function main() {
   await writeFile(structuredCommercialPath, `${compiled.commercialPrompt}\n`, "utf8");
   await writeFile(structuredNegativePath, `${compiled.negativePrompt}\n`, "utf8");
   await writeFile(structuredStoryboardPath, `${compiled.storyboardPrompt ?? ""}\n`, "utf8");
-  await writeFile(structuredDebugPath, `${JSON.stringify({ productUnderstanding: understanding, strategy, compiled }, null, 2)}\n`, "utf8");
+  await writeFile(
+    structuredDebugPath,
+    `${JSON.stringify({ productUnderstanding: understanding, styleProfileResult: styleProfileResult ?? null, strategy, compiled }, null, 2)}\n`,
+    "utf8"
+  );
 
   process.stdout.write(
     `${JSON.stringify(

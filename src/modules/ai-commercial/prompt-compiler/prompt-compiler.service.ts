@@ -62,10 +62,63 @@ function compileNegative(terms: string[], maxLengthHint: number): string {
   return out.join(", ");
 }
 
+function prioritizeNegativeTerms(args: { baseTerms: string[]; extraTerms: string[] }): string[] {
+  const base = Array.isArray(args.baseTerms) ? args.baseTerms : [];
+  const extra = Array.isArray(args.extraTerms) ? args.extraTerms : [];
+
+  const fixedFront = ["no humans", "no hands", "no text overlays", "no watermark", "no subtitles"];
+
+  const normalizedBase = base.map((t) => normalizeSpaces(String(t)).toLowerCase()).filter(Boolean);
+  const normalizedExtra = extra.map((t) => normalizeSpaces(String(t)).toLowerCase()).filter(Boolean);
+
+  const frontWanted = [...fixedFront, ...normalizedExtra];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const t of frontWanted) {
+    if (!t) continue;
+    if (seen.has(t)) continue;
+    if (fixedFront.includes(t) && !normalizedBase.includes(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+
+  for (const t of normalizedBase) {
+    if (!t) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+
+  return out;
+}
+
+function isExtremeRisk(strategy: PromptStrategyResult): boolean {
+  const terms = Array.isArray(strategy?.semanticPromptStrategy?.forbiddenSemanticTerms)
+    ? strategy.semanticPromptStrategy.forbiddenSemanticTerms
+    : [];
+  return terms.map((t) => normalizeSpaces(String(t)).toLowerCase()).includes("demolition");
+}
+
+function softenIndustrialSemantics(s: string): string {
+  return normalizeSpaces(s)
+    .replace(/\bindustrial\b/gi, "premium")
+    .replace(/\bdemolition\b/gi, "")
+    .replace(/\btool\b/gi, "object")
+    .replace(/\bsteel form\b/gi, "metallic product object")
+    .replace(/\bsteel\b/gi, "metallic")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export class PromptCompilerService {
   compile(strategy: PromptStrategyResult): CompiledPromptOutput {
-    const safeProductDescription = strategy?.semanticPromptStrategy?.safeProductDescription ?? "";
-    const interpretationInstruction = strategy?.semanticPromptStrategy?.interpretationInstruction ?? "";
+    const styleProfile = strategy?.styleProfileResult?.selectedProfile;
+    const extreme = isExtremeRisk(strategy);
+
+    const safeProductDescriptionRaw = strategy?.semanticPromptStrategy?.safeProductDescription ?? "";
+    const interpretationInstructionRaw = strategy?.semanticPromptStrategy?.interpretationInstruction ?? "";
     const geometryInstruction = strategy?.geometryLockStrategy?.geometryInstruction ?? "";
     const objectMotionInstruction = strategy?.motionPromptStrategy?.objectMotionInstruction ?? "";
     const cameraMotionInstruction = strategy?.motionPromptStrategy?.cameraMotionInstruction ?? "";
@@ -75,6 +128,33 @@ export class PromptCompilerService {
     const surfaceStyle = strategy?.cinematicPromptStrategy?.surfaceStyle ?? "";
     const cameraStyle = strategy?.cinematicPromptStrategy?.cameraStyle ?? "";
     const avoidance = joinAvoidList(strategy?.cinematicPromptStrategy?.environmentAvoidance ?? []);
+
+    const safeProductDescription = styleProfile
+      ? extreme
+        ? "premium metallic product object, precision metallic geometry, luxury machined product, premium reflective product surface"
+        : safeProductDescriptionRaw
+      : safeProductDescriptionRaw;
+
+    const interpretationInstruction = styleProfile
+      ? softenIndustrialSemantics(interpretationInstructionRaw)
+      : interpretationInstructionRaw;
+
+    const profileCommercial = styleProfile
+      ? joinSentences([
+          ensurePeriod("premium product motion photography, luxury product showcase, minimal luxury aesthetic"),
+          ensurePeriod(styleProfile.visualLanguage),
+          ensurePeriod(`Background: ${styleProfile.background}`),
+          ensurePeriod(`Lighting: ${styleProfile.lighting}`),
+          ensurePeriod("Macro product photography, realistic product reflections"),
+          ensurePeriod(`Reflections: ${styleProfile.reflectionStyle}`),
+          ensurePeriod(`Editing: ${styleProfile.editingStyle}`),
+          ensurePeriod(`Camera motion: ${styleProfile.cameraMotion}`),
+          ensurePeriod("Use subtle camera-only movement and micro motion; avoid dramatic or aggressive motion"),
+          ensurePeriod(`Object motion: ${styleProfile.objectMotion}`),
+          ensurePeriod("The product is fully static, rigid, and unchanged at all times"),
+          ensurePeriod(`Environment complexity: ${styleProfile.environmentComplexity}; fidelity priority: ${styleProfile.fidelityPriority}`)
+        ])
+      : "";
 
     const cinematicSentence = joinSentences([
       "Film it in a",
@@ -87,20 +167,39 @@ export class PromptCompilerService {
 
     const avoidSentence = avoidance ? `Avoid ${avoidance}.` : "";
 
-    const commercialPromptRaw = joinSentences([
-      ensurePeriod(safeProductDescription),
-      ensurePeriod(interpretationInstruction),
-      ensurePeriod(geometryInstruction),
-      ensurePeriod(objectMotionInstruction),
-      ensurePeriod(cameraMotionInstruction),
-      ensurePeriod(cinematicSentence),
-      avoidSentence
-    ]);
+    const commercialPromptRaw = styleProfile
+      ? joinSentences([
+          ensurePeriod(softenIndustrialSemantics(safeProductDescription)),
+          ensurePeriod(profileCommercial),
+          ensurePeriod(geometryInstruction),
+          ensurePeriod(objectMotionInstruction),
+          ensurePeriod(cameraMotionInstruction)
+        ])
+      : joinSentences([
+          ensurePeriod(safeProductDescription),
+          ensurePeriod(interpretationInstruction),
+          ensurePeriod(geometryInstruction),
+          ensurePeriod(objectMotionInstruction),
+          ensurePeriod(cameraMotionInstruction),
+          ensurePeriod(cinematicSentence),
+          avoidSentence
+        ]);
 
     const commercialPrompt = clampChars(commercialPromptRaw, 900);
 
+    const extraPhotographyNegatives = styleProfile
+      ? ["no aggressive motion", "no action sequence", "no dramatic environment", "no explosion", "no sparks", "no destruction"]
+      : [];
+
+    const negativeTerms = styleProfile
+      ? prioritizeNegativeTerms({
+          baseTerms: strategy?.negativePromptStrategy?.compactNegativeTerms ?? [],
+          extraTerms: extraPhotographyNegatives
+        })
+      : strategy?.negativePromptStrategy?.compactNegativeTerms ?? [];
+
     const negativePrompt = compileNegative(
-      strategy?.negativePromptStrategy?.compactNegativeTerms ?? [],
+      negativeTerms,
       strategy?.negativePromptStrategy?.maxLengthHint ?? 300
     );
 
@@ -120,6 +219,9 @@ export class PromptCompilerService {
         negativePromptLength: negativePrompt.length,
         strategySummary: {
           safeProductDescription: normalizeSpaces(safeProductDescription),
+          styleProfileName: styleProfile?.name ?? null,
+          styleProfilePreferredVisualLanguage: styleProfile?.visualLanguage ?? null,
+          extremeRisk: extreme,
           riskMaxLengthHint: strategy?.negativePromptStrategy?.maxLengthHint ?? null,
           sceneType: normalizeSpaces(sceneType)
         }
