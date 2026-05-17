@@ -3,6 +3,7 @@ import { access, readFile, writeFile } from "node:fs/promises";
 
 import { ProductUnderstandingService } from "../src/modules/ai-commercial/product-understanding/product-understanding.service";
 import { StyleProfilesService } from "../src/modules/ai-commercial/style-profiles/style-profiles.service";
+import { PromptModesService } from "../src/modules/ai-commercial/prompt-modes/prompt-modes.service";
 import { PromptStrategyService } from "../src/modules/ai-commercial/prompt-strategy/prompt-strategy.service";
 import { PromptCompilerService } from "../src/modules/ai-commercial/prompt-compiler/prompt-compiler.service";
 
@@ -40,6 +41,42 @@ async function main() {
     );
   }
 
+  const pm = new PromptModesService();
+  let selectedModeResult: any = null;
+  let runwayModeResult: any = null;
+  let protectiveModeResult: any = null;
+  try {
+    selectedModeResult = pm.selectMode({ productUnderstanding: understanding });
+    runwayModeResult = pm.selectMode({ productUnderstanding: understanding, preferredMode: "runway-mode" });
+    protectiveModeResult = pm.selectMode({ productUnderstanding: understanding, preferredMode: "protective-mode" });
+  } catch (e) {
+    const risk = understanding?.semanticRiskProfile?.riskLevel || "medium";
+    const selectedName = risk === "extreme" ? "protective-mode" : "runway-mode";
+
+    const fallbackMode = (name: string): any => ({
+      selectedMode: {
+        name,
+        description: "fallback",
+        verbosity: name === "protective-mode" ? "high" : "low",
+        semanticProtection: name === "protective-mode" ? "maximum" : "medium",
+        geometryProtection: name === "protective-mode" ? "maximum" : "medium",
+        motionProtection: name === "protective-mode" ? "maximum" : "medium",
+        preferredPromptStyle: name === "protective-mode" ? "protective" : "minimal_guidance"
+      },
+      reason: "fallback (mode selection failed)",
+      warnings: [e instanceof Error ? e.message : String(e)]
+    });
+
+    selectedModeResult = fallbackMode(selectedName);
+    runwayModeResult = fallbackMode("runway-mode");
+    protectiveModeResult = fallbackMode("protective-mode");
+    process.stderr.write(
+      `[structured-prompt] prompt mode selection failed; using fallback modes: ${
+        e instanceof Error ? e.message : String(e)
+      }\n`
+    );
+  }
+
   const ps = new PromptStrategyService();
   const strategy =
     styleProfileResult && typeof styleProfileResult === "object"
@@ -47,19 +84,67 @@ async function main() {
       : ps.buildStrategy(understanding);
 
   const pc = new PromptCompilerService();
+  if (selectedModeResult && typeof selectedModeResult === "object") (strategy as any).promptModeResult = selectedModeResult;
   const compiled = pc.compile(strategy);
+  const compiledRunway =
+    runwayModeResult && typeof runwayModeResult === "object" ? pc.compileWithMode(strategy, runwayModeResult) : null;
+  const compiledProtective =
+    protectiveModeResult && typeof protectiveModeResult === "object"
+      ? pc.compileWithMode(strategy, protectiveModeResult)
+      : null;
 
   const structuredCommercialPath = path.join(productDir, "structured-commercial-prompt.txt");
   const structuredNegativePath = path.join(productDir, "structured-negative-prompt.txt");
+  const structuredCommercialRunwayPath = path.join(productDir, "structured-commercial-prompt-runway.txt");
+  const structuredNegativeRunwayPath = path.join(productDir, "structured-negative-prompt-runway.txt");
+  const structuredCommercialProtectivePath = path.join(productDir, "structured-commercial-prompt-protective.txt");
+  const structuredNegativeProtectivePath = path.join(productDir, "structured-negative-prompt-protective.txt");
   const structuredStoryboardPath = path.join(productDir, "structured-storyboard.txt");
   const structuredDebugPath = path.join(productDir, "structured-prompt-debug.json");
 
   await writeFile(structuredCommercialPath, `${compiled.commercialPrompt}\n`, "utf8");
   await writeFile(structuredNegativePath, `${compiled.negativePrompt}\n`, "utf8");
   await writeFile(structuredStoryboardPath, `${compiled.storyboardPrompt ?? ""}\n`, "utf8");
+  if (compiledRunway) {
+    await writeFile(structuredCommercialRunwayPath, `${compiledRunway.commercialPrompt}\n`, "utf8");
+    await writeFile(structuredNegativeRunwayPath, `${compiledRunway.negativePrompt}\n`, "utf8");
+  }
+  if (compiledProtective) {
+    await writeFile(structuredCommercialProtectivePath, `${compiledProtective.commercialPrompt}\n`, "utf8");
+    await writeFile(structuredNegativeProtectivePath, `${compiledProtective.negativePrompt}\n`, "utf8");
+  }
   await writeFile(
     structuredDebugPath,
-    `${JSON.stringify({ productUnderstanding: understanding, styleProfileResult: styleProfileResult ?? null, strategy, compiled }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        productUnderstanding: understanding,
+        styleProfileResult: styleProfileResult ?? null,
+        selectedMode: selectedModeResult ?? null,
+        generatedFiles: {
+          structuredCommercialPath,
+          structuredNegativePath,
+          structuredStoryboardPath,
+          structuredCommercialRunwayPath: compiledRunway ? structuredCommercialRunwayPath : null,
+          structuredNegativeRunwayPath: compiledRunway ? structuredNegativeRunwayPath : null,
+          structuredCommercialProtectivePath: compiledProtective ? structuredCommercialProtectivePath : null,
+          structuredNegativeProtectivePath: compiledProtective ? structuredNegativeProtectivePath : null,
+          structuredDebugPath
+        },
+        compilerModeBehavior: {
+          selectedModeName: selectedModeResult?.selectedMode?.name ?? null,
+          runwayCommercialLength: compiledRunway?.commercialPrompt?.length ?? null,
+          runwayNegativeLength: compiledRunway?.negativePrompt?.length ?? null,
+          protectiveCommercialLength: compiledProtective?.commercialPrompt?.length ?? null,
+          protectiveNegativeLength: compiledProtective?.negativePrompt?.length ?? null
+        },
+        strategy,
+        compiled,
+        compiledRunway,
+        compiledProtective
+      },
+      null,
+      2
+    )}\n`,
     "utf8"
   );
 
@@ -69,6 +154,10 @@ async function main() {
         ok: true,
         structuredCommercialPath,
         structuredNegativePath,
+        structuredCommercialRunwayPath: compiledRunway ? structuredCommercialRunwayPath : null,
+        structuredNegativeRunwayPath: compiledRunway ? structuredNegativeRunwayPath : null,
+        structuredCommercialProtectivePath: compiledProtective ? structuredCommercialProtectivePath : null,
+        structuredNegativeProtectivePath: compiledProtective ? structuredNegativeProtectivePath : null,
         structuredStoryboardPath,
         structuredDebugPath
       },
