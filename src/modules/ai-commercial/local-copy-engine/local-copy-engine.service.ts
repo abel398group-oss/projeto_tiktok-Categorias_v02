@@ -112,19 +112,115 @@ function pickMaterialHint(text: string): string | null {
   const materials = [
     "aço",
     "inox",
+    "hss",
+    "carbeto",
+    "tungstênio",
+    "diamantado",
     "alumínio",
     "metal",
     "metálico",
     "plástico",
+    "abs",
     "silicone",
     "madeira",
     "vidro",
     "borracha"
   ];
   for (const m of materials) {
-    if (t.includes(m)) return m === "inox" ? "aço inox" : m;
+    if (!t.includes(m)) continue;
+    if (m === "inox") return "aço inox";
+    if (m === "hss") return "aço HSS";
+    if (m === "tungstênio") return "carbeto de tungstênio";
+    return m;
   }
   return null;
+}
+
+function extractPrimaryUseHint(text: string): string | null {
+  const t = normalizeSpaces(text);
+  if (!t) return null;
+
+  const m = t.match(/\b(ideal|indicado|perfeito)\s+para\s+([^.!?]{6,80})/i);
+  if (m && m[2]) return normalizeSpaces(m[2]);
+
+  const p = t.match(/\bpara\s+([^.!?]{6,80})/i);
+  if (p && p[1]) return normalizeSpaces(p[1]);
+
+  return null;
+}
+
+function guessProductNoun(title: string, description: string): string | null {
+  const t = `${normalizeSpaces(title)} ${normalizeSpaces(description)}`.toLowerCase();
+  if (!t) return null;
+  const mapping: Array<[RegExp, string]> = [
+    [/\bdiscos?\b.*\bcorte\b/i, "discos de corte"],
+    [/\bdiscos?\b/i, "discos"],
+    [/\bbrocas?\b/i, "brocas"],
+    [/\bponteiro\b/i, "ponteiro"],
+    [/\btalhadeira\b/i, "talhadeira"],
+    [/\bchisel\b/i, "ponteiro"],
+    [/\bkit\b/i, "kit"]
+  ];
+  for (const [re, noun] of mapping) {
+    if (re.test(t)) return noun;
+  }
+  return null;
+}
+
+function clampSentence(s: string, maxChars: number): string {
+  const t = normalizeSpaces(s);
+  if (!t) return "";
+  if (t.length <= maxChars) return t;
+  const clipped = t.slice(0, maxChars).trim();
+  const lastSpace = clipped.lastIndexOf(" ");
+  return (lastSpace >= 24 ? clipped.slice(0, lastSpace) : clipped).trim();
+}
+
+function buildTikTokNativeVoiceScript(args: {
+  title: string;
+  description: string;
+  cleaned: string;
+  material: string | null;
+  measures: string[];
+  qty: string[];
+}): string | null {
+  const noun = guessProductNoun(args.title, args.description);
+  const useHint = extractPrimaryUseHint(args.cleaned);
+
+  const qtyNumber = args.qty
+    .map((q) => q.match(/\b(\d{1,3})\b/))
+    .filter(Boolean)
+    .map((m) => (m ? m[1] : ""))
+    .find(Boolean);
+
+  const first = (() => {
+    if (qtyNumber && noun && noun !== "kit") {
+      return `Kit com ${qtyNumber} ${noun} em ${args.material ?? "acabamento premium"}.`;
+    }
+    if (qtyNumber) {
+      return `Kit com ${qtyNumber} itens em ${args.material ?? "acabamento premium"}.`;
+    }
+    if (noun && args.material) return `${shortenTitle(args.title)} em ${args.material}.`;
+    return `${shortenTitle(args.title)}.`;
+  })();
+
+  const second = useHint ? `Ideal para ${useHint}.` : "";
+
+  const third = (() => {
+    const parts: string[] = [];
+    parts.push("Precisão e durabilidade com acabamento profissional");
+    if (args.measures.length > 0) parts.push(args.measures[0]);
+    return `${parts.join(". ")}.`;
+  })();
+
+  const sentences = [first, second, third]
+    .map((s) => clampSentence(s, 120))
+    .map((s) => ensurePeriod(s))
+    .filter(Boolean);
+
+  const compact = sentences.slice(0, 3).join(" ");
+  const safe = stripBannedPhrases(compact);
+  return safe ? safe : null;
 }
 
 function shortenTitle(title: string): string {
@@ -189,7 +285,16 @@ export class LocalCopyEngineService {
     const benefitSentence =
       sentencePool.find((s) => /\b(resistente|durável|precis[ãa]o|acabamento|qualidade|prático)\b/i.test(s)) || "";
 
-    const voiceLines = uniqKeepOrder([
+    const voiceScriptTikTok = buildTikTokNativeVoiceScript({
+      title,
+      description,
+      cleaned,
+      material,
+      measures,
+      qty
+    });
+
+    const voiceLinesFallback = uniqKeepOrder([
       `${shortenTitle(title)}. ${useSentence}`.trim(),
       material ? `Acabamento em ${material} com visual premium.` : "",
       measures.length > 0 ? `Detalhes: ${measures.join(", ")}.` : "",
@@ -200,7 +305,7 @@ export class LocalCopyEngineService {
       .filter(Boolean)
       .slice(0, 4);
 
-    const voiceScript = voiceLines.join(" ");
+    const voiceScript = voiceScriptTikTok ?? voiceLinesFallback.join(" ");
 
     const overlayCopy = buildOverlayCopy({ title, features: featureCandidates });
 
