@@ -11,7 +11,7 @@ import { PromptCompilerService } from "../src/modules/ai-commercial/prompt-compi
 async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
   const shots: Array<{ fileName: string; content: string }> = [
     {
-      fileName: "01-hero-shot-runway.txt",
+      fileName: "v01-hero-shot-runway.txt",
       content: [
         "premium metallic product object,",
         "single isolated product centered in frame,",
@@ -26,7 +26,7 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
       ].join("\n")
     },
     {
-      fileName: "02-macro-detail-runway.txt",
+      fileName: "v02-macro-detail-runway.txt",
       content: [
         "extreme macro product texture shot,",
         "premium metallic surface detail,",
@@ -41,7 +41,7 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
       ].join("\n")
     },
     {
-      fileName: "03-side-profile-runway.txt",
+      fileName: "v03-side-profile-runway.txt",
       content: [
         "side profile premium product showcase,",
         "single isolated metallic product,",
@@ -55,7 +55,7 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
       ].join("\n")
     },
     {
-      fileName: "04-reflection-shot-runway.txt",
+      fileName: "v04-reflection-shot-runway.txt",
       content: [
         "premium reflective metallic product showcase,",
         "single isolated product,",
@@ -87,9 +87,13 @@ async function tryWriteLocalCopyAssets(args: { productDir: string; metadata: any
     const engine = new LocalCopyEngineService();
     const out = engine.generateFromMetadata(args.metadata);
 
-    await writeFile(path.join(args.productDir, "voice-script.txt"), `${out.voiceScript}\n`, "utf8");
-    await writeFile(path.join(args.productDir, "caption-tiktok.txt"), `${out.captionTikTok}\n`, "utf8");
-    await writeFile(path.join(args.productDir, "overlay-copy.json"), `${JSON.stringify(out.overlayCopy, null, 2)}\n`, "utf8");
+    await writeFile(path.join(args.productDir, "vvoice-script.txt"), `${out.voiceScript}\n`, "utf8");
+    await writeFile(path.join(args.productDir, "vcaption-tiktok.txt"), `${out.captionTikTok}\n`, "utf8");
+    await writeFile(
+      path.join(args.productDir, "voverlay-copy.json"),
+      `${JSON.stringify(out.overlayCopy, null, 2)}\n`,
+      "utf8"
+    );
   } catch (e) {
     process.stderr.write(
       `[structured-prompt] local copy engine failed; continuing without local copy files: ${e instanceof Error ? e.message : String(e)}\n`
