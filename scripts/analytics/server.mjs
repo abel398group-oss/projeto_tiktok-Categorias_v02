@@ -647,6 +647,7 @@ fastify.post("/analytics/export-local", async (req, reply) => {
   const legacyProdutoTxtName = `produto_${productIdRaw}.txt`;
   const legacyDescricaoTxtName = `descricao_${productIdRaw}.txt`;
   const legacyMetaName = `metadata_${productIdRaw}.json`;
+  const metaDirName = "metadata";
   const metaName = "metadata.json";
 
   try {
@@ -727,13 +728,15 @@ fastify.post("/analytics/export-local", async (req, reply) => {
       categoriaLabel
     }
   };
-  await fsp.writeFile(path.join(productDir, metaName), JSON.stringify(meta, null, 2), "utf8");
+  const metaDir = path.join(productDir, metaDirName);
+  await ensureDir(metaDir);
+  await fsp.writeFile(path.join(metaDir, metaName), JSON.stringify(meta, null, 2), "utf8");
 
   console.log("[prompt-export] before", {
     productId: productIdRaw,
     repoRoot,
     productDir,
-    metaName,
+    metaName: `${metaDirName}/${metaName}`,
     hasMetadata: !!meta
   });
   const promptGeneration = await tryGenerateCommercialPromptOutputs({ repoRoot, productDir, metadata: meta });

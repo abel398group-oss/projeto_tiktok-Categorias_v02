@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { ProductUnderstandingService } from "../src/modules/ai-commercial/product-understanding/product-understanding.service";
 import { LocalCopyEngineService } from "../src/modules/ai-commercial/local-copy-engine/local-copy-engine.service";
@@ -8,7 +8,46 @@ import { PromptModesService } from "../src/modules/ai-commercial/prompt-modes/pr
 import { PromptStrategyService } from "../src/modules/ai-commercial/prompt-strategy/prompt-strategy.service";
 import { PromptCompilerService } from "../src/modules/ai-commercial/prompt-compiler/prompt-compiler.service";
 
-async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
+async function ensureDir(dirPath: string): Promise<void> {
+  await mkdir(dirPath, { recursive: true });
+}
+
+async function tryCopyFile(fromPath: string, toPath: string): Promise<void> {
+  try {
+    await copyFile(fromPath, toPath);
+  } catch {
+  }
+}
+
+function buildExportDirs(productDir: string) {
+  const images = path.join(productDir, "imagens");
+  const metadata = path.join(productDir, "metadata");
+  const legacyPrompts = path.join(productDir, "legacy-prompts");
+  const structuredPrompts = path.join(productDir, "structured-prompts");
+  const runwayPrompts = path.join(productDir, "runway-prompts");
+  const protectivePrompts = path.join(productDir, "protective-prompts");
+  const commercialCopy = path.join(productDir, "commercial-copy");
+  const outputs = path.join(productDir, "outputs");
+  const outputsVideos = path.join(outputs, "videos");
+  const outputsAudio = path.join(outputs, "audio");
+  const outputsCapcut = path.join(outputs, "capcut");
+
+  return {
+    images,
+    metadata,
+    legacyPrompts,
+    structuredPrompts,
+    runwayPrompts,
+    protectivePrompts,
+    commercialCopy,
+    outputs,
+    outputsVideos,
+    outputsAudio,
+    outputsCapcut
+  };
+}
+
+async function tryWriteRunwayShotPromptsToDir(runwayPromptsDir: string): Promise<void> {
   const shots: Array<{ fileName: string; content: string }> = [
     {
       fileName: "v01-hero-shot-runway.txt",
@@ -73,7 +112,7 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
 
   try {
     for (const s of shots) {
-      await writeFile(path.join(productDir, s.fileName), `${s.content}\n`, "utf8");
+      await writeFile(path.join(runwayPromptsDir, s.fileName), `${s.content}\n`, "utf8");
     }
   } catch (e) {
     process.stderr.write(
@@ -82,15 +121,15 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
   }
 }
 
-async function tryWriteLocalCopyAssets(args: { productDir: string; metadata: any }): Promise<void> {
+async function tryWriteLocalCopyAssetsToDir(args: { commercialCopyDir: string; metadata: any }): Promise<void> {
   try {
     const engine = new LocalCopyEngineService();
     const out = engine.generateFromMetadata(args.metadata);
 
-    await writeFile(path.join(args.productDir, "vvoice-script.txt"), `${out.voiceScript}\n`, "utf8");
-    await writeFile(path.join(args.productDir, "vcaption-tiktok.txt"), `${out.captionTikTok}\n`, "utf8");
+    await writeFile(path.join(args.commercialCopyDir, "vvoice-script.txt"), `${out.voiceScript}\n`, "utf8");
+    await writeFile(path.join(args.commercialCopyDir, "vcaption-tiktok.txt"), `${out.captionTikTok}\n`, "utf8");
     await writeFile(
-      path.join(args.productDir, "voverlay-copy.json"),
+      path.join(args.commercialCopyDir, "voverlay-copy.json"),
       `${JSON.stringify(out.overlayCopy, null, 2)}\n`,
       "utf8"
     );
@@ -99,6 +138,16 @@ async function tryWriteLocalCopyAssets(args: { productDir: string; metadata: any
       `[structured-prompt] local copy engine failed; continuing without local copy files: ${e instanceof Error ? e.message : String(e)}\n`
     );
   }
+}
+
+async function resolveMetadataPath(productDir: string): Promise<string> {
+  const nested = path.join(productDir, "metadata", "metadata.json");
+  try {
+    await access(nested);
+    return nested;
+  } catch {
+  }
+  return path.join(productDir, "metadata.json");
 }
 
 function getArg(name: string): string | null {
@@ -113,8 +162,31 @@ async function main() {
     throw new Error("missing --dir <productDir>");
   }
 
-  const metaPath = path.join(productDir, "metadata.json");
+  const dirs = buildExportDirs(productDir);
+  try {
+    await ensureDir(dirs.metadata);
+    await ensureDir(dirs.legacyPrompts);
+    await ensureDir(dirs.structuredPrompts);
+    await ensureDir(dirs.runwayPrompts);
+    await ensureDir(dirs.protectivePrompts);
+    await ensureDir(dirs.commercialCopy);
+    await ensureDir(dirs.outputsVideos);
+    await ensureDir(dirs.outputsAudio);
+    await ensureDir(dirs.outputsCapcut);
+  } catch (e) {
+    process.stderr.write(
+      `[structured-prompt] failed to create export directories; continuing with root files only: ${
+        e instanceof Error ? e.message : String(e)
+      }\n`
+    );
+  }
+
+  const metaPath = await resolveMetadataPath(productDir);
   await access(metaPath);
+
+  if (!metaPath.endsWith(path.join("metadata", "metadata.json"))) {
+    await tryCopyFile(metaPath, path.join(dirs.metadata, "metadata.json"));
+  }
 
   const raw = await readFile(metaPath, "utf8");
   const metadata = JSON.parse(raw);
@@ -187,64 +259,74 @@ async function main() {
       ? pc.compileWithMode(strategy, protectiveModeResult)
       : null;
 
-  const structuredCommercialPath = path.join(productDir, "structured-commercial-prompt.txt");
-  const structuredNegativePath = path.join(productDir, "structured-negative-prompt.txt");
-  const structuredCommercialRunwayPath = path.join(productDir, "structured-commercial-prompt-runway.txt");
-  const structuredNegativeRunwayPath = path.join(productDir, "structured-negative-prompt-runway.txt");
-  const structuredCommercialProtectivePath = path.join(productDir, "structured-commercial-prompt-protective.txt");
-  const structuredNegativeProtectivePath = path.join(productDir, "structured-negative-prompt-protective.txt");
-  const structuredStoryboardPath = path.join(productDir, "structured-storyboard.txt");
-  const structuredDebugPath = path.join(productDir, "structured-prompt-debug.json");
+  const structuredCommercialPath = path.join(dirs.structuredPrompts, "structured-commercial-prompt.txt");
+  const structuredNegativePath = path.join(dirs.structuredPrompts, "structured-negative-prompt.txt");
+  const structuredStoryboardPath = path.join(dirs.structuredPrompts, "structured-storyboard.txt");
+  const structuredDebugPath = path.join(dirs.structuredPrompts, "structured-prompt-debug.json");
 
   await writeFile(structuredCommercialPath, `${compiled.commercialPrompt}\n`, "utf8");
   await writeFile(structuredNegativePath, `${compiled.negativePrompt}\n`, "utf8");
   await writeFile(structuredStoryboardPath, `${compiled.storyboardPrompt ?? ""}\n`, "utf8");
+
   if (compiledRunway) {
-    await writeFile(structuredCommercialRunwayPath, `${compiledRunway.commercialPrompt}\n`, "utf8");
-    await writeFile(structuredNegativeRunwayPath, `${compiledRunway.negativePrompt}\n`, "utf8");
+    await writeFile(
+      path.join(dirs.runwayPrompts, "structured-commercial-prompt-runway.txt"),
+      `${compiledRunway.commercialPrompt}\n`,
+      "utf8"
+    );
+    await writeFile(
+      path.join(dirs.runwayPrompts, "structured-negative-prompt-runway.txt"),
+      `${compiledRunway.negativePrompt}\n`,
+      "utf8"
+    );
   }
   if (compiledProtective) {
-    await writeFile(structuredCommercialProtectivePath, `${compiledProtective.commercialPrompt}\n`, "utf8");
-    await writeFile(structuredNegativeProtectivePath, `${compiledProtective.negativePrompt}\n`, "utf8");
+    await writeFile(
+      path.join(dirs.protectivePrompts, "structured-commercial-prompt-protective.txt"),
+      `${compiledProtective.commercialPrompt}\n`,
+      "utf8"
+    );
+    await writeFile(
+      path.join(dirs.protectivePrompts, "structured-negative-prompt-protective.txt"),
+      `${compiledProtective.negativePrompt}\n`,
+      "utf8"
+    );
   }
 
-  await tryWriteRunwayShotPrompts(productDir);
-  await tryWriteLocalCopyAssets({ productDir, metadata });
+  await tryWriteRunwayShotPromptsToDir(dirs.runwayPrompts);
+  await tryWriteLocalCopyAssetsToDir({ commercialCopyDir: dirs.commercialCopy, metadata });
 
-  await writeFile(
-    structuredDebugPath,
-    `${JSON.stringify(
-      {
-        productUnderstanding: understanding,
-        styleProfileResult: styleProfileResult ?? null,
-        selectedMode: selectedModeResult ?? null,
-        generatedFiles: {
-          structuredCommercialPath,
-          structuredNegativePath,
-          structuredStoryboardPath,
-          structuredCommercialRunwayPath: compiledRunway ? structuredCommercialRunwayPath : null,
-          structuredNegativeRunwayPath: compiledRunway ? structuredNegativeRunwayPath : null,
-          structuredCommercialProtectivePath: compiledProtective ? structuredCommercialProtectivePath : null,
-          structuredNegativeProtectivePath: compiledProtective ? structuredNegativeProtectivePath : null,
-          structuredDebugPath
-        },
-        compilerModeBehavior: {
-          selectedModeName: selectedModeResult?.selectedMode?.name ?? null,
-          runwayCommercialLength: compiledRunway?.commercialPrompt?.length ?? null,
-          runwayNegativeLength: compiledRunway?.negativePrompt?.length ?? null,
-          protectiveCommercialLength: compiledProtective?.commercialPrompt?.length ?? null,
-          protectiveNegativeLength: compiledProtective?.negativePrompt?.length ?? null
-        },
-        strategy,
-        compiled,
-        compiledRunway,
-        compiledProtective
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
+  const debugPayload = {
+    productUnderstanding: understanding,
+    styleProfileResult: styleProfileResult ?? null,
+    selectedMode: selectedModeResult ?? null,
+    generatedFiles: {
+      structuredCommercialPath,
+      structuredNegativePath,
+      structuredStoryboardPath,
+      metadataPath: path.join(dirs.metadata, "metadata.json"),
+      structuredPromptsDir: dirs.structuredPrompts,
+      runwayPromptsDir: dirs.runwayPrompts,
+      protectivePromptsDir: dirs.protectivePrompts,
+      legacyPromptsDir: dirs.legacyPrompts,
+      commercialCopyDir: dirs.commercialCopy,
+      structuredDebugPath
+    },
+    compilerModeBehavior: {
+      selectedModeName: selectedModeResult?.selectedMode?.name ?? null,
+      runwayCommercialLength: compiledRunway?.commercialPrompt?.length ?? null,
+      runwayNegativeLength: compiledRunway?.negativePrompt?.length ?? null,
+      protectiveCommercialLength: compiledProtective?.commercialPrompt?.length ?? null,
+      protectiveNegativeLength: compiledProtective?.negativePrompt?.length ?? null
+    },
+    strategy,
+    compiled,
+    compiledRunway,
+    compiledProtective
+  };
+
+  const debugJson = `${JSON.stringify(debugPayload, null, 2)}\n`;
+  await writeFile(structuredDebugPath, debugJson, "utf8");
 
   process.stdout.write(
     `${JSON.stringify(
@@ -252,12 +334,9 @@ async function main() {
         ok: true,
         structuredCommercialPath,
         structuredNegativePath,
-        structuredCommercialRunwayPath: compiledRunway ? structuredCommercialRunwayPath : null,
-        structuredNegativeRunwayPath: compiledRunway ? structuredNegativeRunwayPath : null,
-        structuredCommercialProtectivePath: compiledProtective ? structuredCommercialProtectivePath : null,
-        structuredNegativeProtectivePath: compiledProtective ? structuredNegativeProtectivePath : null,
         structuredStoryboardPath,
-        structuredDebugPath
+        structuredDebugPath,
+        organizedDirs: dirs
       },
       null,
       2

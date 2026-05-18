@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 
 import { CommercialContextService } from "../src/modules/commercial-context/commercial-context.service";
 import { PromptEngineService } from "../src/modules/prompt-engine/prompt-engine.service";
@@ -17,8 +17,17 @@ async function main() {
     throw new Error("missing --dir <productDir>");
   }
 
-  const metaPath = path.join(productDir, "metadata.json");
-  await access(metaPath);
+  const metaPathNested = path.join(productDir, "metadata", "metadata.json");
+  const metaPathLegacy = path.join(productDir, "metadata.json");
+  const metaPath = await (async () => {
+    try {
+      await access(metaPathNested);
+      return metaPathNested;
+    } catch {
+      await access(metaPathLegacy);
+      return metaPathLegacy;
+    }
+  })();
 
   const raw = await readFile(metaPath, "utf8");
   const metadata = JSON.parse(raw);
@@ -29,7 +38,9 @@ async function main() {
   const pe = new PromptEngineService();
   const promptFiles = pe.generate(enriched);
 
-  const saved = await PromptOutputExporter.exportToProductDir(productDir, promptFiles);
+  const legacyPromptsDir = path.join(productDir, "legacy-prompts");
+  await mkdir(legacyPromptsDir, { recursive: true });
+  const saved = await PromptOutputExporter.exportToProductDir(legacyPromptsDir, promptFiles);
   await access(saved.commercialPromptPath);
   await access(saved.negativePromptPath);
   await access(saved.storyboardPath);
@@ -41,4 +52,3 @@ main().catch((e) => {
   process.stderr.write(`${e instanceof Error ? e.stack || e.message : String(e)}\n`);
   process.exitCode = 1;
 });
-

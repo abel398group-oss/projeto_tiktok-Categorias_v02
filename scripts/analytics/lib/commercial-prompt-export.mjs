@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { stat, writeFile, readFile } from "node:fs/promises";
+import { mkdir, stat, writeFile, readFile } from "node:fs/promises";
 
 const safeErrorMessage = (e) => (e instanceof Error ? e.message : String(e));
 
@@ -370,9 +370,11 @@ const buildStoryboard = (aiCommercial) => {
 
 const exportPromptFilesToProductDir = async (productDir, promptFiles) => {
   await ensureDirExists(productDir);
-  const commercialPromptPath = path.join(productDir, "commercial-prompt.txt");
-  const negativePromptPath = path.join(productDir, "negative-prompt.txt");
-  const storyboardPath = path.join(productDir, "storyboard.json");
+  const legacyPromptsDir = path.join(productDir, "legacy-prompts");
+  await mkdir(legacyPromptsDir, { recursive: true });
+  const commercialPromptPath = path.join(legacyPromptsDir, "commercial-prompt.txt");
+  const negativePromptPath = path.join(legacyPromptsDir, "negative-prompt.txt");
+  const storyboardPath = path.join(legacyPromptsDir, "storyboard.json");
 
   await writeFile(commercialPromptPath, `${promptFiles.commercialPrompt}\n`, "utf8");
   await writeFile(negativePromptPath, `${promptFiles.negativePrompt}\n`, "utf8");
@@ -385,8 +387,14 @@ const tryRuntimeGeneration = async ({ productDir, metadata }) => {
   await ensureDirExists(productDir);
   let metaObj = metadata;
   if (!metaObj) {
-    const metaPath = path.join(productDir, "metadata.json");
-    const raw = await readFile(metaPath, "utf8");
+    const nestedMetaPath = path.join(productDir, "metadata", "metadata.json");
+    const legacyMetaPath = path.join(productDir, "metadata.json");
+    let raw = "";
+    try {
+      raw = await readFile(nestedMetaPath, "utf8");
+    } catch {
+      raw = await readFile(legacyMetaPath, "utf8");
+    }
     metaObj = JSON.parse(raw);
   }
   const aiCommercial = buildAiCommercialBaseFromMetadata(metaObj);
