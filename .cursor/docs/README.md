@@ -17,9 +17,9 @@ Esta pasta é um **índice para a IA do Cursor** neste repositório. A documenta
 | Saída “final” (campos em PT) | `output/dados_produtos.json` (gerado; não em git) |
 | Técnica / debug / lojas / caça | `output/extra/*` (ex. `teste_categoria.json`, `modern_router_peek.json`, `caca_*.jsonl`, `rede_ultima_execucao.log`) |
 | Scripts npm (headed, debug, caça, peek) | `package.json` |
-| Perfil de login (local, não committar) | `.chrome-tiktok-profile/` (ignorado no git) |
+| Perfil de login (local, não committar) | `.puppeteer-profile/tiktok-shop/` (ignorado no git; legado documental: `.chrome-tiktok-profile/`) |
 | Itens a ignorar no commit | `.gitignore` (incl. `output/*` exc. `.gitkeep`) |
-| Regras persistentes do Cursor (convenções) | `.cursor/rules/*.mdc` (ex.: `task-management`, `architecture-context`, **`droplet-docker-prisma`**, **`analytics-esm-no-regress`** em `scripts/analytics/`, **`spaces-env-stable`** para DO Spaces / `.env`) |
+| Regras persistentes do Cursor (convenções) | `.cursor/rules/*.mdc` (ex.: `task-management`, `architecture-context`, `analytics-esm-no-regress` em `scripts/analytics/`, `scrape-mjs-patterns`, `frontend-analytics-ui`) |
 
 ## Uso
 
