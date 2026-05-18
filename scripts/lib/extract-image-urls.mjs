@@ -39,3 +39,23 @@ export function extractOrderedImageUrls(snapshot) {
   }
   return deduped;
 }
+
+export function countHttpPdpImages(snapshot) {
+  const out = [];
+  collectFromBlock(snapshot?.pdpImages, out);
+  const seen = new Set();
+  let c = 0;
+  for (const u of out) {
+    const t = typeof u === "string" ? u.trim() : "";
+    if (!t.startsWith("http")) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    c++;
+  }
+  return c;
+}
+
+export function hasAtLeastHttpPdpImages(snapshot, minCount = 3) {
+  const n = typeof minCount === "number" && Number.isFinite(minCount) ? Math.max(1, Math.floor(minCount)) : 3;
+  return countHttpPdpImages(snapshot) >= n;
+}

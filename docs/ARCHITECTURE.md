@@ -95,7 +95,7 @@ flowchart TB
 
 - Implementado como **`ProductSnapshot`** e **`SellerSnapshot`** em `prisma/schema.prisma`, ligados a **`ScrapeRun`** (uma coleta / import) e às dimensões **`Product`** / **`Seller`**.
 - Cada run de importação grava **novas linhas** de snapshot (preço, vendas, imagens no produto; métricas agregadas na loja) sem sobrescrever histórico anterior.
-- Preenchimento: **`scripts/import-output-to-db.mjs`** (`npm run db:import:output`) e o mesmo núcleo em **`scripts/lib/import-output-core.mjs`** (usado também por **`POST /scrape/import-remote`** na API analytics — worker local); sobre `output/dados_produtos.json` e `output/dados_lojas.json`; ver secção **Modelo Postgres** abaixo e `docs/LOCAL_SCRAPER_WORKER.md`.
+- Preenchimento: **`scripts/import-output-to-db.mjs`** (`npm run db:import:output`) e o mesmo núcleo em **`scripts/lib/import-output-core.mjs`** (usado também por **`POST /scrape/import-remote`** na API analytics — worker local); sobre `output/dados_produtos.json` e `output/dados_lojas.json`; ver secção **Modelo Postgres** abaixo e `docs/ANALYTICS-API.md` (POST `/scrape/import-remote`) + `FLUXO.md` (`npm run scraper:worker`).
 
 ## Contrato dos outputs
 

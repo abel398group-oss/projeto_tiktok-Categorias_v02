@@ -6,6 +6,7 @@
  * Não recalcula preço/vendas/merge — só mapeia campos do JSON.
  */
 import { createHash } from "node:crypto";
+import { hasAtLeastHttpPdpImages } from "./extract-image-urls.mjs";
 
 /**
  * Concatenação determinística para import idempotente (SHA-256).
@@ -35,6 +36,51 @@ function toJson(v) {
     return null;
   }
   return v;
+}
+
+function normalizeUrlForHash(url) {
+  const raw = typeof url === "string" ? url.trim() : "";
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return raw.split("?")[0].trim();
+  }
+}
+
+export function computeEnrichmentBaseHashFromItem(item) {
+  const nome = item?.nome != null ? String(item.nome).trim() : "";
+  const sellerId = item?.seller_id != null ? String(item.seller_id).trim() : "";
+  const price = item?.preco != null && item.preco !== "" ? String(item.preco) : "";
+  const orig = item?.preco_original != null && item.preco_original !== "" ? String(item.preco_original) : "";
+  const fotos = Array.isArray(item?.fotos) ? item.fotos : [];
+  const imgs = [];
+  const seen = new Set();
+  for (const x of fotos) {
+    if (typeof x !== "string") continue;
+    const k = normalizeUrlForHash(x);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    imgs.push(k);
+    if (imgs.length >= 3) break;
+  }
+  const body = `v1\n${nome}\n${sellerId}\n${price}\n${orig}\n${imgs.join("\n")}`;
+  return createHash("sha256").update(Buffer.from(body, "utf8")).digest("hex");
+}
+
+export function extractEnrichmentFromDataQuality(dataQuality) {
+  if (!dataQuality || typeof dataQuality !== "object") return null;
+  const e = dataQuality.enrichment;
+  if (!e || typeof e !== "object") return null;
+  const status = typeof e.status === "string" ? e.status : "";
+  if (status !== "enriched") return null;
+  const baseHash = typeof e.baseHash === "string" ? e.baseHash : "";
+  const at = typeof e.at === "string" ? e.at : null;
+  const source = typeof e.source === "string" ? e.source : "pdp";
+  if (!baseHash) return null;
+  return { status: "enriched", baseHash, ...(at ? { at } : {}), ...(source ? { source } : {}) };
 }
 
 /**
@@ -186,6 +232,8 @@ export async function importOutputFromStrings(prisma, opts) {
   let productsUpserted = 0;
   let productSnapshotsCreated = 0;
 
+  const prevEnrichmentByProductRefId = new Map();
+
   for (const item of itens) {
     const productId = item.product_id != null ? String(item.product_id) : null;
     if (!productId) {
@@ -221,12 +269,52 @@ export async function importOutputFromStrings(prisma, opts) {
     });
     productsUpserted++;
 
+    let prevEnrichment = prevEnrichmentByProductRefId.get(row.id) ?? null;
+    if (prevEnrichment === undefined) {
+      prevEnrichment = null;
+    }
+    if (prevEnrichmentByProductRefId.has(row.id) === false) {
+      try {
+        const prev = await prisma.productSnapshot.findFirst({
+          where: { productRefId: row.id },
+          orderBy: { capturedAt: "desc" },
+          select: { dataQuality: true }
+        });
+        prevEnrichment = extractEnrichmentFromDataQuality(prev?.dataQuality ?? null);
+      } catch {
+        prevEnrichment = null;
+      }
+      prevEnrichmentByProductRefId.set(row.id, prevEnrichment);
+    }
+
     const snapshotImages =
       Array.isArray(item.fotos) && item.fotos.length > 0
         ? item.fotos
         : Array.isArray(item.fotos_pdp) && item.fotos_pdp.length > 0
           ? item.fotos_pdp
           : null;
+
+    const productDescription =
+      typeof item.productDescription === "string" && item.productDescription.trim()
+        ? item.productDescription.trim()
+        : null;
+
+    const baseHash = computeEnrichmentBaseHashFromItem(item);
+    const isEnrichedNow = hasAtLeastHttpPdpImages({ pdpImages: item.fotos_pdp }, 3);
+    const carry =
+      !isEnrichedNow && prevEnrichment != null && typeof prevEnrichment.baseHash === "string"
+        ? prevEnrichment.baseHash === baseHash
+        : false;
+    const enrichment = isEnrichedNow
+      ? { status: "enriched", at: t.toISOString(), source: "pdp", baseHash }
+      : carry
+        ? prevEnrichment
+        : null;
+
+    const dataQuality =
+      productDescription || enrichment
+        ? { ...(productDescription ? { productDescription } : {}), ...(enrichment ? { enrichment } : {}) }
+        : null;
 
     await prisma.productSnapshot.create({
       data: {
@@ -244,7 +332,7 @@ export async function importOutputFromStrings(prisma, opts) {
         votesByStar: toJson(item.votos_por_estrela),
         images: toJson(snapshotImages),
         pdpImages: toJson(item.fotos_pdp),
-        dataQuality: null,
+        dataQuality,
         productRefId: row.id,
         scrapeRunId
       }

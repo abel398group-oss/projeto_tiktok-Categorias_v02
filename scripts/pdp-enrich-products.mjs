@@ -176,7 +176,154 @@ function mergePdpIntoItem(orig, clean, enrichedOk) {
     }
   }
 
+  const pd = typeof clean.productDescription === "string" ? clean.productDescription.trim() : "";
+  if (pd) {
+    next.productDescription = pd;
+  }
+
   return next;
+}
+
+async function captureProductDescriptionFromPdp(page) {
+  try {
+    const out = await page.evaluate(() => {
+      const targetRe = /(descri[cç][aã]o do produto|product description)/i;
+
+      const normSpaces = (s) =>
+        String(s || "")
+          .replace(/\u00a0/g, " ")
+          .replace(/[ \t]+/g, " ")
+          .trim();
+
+      const cleanText = (text) => {
+        const lines = String(text || "")
+          .replace(/\r\n/g, "\n")
+          .split("\n")
+          .map((l) => normSpaces(l))
+          .filter((l) => l !== "");
+        const deduped = [];
+        for (const line of lines) {
+          if (deduped.length && deduped[deduped.length - 1] === line) continue;
+          deduped.push(line);
+        }
+        const merged = deduped.join("\n").trim();
+        return merged ? merged : null;
+      };
+
+      const isVisible = (el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        if (!style) return false;
+        if (style.display === "none") return false;
+        if (style.visibility === "hidden") return false;
+        if (Number(style.opacity || "1") === 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      const isHeading = (el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const tag = el.tagName.toLowerCase();
+        if (/^h[1-6]$/.test(tag)) return true;
+        const role = el.getAttribute("role");
+        return role != null && role.toLowerCase() === "heading";
+      };
+
+      const allEls = Array.from(document.querySelectorAll("*"));
+      const candidates = [];
+      for (let i = 0; i < allEls.length && i < 4000; i++) {
+        const el = allEls[i];
+        if (!(el instanceof HTMLElement)) continue;
+        if (!isVisible(el)) continue;
+        const t = (el.innerText || "").trim();
+        if (!t) continue;
+        if (!targetRe.test(t)) continue;
+        if (t.length > 120) continue;
+        const headingBonus = isHeading(el) ? 10 : 0;
+        const exactBonus = /^descri[cç][aã]o do produto$/i.test(t) || /^product description$/i.test(t) ? 20 : 0;
+        const tag = el.tagName.toLowerCase();
+        const tagBonus = tag === "h2" || tag === "h3" ? 8 : tag === "h4" ? 6 : tag === "h5" ? 4 : 0;
+        candidates.push({ el, score: headingBonus + exactBonus + tagBonus + Math.max(0, 120 - t.length) / 40 });
+      }
+      candidates.sort((a, b) => b.score - a.score);
+      const h = candidates.length ? candidates[0].el : null;
+      if (!h) return { text: null, status: "not_found" };
+
+      const blocks = [];
+      const stopRe = /(especifica[cç][oõ]es|detalhes|avalia[cç][oõ]es|reviews|shipping|entrega)/i;
+      const noiseRe = /(comprar|buy now|r\$\s*\d|explore|explorar|ver mais|see more|menu|varia[cç][aã]o|variation)/i;
+
+      const pushFrom = (el) => {
+        if (!(el instanceof HTMLElement)) return;
+        if (isHeading(el) && stopRe.test((el.innerText || "").trim())) return;
+        const raw = cleanText(el.innerText || "");
+        if (!raw) return;
+        const lines = raw.split("\n").map((x) => x.trim()).filter(Boolean);
+        const keep = lines.filter((l) => !noiseRe.test(l));
+        const txt = cleanText(keep.join("\n"));
+        if (!txt) return;
+        blocks.push(txt);
+      };
+
+      let container = h.parentElement;
+      for (let up = 0; up < 5 && container; up++) {
+        const txt = (container.innerText || "").trim();
+        if (txt && txt.length < 20000) break;
+        container = container.parentElement;
+      }
+
+      const fromSiblings = () => {
+        let cur = h.nextElementSibling;
+        for (let step = 0; step < 18 && cur; step++) {
+          const el = cur;
+          if (isHeading(el) && stopRe.test((el.innerText || "").trim())) break;
+          pushFrom(el);
+          if (blocks.join("\n").length > 9000) break;
+          cur = cur.nextElementSibling;
+        }
+      };
+
+      const fromContainerChildren = () => {
+        if (!container) return;
+        const kids = Array.from(container.children);
+        const idx = kids.indexOf(h);
+        if (idx < 0) return;
+        for (let i = idx + 1; i < kids.length; i++) {
+          const el = kids[i];
+          if (!(el instanceof HTMLElement)) continue;
+          if (isHeading(el) && stopRe.test((el.innerText || "").trim())) break;
+          pushFrom(el);
+          if (blocks.join("\n").length > 9000) break;
+        }
+      };
+
+      fromSiblings();
+      if (blocks.length === 0) fromContainerChildren();
+
+      const merged = cleanText(blocks.join("\n"));
+      return { text: merged, status: merged ? "ok" : "empty" };
+    });
+
+    const text = typeof out?.text === "string" ? out.text.trim() : "";
+    const status = typeof out?.status === "string" ? out.status : "empty";
+    return { text: text ? text : null, status, size: text ? text.length : 0 };
+  } catch {
+    return { text: null, status: "empty", size: 0 };
+  }
+}
+
+async function smallLazyScrollDown(page, index) {
+  try {
+    await page.evaluate(() => {
+      const dy = Math.max(280, Math.floor(window.innerHeight * 0.55));
+      window.scrollBy(0, dy);
+    });
+  } catch {
+  }
+  try {
+    await page.waitForTimeout(index === 0 ? 250 : 350);
+  } catch {
+  }
 }
 
 function indicesByProductId(itens) {
@@ -269,11 +416,37 @@ async function main() {
 
       const enrichedOk = stats.visited >= 1 && stats.eligible >= 1;
 
+      let productDescription = null;
+      if (stats.visited >= 1) {
+        const r0 = await captureProductDescriptionFromPdp(page);
+        if (r0.status === "ok") {
+          productDescription = r0.text;
+          console.log(`[pdp-description] found-before-scroll size=${r0.size} product_id=${reqId}`);
+        } else {
+          console.log(`[pdp-description] empty-before-scroll size=${r0.size} product_id=${reqId}`);
+          for (let s = 0; s < 2; s++) {
+            await smallLazyScrollDown(page, s);
+            const r1 = await captureProductDescriptionFromPdp(page);
+            if (r1.status === "ok") {
+              productDescription = r1.text;
+              console.log(`[pdp-description] found-after-scroll size=${r1.size} product_id=${reqId}`);
+              break;
+            }
+          }
+          if (!productDescription) {
+            console.log(`[pdp-description] empty-after-scroll size=0 product_id=${reqId}`);
+          }
+        }
+      }
+
       /** @type {object | null} */
       let clean = null;
       try {
         const after = byProductId.get(String(reqId));
         clean = toDadosProdutoClean(after, categoriaUrl);
+        if (clean && typeof productDescription === "string" && productDescription.trim()) {
+          clean.productDescription = productDescription.trim();
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error(

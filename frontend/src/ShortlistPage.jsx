@@ -40,6 +40,10 @@ export default function ShortlistPage() {
   const [entries, setEntries] = useState(() => getCreatorShortlist());
   const [exportingId, setExportingId] = useState(null);
   const [exportById, setExportById] = useState(/** @type {Record<string, { kind: "ok" | "err", text: string }>} */ ({}));
+  const [localExportingId, setLocalExportingId] = useState(null);
+  const [localExportById, setLocalExportById] = useState(
+    /** @type {Record<string, { kind: "ok" | "err", text: string }>} */ ({})
+  );
   const [actionFlash, setActionFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
   const refresh = useCallback(() => {
@@ -92,6 +96,35 @@ export default function ShortlistPage() {
     [exportingId]
   );
 
+  const onExportLocal = useCallback(
+    async (productId) => {
+      const pid = String(productId ?? "").trim();
+      if (!pid) return;
+      if (localExportingId != null) return;
+      setLocalExportingId(pid);
+      setLocalExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: "Exportação local iniciada" } }));
+      try {
+        const res = await apiPost("/analytics/export-local", { productId: pid });
+        const dir = res && typeof res === "object" && typeof res.dir === "string" ? res.dir.trim() : "";
+        const saved = res && typeof res === "object" && Number.isFinite(Number(res.imagesSaved)) ? Number(res.imagesSaved) : null;
+        const failed = res && typeof res === "object" && Number.isFinite(Number(res.imagesFailed)) ? Number(res.imagesFailed) : null;
+        const bits = [];
+        if (saved != null) bits.push(`imagens: ${saved.toLocaleString("pt-BR")}`);
+        if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
+        const msg = `Exportação local concluída${bits.length ? " · " + bits.join(" · ") : ""}${dir ? ` · ${dir}` : ""}`;
+        setLocalExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: msg } }));
+      } catch (err) {
+        setLocalExportById((prev) => ({
+          ...prev,
+          [pid]: { kind: "err", text: `Falha ao exportar local: ${String(err?.message ?? err)}` }
+        }));
+      } finally {
+        setLocalExportingId(null);
+      }
+    },
+    [localExportingId]
+  );
+
   return (
     <main className="tk-page-body">
       <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
@@ -140,6 +173,11 @@ export default function ShortlistPage() {
                 exportState?.kind === "ok" &&
                 typeof exportState.text === "string" &&
                 exportState.text.startsWith("Exportação concluída");
+              const localState = localExportById[pidStr];
+              const localDone =
+                localState?.kind === "ok" &&
+                typeof localState.text === "string" &&
+                localState.text.startsWith("Exportação local concluída");
               return (
                 <li
                   key={e.productId}
@@ -241,6 +279,40 @@ export default function ShortlistPage() {
                         textDecoration: "none"
                       }}
                     />
+                    <button
+                      type="button"
+                      aria-busy={localExportingId === pidStr}
+                      disabled={localExportingId != null || exportingId != null}
+                      onClick={() => void onExportLocal(e.productId)}
+                      title="Exportar local (kit no Windows). Não faz scraping."
+                      style={{
+                        padding: "0.28rem 0.55rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        cursor: localExportingId != null ? "wait" : "pointer",
+                        borderRadius: 6,
+                        border: localDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #45515c",
+                        background: localDone ? "rgba(34, 197, 94, 0.12)" : "#1a2733",
+                        color: localDone ? "#dcedc8" : "#e7e9ea",
+                        opacity: localExportingId === pidStr ? 0.65 : 1
+                      }}
+                    >
+                      {localExportingId === pidStr ? "Exportando local…" : localDone ? "Exportar local ✓" : "Exportar local"}
+                    </button>
+                    {localExportById[pidStr] ? (
+                      <div
+                        role="status"
+                        style={{
+                          fontSize: "0.62rem",
+                          lineHeight: 1.35,
+                          opacity: 0.92,
+                          color: localExportById[pidStr].kind === "ok" ? "#9dd4b8" : "#f0a08a",
+                          maxWidth: "12rem"
+                        }}
+                      >
+                        {localExportById[pidStr].text}
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                        aria-busy={exportingId === pidStr}

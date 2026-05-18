@@ -48,6 +48,7 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 | GET | `/analytics/categories` | Grelha do painel `/`: categorias derivadas da BD (`scripts/analytics/lib/categories-catalog.mjs`). Inclui métricas operacionais por cartão: `operationalHealth`, `storedUrlVariantCount`, metadados do último `ScrapeRun` (`lastRunStatus`, `lastRunJsonTotal`, `lastRunInputHashPreview`, …), heurística `lastRunNewProductsApprox` / `lastRunUpdatedProductsApprox`, `jsonRunCoveragePercent` quando o run é multi-categoria. |
 | GET | `/analytics/product-workspace/:productId` | Detalhe do produto: **preferência** por snapshot no **último** `ScrapeRun` global (alinhado a `product-score`); se não existir aí, **fallback** ao snapshot mais recente desse produto na BD. Ver secção GET abaixo. |
 | POST | `/analytics/product-workspace/:productId/images-zip` | **`application/zip`** — fotos do snapshot. Corpo `{}` = todas; `{ "urls": ["…"] }` = subconjunto válido das `imageUrls` do workspace. Ver secção abaixo. |
+| POST | `/analytics/export-local` | Exporta um produto para uma pasta local (imagens + `metadata.json`) e gera prompts (antigo + structured). |
 | POST | `/analytics/pdp-enrich` | Arranca em background **`npm run pdp:enrich`** com lista de **`productIds`** (`scripts/analytics/pdp-enrich-route.mjs`). Requer máquina com browser. |
 | POST | `/scrape/run` | Corpo JSON `{ "categoryUrl": "https://shop.tiktok.com/…" }` — corre **`node src/scrapeCategory.mjs`** com `CATEGORY_URL` e **`OUTPUT_DIR`** em `output/categorias/…` quando a URL corresponde às duas categorias do repo (como `scrape-both`); em seguida **`consolidate-category-outputs.mjs`** para actualizar `output/dados_*.json` antes do import. **409** se busy. Em sucesso inclui **`outputDir`** (relativo ao repo, separador `/`) e **`consolidated`** (`true` quando correu consolidate após subpasta `categorias/`). Ver `scripts/analytics/scrape-run-route.mjs`. |
 | POST | `/scrape/run-both` | Corpo `{}` — **`node scripts/scrape-both.mjs`** (duas categorias, pastas em `output/categorias/…`) e em seguida **`node scripts/consolidate-category-outputs.mjs`**. Partilha o mesmo mutex **busy** que `/scrape/run`. Em sucesso inclui **`outputDir`** (`output`) e **`consolidated`: true**. |
@@ -64,6 +65,15 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
   - **`raw_payload_extra`**: object opcional — fundido em **`worker_extra`** dentro do envelope `RawPayload` (metadados / diagnósticos leves).
 - **200** `ok: true`, **`skipped: true|false`**, **`message`**, **`detail`** (`scrapeRunId`, `inputHash`, contagens quando importou; `existingScrapeRunId` quando saltou).
 - **400** JSON inválido, campos em falta, ou erro de importação (ex.: `coletado_em` inválido).
+
+### POST `/analytics/export-local`
+
+- **Corpo JSON** (`application/json`): `{ "productId": "1732593847560123456" }` (apenas dígitos).
+- **Efeito:** exporta para a pasta **Documentos/Scraper-TikTok-Produtos/** (no PC do operador) e escreve `metadata.json` + `imagens/`.
+- **Prompts:** tenta gerar prompts do pipeline antigo e, em best-effort, prompts structured (inclui `structured-prompt-debug.json` e variantes runway/protective quando disponíveis).
+- **Pode rodar enrich/import:** se não houver imagens suficientes, pode executar `pdp:enrich` e depois `db:import:output` antes de exportar.
+- **Resposta (200):** `{ ok: true, productId, dir, imagesSaved, imagesFailed, link, promptGeneration }`.
+- **Erros típicos:** `400 bad_request`, `404 not_found/no_snapshot`, `409 no_images`, `502 pdp_enrich_failed/import_failed`, `503 no_run`.
 
 ### GET `/analytics/categories`
 

@@ -6,6 +6,7 @@
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
+import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 
 const TOP_LIMIT = 20;
 
@@ -127,6 +128,14 @@ export async function getGrowthReport(prisma, opts = {}) {
   }
 
   const items = slice.map(({ s, prevSales, delta, deltaPctLabel }) => ({
+    enriched:
+      s?.dataQuality &&
+      typeof s.dataQuality === "object" &&
+      s.dataQuality.enrichment &&
+      typeof s.dataQuality.enrichment === "object" &&
+      s.dataQuality.enrichment.status === "enriched"
+        ? true
+        : hasAtLeastHttpPdpImages(s, 3),
     productId: s.product.productId,
     nome: (s.product.name ?? "").slice(0, 38),
     loja: (s.product.seller?.name ?? "—").slice(0, 24),

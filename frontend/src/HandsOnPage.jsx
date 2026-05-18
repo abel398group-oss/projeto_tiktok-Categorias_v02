@@ -179,6 +179,10 @@ export default function HandsOnPage() {
   const [exportById, setExportById] = useState(
     /** @type {Record<string, { kind: "ok" | "err"; text: string }>} */ ({})
   );
+  const [localExportingId, setLocalExportingId] = useState(/** @type {string | null} */ (null));
+  const [localExportById, setLocalExportById] = useState(
+    /** @type {Record<string, { kind: "ok" | "err"; text: string }>} */ ({})
+  );
   const [exportFlash, setExportFlash] = useState(
     /** @type {{ kind: "ok" | "err"; text: string } | null} */ (null)
   );
@@ -284,6 +288,7 @@ export default function HandsOnPage() {
               nome: typeof p.nome === "string" ? p.nome : undefined,
               link: typeof p.link === "string" ? p.link : null,
               hasPdpImages: Boolean(p.hasPdpImages),
+              enriched: Boolean(p.enriched),
               error: null,
               workspaceNote: note
             };
@@ -295,6 +300,7 @@ export default function HandsOnPage() {
               rating: "—",
               link: null,
               hasPdpImages: false,
+              enriched: false,
               error: typeof r.err === "string" ? r.err : "—",
               workspaceNote: null
             };
@@ -352,6 +358,35 @@ export default function HandsOnPage() {
       setExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: errMsg } }));
     } finally {
       setExportingId(null);
+    }
+  }, []);
+
+  const onExportLocal = useCallback(async (productId) => {
+    const pid = String(productId ?? "").trim();
+    if (!pid) return;
+    setLocalExportById((prev) => {
+      const next = { ...prev };
+      delete next[pid];
+      return next;
+    });
+    setLocalExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: "Exportação local iniciada" } }));
+    setLocalExportingId(pid);
+    try {
+      const res = await apiPost("/analytics/export-local", { productId: pid });
+      const dir = res && typeof res === "object" && typeof res.dir === "string" ? res.dir.trim() : "";
+      const saved = res && typeof res === "object" && Number.isFinite(Number(res.imagesSaved)) ? Number(res.imagesSaved) : null;
+      const failed = res && typeof res === "object" && Number.isFinite(Number(res.imagesFailed)) ? Number(res.imagesFailed) : null;
+      const bits = [];
+      if (saved != null) bits.push(`imagens: ${saved.toLocaleString("pt-BR")}`);
+      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
+      const msg = `Exportação local concluída${bits.length ? " · " + bits.join(" · ") : ""}${dir ? ` · ${dir}` : ""}`;
+      setLocalExportById((prev) => ({ ...prev, [pid]: { kind: "ok", text: msg } }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const errMsg = `Falha ao exportar local: ${msg}`;
+      setLocalExportById((prev) => ({ ...prev, [pid]: { kind: "err", text: errMsg } }));
+    } finally {
+      setLocalExportingId(null);
     }
   }, []);
 
@@ -495,6 +530,11 @@ export default function HandsOnPage() {
                     exportState?.kind === "ok" &&
                     typeof exportState.text === "string" &&
                     exportState.text.startsWith("Exportação concluída");
+                  const localState = localExportById[r.productId];
+                  const localDone =
+                    localState?.kind === "ok" &&
+                    typeof localState.text === "string" &&
+                    localState.text.startsWith("Exportação local concluída");
                   const tiktokUrl =
                     (typeof d?.link === "string" && d.link.trim()) ||
                     (typeof r.tiktokUrl === "string" && r.tiktokUrl.trim()) ||
@@ -529,7 +569,7 @@ export default function HandsOnPage() {
                               EXPORTADO
                             </span>
                           ) : null}
-                          {d?.hasPdpImages ? (
+                          {d?.enriched || d?.hasPdpImages ? (
                             <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "0.14rem 0.42rem", borderRadius: 999, background: "rgba(168, 85, 247, 0.16)", color: "#f0d7ff" }}>
                               PDP enriquecido
                             </span>
@@ -581,6 +621,42 @@ export default function HandsOnPage() {
                           Abrir no TikTok
                         </a>
                         <PdpEnrichButton productId={r.productId} />
+                        <button
+                          type="button"
+                          aria-busy={localExportingId === r.productId}
+                          style={{
+                            ...btnOpen,
+                            borderRadius: 8,
+                            border: localDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #45515c",
+                            background: localDone ? "rgba(34, 197, 94, 0.12)" : "#1a2733",
+                            color: localDone ? "#dcedc8" : "#e7e9ea",
+                            fontWeight: 700,
+                            opacity: localExportingId === r.productId ? 0.6 : 1,
+                            cursor: localExportingId != null ? "wait" : "pointer"
+                          }}
+                          disabled={localExportingId != null || exportingId != null}
+                          onClick={() => void onExportLocal(r.productId)}
+                          title="Exporta kit local do produto no Windows (não faz scraping)"
+                        >
+                          {localExportingId === r.productId
+                            ? "Exportando local…"
+                            : localDone
+                              ? "Exportar local ✓"
+                              : "Exportar local"}
+                        </button>
+                        {localExportById[r.productId] ? (
+                          <div
+                            role="status"
+                            style={{
+                              fontSize: "0.62rem",
+                              lineHeight: 1.35,
+                              opacity: 0.92,
+                              color: localExportById[r.productId].kind === "ok" ? "#9dd4b8" : "#f0a08a"
+                            }}
+                          >
+                            {localExportById[r.productId].text}
+                          </div>
+                        ) : null}
                         <button
                           type="button"
                           aria-busy={exportingId === r.productId}

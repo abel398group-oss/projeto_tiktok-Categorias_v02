@@ -4256,6 +4256,19 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     exitCode = 1;
   }
 
+  const productLimitRaw = process.env.PRODUCT_LIMIT;
+  const productLimit =
+    productLimitRaw != null && String(productLimitRaw).trim() !== "" ? Math.floor(Number(productLimitRaw)) : 0;
+  if (productLimit > 0 && byProductId.size > productLimit) {
+    const limited = [...byProductId.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(0, productLimit);
+    byProductId.clear();
+    for (const [k, v] of limited) {
+      byProductId.set(k, v);
+    }
+  }
+
   const products = Object.fromEntries(
     [...byProductId.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -4469,6 +4482,8 @@ async function main() {
   initOutputPaths();
   const startUrl = process.env.CATEGORY_URL || DEFAULT_URL;
   const assistedMode = isAssistedModeEnabled();
+  const keepBrowserOpen = String(process.env.KEEP_BROWSER_OPEN || "").trim() === "1";
+  const assistedStartUrl = "https://shop.tiktok.com/br/c";
   if (assistedMode && process.env.HEADED !== "1") {
     console.error("[ASSISTED_MODE] Requer HEADED=1 (janela visível).");
     return 1;
@@ -4508,14 +4523,20 @@ async function main() {
   await installAntiPopupGuards(browser, page);
   try {
     if (assistedMode) {
-      console.log(`[ASSISTED_MODE] URL inicial: ${startUrl}`);
-      await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      console.log(`[ASSISTED_MODE] URL inicial: ${assistedStartUrl}`);
+      await page.goto(assistedStartUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
       const catUrl = await assistedWaitForCategoryUrl(page);
       return await runCategoryHarvest(browser, page, catUrl, { skipGoto: true, passive: true });
     }
     return await runCategoryHarvest(browser, page, startUrl);
   } finally {
-    await browser.close();
+    if (keepBrowserOpen) {
+      await new Promise((resolve) => {
+        browser.on("disconnected", resolve);
+      });
+    } else {
+      await browser.close();
+    }
   }
 }
 
