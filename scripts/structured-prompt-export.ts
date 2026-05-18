@@ -2,6 +2,7 @@ import * as path from "node:path";
 import { access, readFile, writeFile } from "node:fs/promises";
 
 import { ProductUnderstandingService } from "../src/modules/ai-commercial/product-understanding/product-understanding.service";
+import { LocalCopyEngineService } from "../src/modules/ai-commercial/local-copy-engine/local-copy-engine.service";
 import { StyleProfilesService } from "../src/modules/ai-commercial/style-profiles/style-profiles.service";
 import { PromptModesService } from "../src/modules/ai-commercial/prompt-modes/prompt-modes.service";
 import { PromptStrategyService } from "../src/modules/ai-commercial/prompt-strategy/prompt-strategy.service";
@@ -77,6 +78,21 @@ async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
   } catch (e) {
     process.stderr.write(
       `[structured-prompt] runway shot prompts failed; continuing without them: ${e instanceof Error ? e.message : String(e)}\n`
+    );
+  }
+}
+
+async function tryWriteLocalCopyAssets(args: { productDir: string; metadata: any }): Promise<void> {
+  try {
+    const engine = new LocalCopyEngineService();
+    const out = engine.generateFromMetadata(args.metadata);
+
+    await writeFile(path.join(args.productDir, "voice-script.txt"), `${out.voiceScript}\n`, "utf8");
+    await writeFile(path.join(args.productDir, "caption-tiktok.txt"), `${out.captionTikTok}\n`, "utf8");
+    await writeFile(path.join(args.productDir, "overlay-copy.json"), `${JSON.stringify(out.overlayCopy, null, 2)}\n`, "utf8");
+  } catch (e) {
+    process.stderr.write(
+      `[structured-prompt] local copy engine failed; continuing without local copy files: ${e instanceof Error ? e.message : String(e)}\n`
     );
   }
 }
@@ -189,6 +205,7 @@ async function main() {
   }
 
   await tryWriteRunwayShotPrompts(productDir);
+  await tryWriteLocalCopyAssets({ productDir, metadata });
 
   await writeFile(
     structuredDebugPath,
