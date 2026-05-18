@@ -7,6 +7,80 @@ import { PromptModesService } from "../src/modules/ai-commercial/prompt-modes/pr
 import { PromptStrategyService } from "../src/modules/ai-commercial/prompt-strategy/prompt-strategy.service";
 import { PromptCompilerService } from "../src/modules/ai-commercial/prompt-compiler/prompt-compiler.service";
 
+async function tryWriteRunwayShotPrompts(productDir: string): Promise<void> {
+  const shots: Array<{ fileName: string; content: string }> = [
+    {
+      fileName: "01-hero-shot-runway.txt",
+      content: [
+        "premium metallic product object,",
+        "single isolated product centered in frame,",
+        "premium product motion photography,",
+        "clean white infinite studio,",
+        "soft high-key lighting,",
+        "realistic reflections,",
+        "minimal luxury aesthetic,",
+        "subtle macro camera movement,",
+        "fully static product,",
+        "preserve exact geometry and proportions"
+      ].join("\n")
+    },
+    {
+      fileName: "02-macro-detail-runway.txt",
+      content: [
+        "extreme macro product texture shot,",
+        "premium metallic surface detail,",
+        "soft cinematic reflections,",
+        "clean white studio,",
+        "shallow depth of field,",
+        "luxury product photography,",
+        "subtle camera movement,",
+        "fully static product,",
+        "preserve exact geometry,",
+        "focus on material texture and reflective finish"
+      ].join("\n")
+    },
+    {
+      fileName: "03-side-profile-runway.txt",
+      content: [
+        "side profile premium product showcase,",
+        "single isolated metallic product,",
+        "clean white infinite studio,",
+        "soft diffused lighting,",
+        "minimal luxury aesthetic,",
+        "controlled reflections,",
+        "subtle lateral camera movement,",
+        "fully static object,",
+        "preserve exact silhouette and proportions"
+      ].join("\n")
+    },
+    {
+      fileName: "04-reflection-shot-runway.txt",
+      content: [
+        "premium reflective metallic product showcase,",
+        "single isolated product,",
+        "clean studio environment,",
+        "soft high-key lighting,",
+        "controlled realistic reflections,",
+        "macro luxury product photography,",
+        "minimal composition,",
+        "subtle cinematic camera motion,",
+        "fully static product,",
+        "preserve exact geometry and surface finish"
+      ].join("\n")
+    }
+  ];
+
+  try {
+    for (const s of shots) {
+      await writeFile(path.join(productDir, s.fileName), `${s.content}\n`, "utf8");
+    }
+  } catch (e) {
+    process.stderr.write(
+      `[structured-prompt] runway shot prompts failed; continuing without them: ${e instanceof Error ? e.message : String(e)}\n`
+    );
+  }
+}
+
 function getArg(name: string): string | null {
   const idx = process.argv.findIndex((a) => a === name);
   if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
@@ -113,6 +187,9 @@ async function main() {
     await writeFile(structuredCommercialProtectivePath, `${compiledProtective.commercialPrompt}\n`, "utf8");
     await writeFile(structuredNegativeProtectivePath, `${compiledProtective.negativePrompt}\n`, "utf8");
   }
+
+  await tryWriteRunwayShotPrompts(productDir);
+
   await writeFile(
     structuredDebugPath,
     `${JSON.stringify(
