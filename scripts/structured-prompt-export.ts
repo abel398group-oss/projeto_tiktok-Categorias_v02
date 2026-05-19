@@ -141,6 +141,7 @@ async function tryWriteLocalCopyAssetsToDir(args: { commercialCopyDir: string; m
 }
 
 async function resolveMetadataPath(productDir: string): Promise<string> {
+  // Official path: metadata/metadata.json. Legacy fallback: metadata.json at product root.
   const nested = path.join(productDir, "metadata", "metadata.json");
   try {
     await access(nested);
@@ -175,7 +176,7 @@ async function main() {
     await ensureDir(dirs.outputsCapcut);
   } catch (e) {
     process.stderr.write(
-      `[structured-prompt] failed to create export directories; continuing with root files only: ${
+      `[structured-prompt] failed to create export directories; structured prompt export may fail or be skipped: ${
         e instanceof Error ? e.message : String(e)
       }\n`
     );

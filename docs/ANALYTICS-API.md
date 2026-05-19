@@ -69,11 +69,26 @@ Pedidos sem chave válida obtêm **`401`** com corpo JSON `{"error":"unauthorize
 ### POST `/analytics/export-local`
 
 - **Corpo JSON** (`application/json`): `{ "productId": "1732593847560123456" }` (apenas dígitos).
-- **Efeito:** exporta para a pasta **Documentos/Scraper-TikTok-Produtos/** (no PC do operador) e escreve `metadata.json` + `imagens/`.
-- **Prompts:** tenta gerar prompts do pipeline antigo e, em best-effort, prompts structured (inclui `structured-prompt-debug.json` e variantes runway/protective quando disponíveis).
+- **Efeito:** exporta para a pasta **Documentos/Scraper-TikTok-Produtos/** (no PC do operador) e escreve `imagens/` + `metadata/metadata.json` (path oficial; compatibilidade temporária com `metadata.json` legado pode existir em exportações antigas).
+- **Prompts (best-effort):**
+  - **Legacy:** `legacy-prompts/` (`commercial-prompt.txt`, `negative-prompt.txt`, `storyboard.json`).
+  - **Structured:** `structured-prompts/` (`structured-commercial-prompt.txt`, `structured-negative-prompt.txt`, `structured-storyboard.txt`, `structured-prompt-debug.json`).
+  - **Runway/Protective:** quando disponíveis, variantes por modo em `runway-prompts/` e `protective-prompts/`.
 - **Pode rodar enrich/import:** se não houver imagens suficientes, pode executar `pdp:enrich` e depois `db:import:output` antes de exportar.
 - **Resposta (200):** `{ ok: true, productId, dir, imagesSaved, imagesFailed, link, promptGeneration }`.
 - **Erros típicos:** `400 bad_request`, `404 not_found/no_snapshot`, `409 no_images`, `502 pdp_enrich_failed/import_failed`, `503 no_run`.
+
+#### Checklist técnico (export-local)
+
+- `metadata/metadata.json` é o path oficial do metadata no `productDir` (fallback legado `metadata.json` pode existir em exportações antigas).
+- Prompts structured são gravados em subpastas (`structured-prompts/`, `runway-prompts/`, `protective-prompts/`).
+- Prompts legacy continuam a existir em paralelo (compatibilidade backward) e são gravados em `legacy-prompts/`.
+- Falhas no export structured/artefatos adicionais não devem quebrar o fluxo principal do export (best-effort com warning).
+- `npm test` deve permanecer verde.
+
+#### Nota: `scripts/prompts/`
+
+`scripts/prompts/` contém textos de referência/templates manuais para takes. Os prompts exportados por produto ficam no `productDir/*-prompts/` e são os artefatos runtime gerados por exportação.
 
 ### GET `/analytics/categories`
 
