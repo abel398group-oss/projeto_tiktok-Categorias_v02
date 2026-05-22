@@ -217,6 +217,7 @@ export default function ProductWorkspacePage() {
   );
 
   const [selectedUrls, setSelectedUrls] = useState(() => new Set());
+  const [selectedMainImageUrl, setSelectedMainImageUrl] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
   const [zipMsg, setZipMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
@@ -324,10 +325,18 @@ export default function ProductWorkspacePage() {
 
   const onExportLocal = useCallback(async () => {
     if (!decodedId) return;
+    if (!isWorkspace(workspace) || !Array.isArray(workspace.imageUrls) || workspace.imageUrls.length === 0) {
+      setLocalExportMsg({ kind: "err", text: "Este produto não tem imagens no snapshot para exportar." });
+      return;
+    }
+    if (!selectedMainImageUrl || !workspace.imageUrls.includes(selectedMainImageUrl)) {
+      setLocalExportMsg({ kind: "err", text: "Selecione uma imagem principal antes de exportar local." });
+      return;
+    }
     setLocalExportBusy(true);
     setLocalExportMsg({ kind: "ok", text: "Exportação local iniciada" });
     try {
-      const res = await apiPost("/analytics/export-local", { productId: decodedId });
+      const res = await apiPost("/analytics/export-local", { productId: decodedId, selectedImageUrl: selectedMainImageUrl });
       const dir = res && typeof res === "object" && typeof res.dir === "string" ? res.dir.trim() : "";
       const saved = res && typeof res === "object" && Number.isFinite(Number(res.imagesSaved)) ? Number(res.imagesSaved) : null;
       const failed = res && typeof res === "object" && Number.isFinite(Number(res.imagesFailed)) ? Number(res.imagesFailed) : null;
@@ -344,7 +353,7 @@ export default function ProductWorkspacePage() {
     } finally {
       setLocalExportBusy(false);
     }
-  }, [decodedId]);
+  }, [decodedId, selectedMainImageUrl, workspace]);
 
   const exportDone =
     exportMsg?.kind === "ok" && typeof exportMsg.text === "string" && exportMsg.text.startsWith("Exportação concluída");
@@ -1123,7 +1132,7 @@ export default function ProductWorkspacePage() {
               </button>
               <button
                 type="button"
-                disabled={localExportBusy || exportBusy || importBusy || loading || !decodedId}
+                disabled={localExportBusy || exportBusy || importBusy || loading || !decodedId || !selectedMainImageUrl}
                 onClick={() => void onExportLocal()}
                 title="Exporta um kit local do produto no Windows (não faz scraping)"
                 aria-busy={localExportBusy}
@@ -1146,6 +1155,9 @@ export default function ProductWorkspacePage() {
               >
                 {localExportBusy ? "Exportando local…" : localExportDone ? "Exportar local ✓" : "Exportar local"}
               </button>
+              <span style={{ fontSize: "0.7rem", opacity: 0.75, alignSelf: "center" }}>
+                {selectedMainImageUrl ? "Imagem principal selecionada ✓" : "Selecione uma imagem principal antes de exportar local."}
+              </span>
               <button
                 type="button"
                 disabled={loading || !decodedId}
@@ -1346,6 +1358,7 @@ export default function ProductWorkspacePage() {
               >
                 {workspace.imageUrls.map((u, idx) => {
                   const checked = selectedUrls.has(u);
+                  const isMain = selectedMainImageUrl === u;
                   return (
                     <div key={`${idx}-${u.slice(-32)}`} style={{ position: "relative", lineHeight: 0 }}>
                       <input
@@ -1365,6 +1378,27 @@ export default function ProductWorkspacePage() {
                         }}
                         disabled={zipBusy}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMainImageUrl(u)}
+                        disabled={zipBusy}
+                        title={isMain ? "Imagem principal selecionada" : "Selecionar como imagem principal"}
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          left: 6,
+                          zIndex: 2,
+                          padding: "0.18rem 0.35rem",
+                          fontSize: "0.62rem",
+                          borderRadius: 6,
+                          border: isMain ? "1px solid rgba(34, 197, 94, 0.65)" : "1px solid #45515c",
+                          background: isMain ? "rgba(34, 197, 94, 0.16)" : "rgba(15, 23, 30, 0.85)",
+                          color: isMain ? "#dcedc8" : "#e7e9ea",
+                          cursor: zipBusy ? "wait" : "pointer"
+                        }}
+                      >
+                        {isMain ? "Principal ✓" : "Selecionar principal"}
+                      </button>
                       <a href={u} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
                         <img
                           src={u}
@@ -1375,7 +1409,7 @@ export default function ProductWorkspacePage() {
                             aspectRatio: "1",
                             objectFit: "cover",
                             borderRadius: 6,
-                            border: checked ? "2px solid #1d9bf0" : "1px solid #334",
+                            border: isMain ? "2px solid rgba(34, 197, 94, 0.85)" : checked ? "2px solid #1d9bf0" : "1px solid #334",
                             boxSizing: "border-box"
                           }}
                         />

@@ -494,6 +494,7 @@ async function resolveProductSnapshotForExport(tiktokProductId) {
 fastify.post("/analytics/export-local", async (req, reply) => {
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const productIdRaw = body.productId != null ? String(body.productId).trim() : "";
+  const selectedImageUrlRaw = body.selectedImageUrl != null ? String(body.selectedImageUrl).trim() : "";
   if (!productIdRaw || !isDigitsOnly(productIdRaw)) {
     return reply.code(400).send({
       ok: false,
@@ -606,6 +607,9 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     });
   }
 
+  const selectedImageUrl =
+    selectedImageUrlRaw && selectedImageUrlRaw.startsWith("http") ? selectedImageUrlRaw : null;
+
   await ensureDir(baseDir);
 
   const nome = typeof product.name === "string" ? product.name.trim() : "";
@@ -640,6 +644,27 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     } catch (e) {
       failed.push({ url, error: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  const isAllowedImageExt = (fileName) => {
+    const t = typeof fileName === "string" ? fileName.trim().toLowerCase() : "";
+    return t.endsWith(".jpg") || t.endsWith(".jpeg") || t.endsWith(".png") || t.endsWith(".webp");
+  };
+  const urlPathname = (u) => {
+    try {
+      return new URL(u).pathname || "";
+    } catch {
+      return "";
+    }
+  };
+
+  /** @type {{ file: string, url: string } | null} */
+  let selectedWritten = null;
+  if (selectedImageUrl) {
+    selectedWritten =
+      written.find((w) => w.url === selectedImageUrl) ??
+      written.find((w) => urlPathname(w.url) !== "" && urlPathname(w.url) === urlPathname(selectedImageUrl)) ??
+      null;
   }
 
   const legacyLinkTxtName = `link_${productIdRaw}.txt`;
@@ -728,6 +753,27 @@ fastify.post("/analytics/export-local", async (req, reply) => {
       categoriaLabel
     }
   };
+
+  if (selectedWritten && isAllowedImageExt(selectedWritten.file)) {
+    try {
+      const selectedDir = path.join(imagesDir, "imagem-selecionada");
+      await ensureDir(selectedDir);
+      const dst = path.join(selectedDir, "imagem-principal.jpg");
+      await fsp.copyFile(path.join(imagesDir, selectedWritten.file), dst);
+      meta.imagemSelecionada = {
+        arquivoOriginal: selectedWritten.file,
+        caminhoOriginal: `imagens/${selectedWritten.file}`,
+        caminhoSelecionado: "imagens/imagem-selecionada/imagem-principal.jpg",
+        selecionadoEm: ts
+      };
+    } catch (e) {
+      console.warn("[export-local] failed to copy selected image; continuing", {
+        productId: productIdRaw,
+        error: e instanceof Error ? e.message : String(e)
+      });
+    }
+  }
+
   const metaDir = path.join(productDir, metaDirName);
   await ensureDir(metaDir);
   await fsp.writeFile(path.join(metaDir, metaName), JSON.stringify(meta, null, 2), "utf8");
