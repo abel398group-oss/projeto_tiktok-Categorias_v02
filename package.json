@@ -9,6 +9,7 @@
   "scripts": {
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
     "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs",
+    "typecheck": "tsc --noEmit",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
     "setup:local": "node scripts/setup-local-env.mjs",
@@ -67,10 +68,12 @@
     "scrape:categories:sample": "node scripts/scrape-both.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "ajv": "^8.20.0",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
-    "prisma": "5.22.0"
+    "prisma": "5.22.0",
+    "typescript": "^5.8.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",
