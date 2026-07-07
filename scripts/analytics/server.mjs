@@ -10,9 +10,7 @@
 import { PrismaClient } from "@prisma/client";
 import Fastify from "fastify";
 import { spawn } from "node:child_process";
-import fs from "node:fs";
 import fsp from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
@@ -331,23 +329,6 @@ function fmtPtPriceBRL(price) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(price));
 }
 
-async function pickDocumentsDir() {
-  const home = os.homedir();
-  const candidates = [
-    path.join(home, "Documents"),
-    path.join(home, "OneDrive", "Documents"),
-    path.join(home, "Documentos"),
-    path.join(home, "OneDrive", "Documentos")
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {
-    }
-  }
-  return candidates[0];
-}
-
 async function ensureDir(p) {
   await fsp.mkdir(p, { recursive: true });
 }
@@ -503,8 +484,8 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     });
   }
 
-  const docsDir = await pickDocumentsDir();
-  const baseDir = path.join(docsDir, "Scraper-TikTok-Produtos");
+  // Exporta para a raiz do projeto: exportado/<categoria>/<produto>/ (antes: Documentos/Scraper-TikTok-Produtos).
+  const baseDir = path.join(repoRoot, "exportado");
 
   let current = await resolveProductSnapshotForExport(productIdRaw);
   if ("error" in current) {
@@ -614,7 +595,9 @@ fastify.post("/analytics/export-local", async (req, reply) => {
 
   const nome = typeof product.name === "string" ? product.name.trim() : "";
   const slug = safeSlug(nome);
-  const productDir = path.join(baseDir, `${slug}_${productIdRaw}`);
+  // Subpasta por categoria dentro de exportado/ (ex.: exportado/womenswear-underwear/<nome>_<id>/).
+  const categoriaSlug = safeSlug(categoryLabelFromUrl(product.categoryUrl) ?? "sem-categoria");
+  const productDir = path.join(baseDir, categoriaSlug, `${slug}_${productIdRaw}`);
   const imagesDir = path.join(productDir, "imagens");
   await ensureDir(imagesDir);
 

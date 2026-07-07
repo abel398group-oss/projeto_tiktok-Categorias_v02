@@ -209,8 +209,6 @@ export default function ProductWorkspacePage() {
   const [importFlash, setImportFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [importBusy, setImportBusy] = useState(false);
 
-  const [exportBusy, setExportBusy] = useState(false);
-  const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [localExportBusy, setLocalExportBusy] = useState(false);
   const [localExportMsg, setLocalExportMsg] = useState(
     /** @type {{ kind: "ok" | "err", text: string } | null} */ (null)
@@ -292,37 +290,6 @@ export default function ProductWorkspacePage() {
     setShortlisted(inList);
   }, [decodedId, workspace]);
 
-  const onExportImagesToSpaces = useCallback(async () => {
-    if (!decodedId) return;
-    setExportBusy(true);
-    setExportMsg({ kind: "ok", text: "Exportação iniciada" });
-    try {
-      const res = await apiPost("/analytics/images-upload", { productId: decodedId });
-      const stats = res && typeof res === "object" && res.stats && typeof res.stats === "object" ? res.stats : null;
-      const uploaded = stats && Number.isFinite(Number(stats.uploaded)) ? Number(stats.uploaded) : null;
-      const failed = stats && Number.isFinite(Number(stats.failed)) ? Number(stats.failed) : null;
-      const skipped = stats && Number.isFinite(Number(stats.skippedExists)) ? Number(stats.skippedExists) : null;
-      const ms = Number.isFinite(Number(res.ms)) ? Number(res.ms) : null;
-
-      const bits = [];
-      if (uploaded != null) bits.push(`enviadas: ${uploaded.toLocaleString("pt-BR")}`);
-      if (skipped != null) bits.push(`reutilizadas: ${skipped.toLocaleString("pt-BR")}`);
-      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
-      if (ms != null) bits.push(`tempo: ${(ms / 1000).toFixed(1)}s`);
-
-      setProductStatus(decodedId, "conteudo_produzido");
-      setExportMsg({
-        kind: "ok",
-        text: `Exportação concluída${bits.length ? " · " + bits.join(" · ") : ""}`
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setExportMsg({ kind: "err", text: `Falha ao exportar: ${msg}` });
-    } finally {
-      setExportBusy(false);
-    }
-  }, [decodedId]);
-
   const onExportLocal = useCallback(async () => {
     if (!decodedId) return;
     if (!isWorkspace(workspace) || !Array.isArray(workspace.imageUrls) || workspace.imageUrls.length === 0) {
@@ -355,8 +322,6 @@ export default function ProductWorkspacePage() {
     }
   }, [decodedId, selectedMainImageUrl, workspace]);
 
-  const exportDone =
-    exportMsg?.kind === "ok" && typeof exportMsg.text === "string" && exportMsg.text.startsWith("Exportação concluída");
   const localExportDone =
     localExportMsg?.kind === "ok" &&
     typeof localExportMsg.text === "string" &&
@@ -1107,34 +1072,9 @@ export default function ProductWorkspacePage() {
               </button>
               <button
                 type="button"
-                disabled={exportBusy || localExportBusy || loading || !decodedId}
-                onClick={() => void onExportImagesToSpaces()}
-                title="Exporta imagens deste produto para o DigitalOcean Spaces (não faz scraping)"
-                aria-busy={exportBusy}
-                style={{
-                  padding: "0.28rem 0.55rem",
-                  fontSize: "0.68rem",
-                  cursor: exportBusy ? "wait" : "pointer",
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  display: "inline-block",
-                  textAlign: "center",
-                  whiteSpace: "nowrap",
-                  border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
-                  background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
-                  color: "#dcedc8",
-                  opacity: exportBusy ? 0.7 : 1,
-                  alignSelf: "center"
-                }}
-              >
-                {exportBusy ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
-              </button>
-              <button
-                type="button"
-                disabled={localExportBusy || exportBusy || importBusy || loading || !decodedId || !selectedMainImageUrl}
+                disabled={localExportBusy || importBusy || loading || !decodedId || !selectedMainImageUrl}
                 onClick={() => void onExportLocal()}
-                title="Exporta um kit local do produto no Windows (não faz scraping)"
+                title="Guarda um kit local do produto na raiz do projeto: exportado/<categoria>/<produto>/ com imagens e metadata (não faz scraping)"
                 aria-busy={localExportBusy}
                 style={{
                   padding: "0.28rem 0.55rem",
@@ -1213,20 +1153,6 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {importFlash.text}
-              </p>
-            ) : null}
-            {exportMsg ? (
-              <p
-                role="status"
-                style={{
-                  marginTop: "0.35rem",
-                  marginBottom: 0,
-                  fontSize: "0.71rem",
-                  color: exportMsg.kind === "ok" ? "#9ed9b0" : "#f97373",
-                  lineHeight: 1.45
-                }}
-              >
-                {exportMsg.text}
               </p>
             ) : null}
             {localExportMsg ? (

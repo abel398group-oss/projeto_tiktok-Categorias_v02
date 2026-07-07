@@ -15,6 +15,9 @@ output/
 !output/.gitkeep
 !output/extra/.gitkeep
 
+# kits exportados localmente (imagens + metadata por produto)
+exportado/
+
 # debug/logs
 *.log
 debug_*.log
