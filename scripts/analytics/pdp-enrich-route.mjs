@@ -1,6 +1,7 @@
 /**
- * POST /analytics/pdp-enrich — dispara o CLI existente `npm run pdp:enrich -- --ids=...` (processo em background).
+ * POST /analytics/pdp-enrich — executa pdp:enrich e depois db:import:output, esperando a conclusão.
  */
+/* eslint-disable no-console -- logs operacionais no terminal da API */
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,33 @@ function normalizeProductIds(body) {
 }
 
 /**
+ * Executa um comando npm e aguarda a conclusão.
+ * @param {string[]} args - Argumentos para npm (ex: ["run", "pdp:enrich", "--", "--ids=..."])
+ * @returns {Promise<{ exitCode: number; log: string }>}
+ */
+async function runNpmCommand(args) {
+  return new Promise((resolve, reject) => {
+    let log = "";
+    const child = spawn("npm", args, {
+      cwd: repoRoot,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    child.stderr?.on("data", (d) => {
+      log += typeof d === "string" ? d : d.toString();
+    });
+    child.stdout?.on("data", (d) => {
+      log += typeof d === "string" ? d : d.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const exitCode = typeof code === "number" ? code : signal === "SIGKILL" ? 1 : 1;
+      resolve({ exitCode, log });
+    });
+  });
+}
+
+/**
  * @param {import("fastify").FastifyInstance} fastify
  */
 export function registerPdpEnrichRoute(fastify) {
@@ -57,29 +85,57 @@ export function registerPdpEnrichRoute(fastify) {
     }
 
     const idsArg = ids.join(",");
-    let child;
+    console.log("[pdp-enrich] Início: npm run pdp:enrich -- --ids=%s", idsArg);
+    const t0 = Date.now();
+
     try {
-      child = spawn("npm", ["run", "pdp:enrich", "--", `--ids=${idsArg}`], {
-        cwd: repoRoot,
-        shell: true,
-        detached: true,
-        stdio: "ignore"
+      // 1. Executa pdp:enrich
+      const { exitCode: pdpExitCode, log: pdpLog } = await runNpmCommand([
+        "run",
+        "pdp:enrich",
+        "--",
+        `--ids=${idsArg}`
+      ]);
+
+      if (pdpExitCode !== 0) {
+        const tail = pdpLog.length > 3800 ? `…${pdpLog.slice(-3700)}` : pdpLog.trim() || `exit ${pdpExitCode}`;
+        console.error("[pdp-enrich] pdp:enrich falhou exitCode=%s · tail:\n%s", pdpExitCode, tail.slice(0, 1200));
+        return reply.code(502).send({
+          ok: false,
+          message: `pdp:enrich falhou com código ${pdpExitCode}: ${tail}`
+        });
+      }
+      console.log("[pdp-enrich] pdp:enrich concluído em %sms", Date.now() - t0);
+
+      // 2. Executa db:import:output
+      console.log("[pdp-enrich] Início: npm run db:import:output");
+      const { exitCode: importExitCode, log: importLog } = await runNpmCommand(["run", "db:import:output"]);
+
+      if (importExitCode !== 0) {
+        const tail = importLog.length > 3800 ? `…${importLog.slice(-3700)}` : importLog.trim() || `exit ${importExitCode}`;
+        console.error("[pdp-enrich] db:import:output falhou exitCode=%s · tail:\n%s", importExitCode, tail.slice(0, 1200));
+        return reply.code(502).send({
+          ok: false,
+          message: `db:import:output falhou com código ${importExitCode}: ${tail}`
+        });
+      }
+      console.log("[pdp-enrich] db:import:output concluído em %sms total", Date.now() - t0);
+
+      // 3. Verifica se a importação foi ignorada
+      const skipped = importLog.includes("Importação ignorada");
+
+      return reply.send({
+        ok: true,
+        skipped,
+        message: skipped
+          ? "PDP enriquecido e importação ignorada (mesmo input_hash)"
+          : "PDP enriquecido e importado com sucesso",
+        productIds: ids
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return reply.code(500).send({ ok: false, error: "spawn_failed", message: msg });
+      console.error("[pdp-enrich] Excepção:", msg);
+      return reply.code(500).send({ ok: false, message: msg });
     }
-
-    child.unref();
-    child.on("error", (err) => {
-      // eslint-disable-next-line no-console
-      console.error("[analytics/pdp-enrich] spawn:", err);
-    });
-
-    return reply.send({
-      ok: true,
-      message: "PDP enrich iniciado",
-      productIds: ids
-    });
   });
 }

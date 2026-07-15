@@ -20,7 +20,7 @@
     "db:docker:down": "docker compose -f docker-compose.postgres-local.yml down",
     "db:docker:wait": "node scripts/wait-tcp.mjs 127.0.0.1 5433",
     "db:docker:bootstrap": "node scripts/ensure-local-database-url.mjs && docker compose -f docker-compose.postgres-local.yml up -d && node scripts/wait-tcp.mjs 127.0.0.1 5433 && npx prisma migrate deploy && npx prisma generate",
-    "pdp:enrich": "node scripts/pdp-enrich-products.mjs",
+    "pdp:enrich": "node --import ./scripts/load-root-env.mjs scripts/pdp-enrich-products.mjs",
     "images:upload": "node --import ./scripts/load-root-env.mjs scripts/images-upload.mjs",
     "validate:db-vs-json": "node --import ./scripts/load-root-env.mjs scripts/validate-db-vs-json.mjs",
     "analytics:top-products": "node --import ./scripts/load-root-env.mjs scripts/analytics/top-products.mjs",

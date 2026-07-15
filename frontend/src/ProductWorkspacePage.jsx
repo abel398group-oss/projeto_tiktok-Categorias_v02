@@ -1049,7 +1049,7 @@ export default function ProductWorkspacePage() {
               <strong>Refrescar da BD</strong> só volta a pedir à API os dados deste produto <em>sem</em> importar nada (útil se já importaste no terminal ou doutro separador, ou para rever o snapshot actual sem repetir o import).
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-start" }}>
-              <PdpEnrichButton productId={decodedId} />
+              <PdpEnrichButton productId={decodedId} onSuccess={reloadWorkspace} />
               <button
                 type="button"
                 disabled={importBusy || loading || !decodedId}

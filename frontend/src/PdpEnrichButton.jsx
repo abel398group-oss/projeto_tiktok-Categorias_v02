@@ -15,9 +15,9 @@ const btn = {
 
 /**
  * Dispara POST /analytics/pdp-enrich com um productId (TikTok).
- * @param {{ productId: string, inlineHint?: boolean }} props
+ * @param {{ productId: string, inlineHint?: boolean, onSuccess?: () => void }} props
  */
-export default function PdpEnrichButton({ productId, inlineHint = true }) {
+export default function PdpEnrichButton({ productId, inlineHint = true, onSuccess }) {
   const [busy, setBusy] = useState(false);
   /** @type {[{ kind: "ok" | "err", text: string } | null, function]} */
   const [flash, setFlash] = useState(null);
@@ -33,15 +33,16 @@ export default function PdpEnrichButton({ productId, inlineHint = true }) {
       await apiPost("/analytics/pdp-enrich", { productIds: [id] });
       setFlash({
         kind: "ok",
-        text: "PDP enrich iniciado. Quando terminar no servidor, importe o JSON (db:import) e atualize a lista."
+        text: "PDP enriquecido e importado com sucesso."
       });
+      onSuccess?.();
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
       setFlash({ kind: "err", text });
     } finally {
       setBusy(false);
     }
-  }, [productId]);
+  }, [productId, onSuccess]);
 
   if (!String(productId ?? "").trim()) {
     return null;
