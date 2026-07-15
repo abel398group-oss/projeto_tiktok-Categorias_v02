@@ -1044,9 +1044,9 @@ export default function ProductWorkspacePage() {
             <div style={{ ...labelMuted, marginBottom: "0.55rem" }}>Ligações</div>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.69rem", lineHeight: 1.45, opacity: 0.78, maxWidth: "52rem" }}>
               As fotos mais abaixo vêm da <strong>última importação na BD</strong> (<code>pdpImages</code> no snapshot).{" "}
-              <strong>Enriquecer PDP</strong> dispara no servidor o script que escreve galeria PDP no <code>dados_produtos.json</code> consolidado
-              (pode demorar ~1 min.). <strong>Actualizar dados — import JSON→BD</strong> corre o mesmo import que na raiz (<code>npm run db:import:output</code>): lê o JSON e grava no Postgres — é o passo necessário para as novas fotos aparecerem aqui.{" "}
-              <strong>Refrescar da BD</strong> só volta a pedir à API os dados deste produto <em>sem</em> importar nada (útil se já importaste no terminal ou doutro separador, ou para rever o snapshot actual sem repetir o import).
+              <strong>Enriquecer PDP</strong> faz tudo automaticamente: abre o browser para coletar as fotos do produto, grava no <code>dados_produtos.json</code> e importa diretamente na BD (pode demorar ~1 min.).{" "}
+              <strong>Actualizar dados — import JSON→BD</strong> está aqui para casos especiais (ex.: se você alterar o JSON manualmente): corre <code>npm run db:import:output</code> no servidor.{" "}
+              <strong>Refrescar da BD</strong> só recarrega este painel sem importar nada (útil se já importaste noutro lugar).
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-start" }}>
               <PdpEnrichButton productId={decodedId} onSuccess={reloadWorkspace} />
@@ -1347,8 +1347,7 @@ export default function ProductWorkspacePage() {
             </section>
           ) : (
             <p style={{ fontSize: "0.75rem", opacity: 0.65, lineHeight: 1.5 }}>
-              Sem imagens neste snapshot. Se já enriqueceu o PDP no JSON mas ainda só vê uma foto, rode «Actualizar dados — import
-              JSON→BD» em Ligações (ou espere ~1 min. após Enriquecer PDP e depois importe).
+              Sem imagens neste snapshot. Clique em <strong>Enriquecer PDP</strong> para coletar as fotos automaticamente (pode demorar ~1 min.).
             </p>
           )}
 
