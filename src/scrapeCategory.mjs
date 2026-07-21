@@ -1033,11 +1033,6 @@ async function gentleMouseJiggle(page) {
     // Movimento com velocidade variável
     await page.mouse.move(x, y, { steps: 20 + Math.floor(Math.random() * 25) });
     
-    // Pequena chance de um clique inofensivo em área vazia para simular interação
-    if (Math.random() > 0.9) {
-      await page.mouse.click(x, y, { delay: 50 + Math.random() * 100 });
-    }
-    
     await humanPause(page, 200, 500);
   }
 }
@@ -1259,13 +1254,27 @@ function mergeProductsFromModernRouter(rootData, byProductId, categoriaUrl) {
 async function scrollToLoadGrid(page) {
   let lastHeight = 0;
   let stable = 0;
+  const startUrl = page.url();
   // eslint-disable-next-line no-console
   console.log("[scrape] Iniciando scroll progressivo e aleatório...");
 
   for (let i = 0; i < 15; i++) {
+    // Aborta se a página navegou para fora da categoria (ex: PDP)
+    if (page.url() !== startUrl) {
+      // eslint-disable-next-line no-console
+      console.warn(`[scrape] scrollToLoadGrid: navegação inesperada detectada (${page.url().slice(0, 80)}…) — abortando scroll`);
+      return;
+    }
+
     // Scroll com valor aleatório para não ser sempre o mesmo salto
     const scrollAmount = 400 + Math.floor(Math.random() * 500);
-    await page.evaluate((amt) => window.scrollBy(0, amt), scrollAmount);
+    try {
+      await page.evaluate((amt) => window.scrollBy(0, amt), scrollAmount);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[scrape] scrollToLoadGrid: evaluate falhou (navegação em curso?) —", e?.message ?? e);
+      return;
+    }
 
     // Pausa humana após cada scroll
     await humanPause(page, 400, 900);
@@ -1275,7 +1284,12 @@ async function scrollToLoadGrid(page) {
       await gentleMouseJiggle(page);
     }
 
-    const h = await page.evaluate(() => document.body?.scrollHeight ?? 0);
+    let h = 0;
+    try {
+      h = await page.evaluate(() => document.body?.scrollHeight ?? 0);
+    } catch {
+      return;
+    }
     if (h === lastHeight) stable += 1;
     else stable = 0;
     lastHeight = h;
@@ -1283,9 +1297,11 @@ async function scrollToLoadGrid(page) {
     if (stable >= 3) break;
   }
   // Volta ao topo de forma suave
-  await page.evaluate(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
+  try {
+    await page.evaluate(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  } catch { /* navegação ocorreu, ignorar */ }
   await humanPause(page, 1000, 2000);
 }
 
