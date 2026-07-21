@@ -65,7 +65,10 @@
     "scraper:worker": "node --import ./scripts/load-root-env.mjs src/scrapeCategory.mjs --debug",
     "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
     "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
-    "scrape:categories:sample": "node scripts/scrape-both.mjs"
+    "scrape:categories:sample": "node scripts/scrape-both.mjs",
+    "coleta:todas": "node scripts/scrape-all-categories.mjs",
+    "coleta:todas:reset": "node scripts/scrape-all-categories.mjs --reset",
+    "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

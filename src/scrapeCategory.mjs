@@ -1302,7 +1302,7 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
   const off = process.env.VIEW_MORE === "0";
   const rawMax = Number(process.env.VIEW_MORE_MAX_CLICKS);
   const maxClicksConfigured = Number.isFinite(rawMax) ? rawMax : 8;
-  const maxClicks = off ? 0 : Math.min(10, Math.max(0, maxClicksConfigured));
+  const maxClicks = off ? 0 : Math.max(0, maxClicksConfigured);
   const drainMs = Math.max(800, Number(process.env.VIEW_MORE_DRAIN_MS) || 4500);
 
   if (maxClicks === 0) {
@@ -2872,11 +2872,14 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
  * Duas+ categorias no mesmo processo Chrome (sem fechar o browser entre elas). Nova `Page` por categoria
  * para evitar listeners duplicados. `runs[]`: `{ OUTPUT_DIR, CATEGORY_URL, label? }`.
  * @param {Array<{ OUTPUT_DIR: string, CATEGORY_URL: string, label?: string }>} runs
+ * @param {{ pauseMs?: number, onCategoryComplete?: (url: string, code: number, index: number, total: number) => Promise<void> }} [opts]
  */
-export async function scrapeCategoriesSequentialSharedBrowser(runs) {
+export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
   if (!Array.isArray(runs) || runs.length === 0) {
     throw new Error("scrapeCategoriesSequentialSharedBrowser: runs[] vazio");
   }
+  const { pauseMs, onCategoryComplete } = opts;
+  const defaultPause = Number(process.env.PAUSE_BETWEEN_CATEGORIES_MS);
   const browser = await launchTikTokBrowser();
   let exitCode = 0;
   try {
@@ -2886,14 +2889,23 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs) {
       process.env.OUTPUT_DIR = r.OUTPUT_DIR;
       initOutputPaths();
       // eslint-disable-next-line no-console
-      console.log(`\n--- ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
+      console.log(`\n--- [${i + 1}/${runs.length}] ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
       const page = await browser.newPage();
       await installAntiPopupGuards(browser, page);
       const code = await runCategoryHarvest(browser, page, r.CATEGORY_URL);
       exitCode = Math.max(exitCode, code);
       await page.close().catch(() => {});
+      if (onCategoryComplete) {
+        await onCategoryComplete(r.CATEGORY_URL, code, i + 1, runs.length).catch(() => {});
+      }
       if (i < runs.length - 1) {
-        await new Promise((res) => setTimeout(res, 450 + Math.random() * 550));
+        const delay =
+          pauseMs != null ? pauseMs :
+          Number.isFinite(defaultPause) && defaultPause >= 0 ? defaultPause :
+          10_000 + Math.random() * 5_000;
+        // eslint-disable-next-line no-console
+        console.log(`[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`);
+        await new Promise((res) => setTimeout(res, delay));
       }
     }
   } finally {
