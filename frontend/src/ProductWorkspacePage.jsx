@@ -209,14 +209,13 @@ export default function ProductWorkspacePage() {
   const [importFlash, setImportFlash] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [importBusy, setImportBusy] = useState(false);
 
-  const [exportBusy, setExportBusy] = useState(false);
-  const [exportMsg, setExportMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
   const [localExportBusy, setLocalExportBusy] = useState(false);
   const [localExportMsg, setLocalExportMsg] = useState(
     /** @type {{ kind: "ok" | "err", text: string } | null} */ (null)
   );
 
   const [selectedUrls, setSelectedUrls] = useState(() => new Set());
+  const [selectedMainImageUrl, setSelectedMainImageUrl] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
   const [zipMsg, setZipMsg] = useState(/** @type {{ kind: "ok" | "err", text: string } | null} */ (null));
 
@@ -291,43 +290,20 @@ export default function ProductWorkspacePage() {
     setShortlisted(inList);
   }, [decodedId, workspace]);
 
-  const onExportImagesToSpaces = useCallback(async () => {
-    if (!decodedId) return;
-    setExportBusy(true);
-    setExportMsg({ kind: "ok", text: "Exportação iniciada" });
-    try {
-      const res = await apiPost("/analytics/images-upload", { productId: decodedId });
-      const stats = res && typeof res === "object" && res.stats && typeof res.stats === "object" ? res.stats : null;
-      const uploaded = stats && Number.isFinite(Number(stats.uploaded)) ? Number(stats.uploaded) : null;
-      const failed = stats && Number.isFinite(Number(stats.failed)) ? Number(stats.failed) : null;
-      const skipped = stats && Number.isFinite(Number(stats.skippedExists)) ? Number(stats.skippedExists) : null;
-      const ms = Number.isFinite(Number(res.ms)) ? Number(res.ms) : null;
-
-      const bits = [];
-      if (uploaded != null) bits.push(`enviadas: ${uploaded.toLocaleString("pt-BR")}`);
-      if (skipped != null) bits.push(`reutilizadas: ${skipped.toLocaleString("pt-BR")}`);
-      if (failed != null) bits.push(`falhas: ${failed.toLocaleString("pt-BR")}`);
-      if (ms != null) bits.push(`tempo: ${(ms / 1000).toFixed(1)}s`);
-
-      setProductStatus(decodedId, "conteudo_produzido");
-      setExportMsg({
-        kind: "ok",
-        text: `Exportação concluída${bits.length ? " · " + bits.join(" · ") : ""}`
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setExportMsg({ kind: "err", text: `Falha ao exportar: ${msg}` });
-    } finally {
-      setExportBusy(false);
-    }
-  }, [decodedId]);
-
   const onExportLocal = useCallback(async () => {
     if (!decodedId) return;
+    if (!isWorkspace(workspace) || !Array.isArray(workspace.imageUrls) || workspace.imageUrls.length === 0) {
+      setLocalExportMsg({ kind: "err", text: "Este produto não tem imagens no snapshot para exportar." });
+      return;
+    }
+    if (!selectedMainImageUrl || !workspace.imageUrls.includes(selectedMainImageUrl)) {
+      setLocalExportMsg({ kind: "err", text: "Selecione uma imagem principal antes de exportar local." });
+      return;
+    }
     setLocalExportBusy(true);
     setLocalExportMsg({ kind: "ok", text: "Exportação local iniciada" });
     try {
-      const res = await apiPost("/analytics/export-local", { productId: decodedId });
+      const res = await apiPost("/analytics/export-local", { productId: decodedId, selectedImageUrl: selectedMainImageUrl });
       const dir = res && typeof res === "object" && typeof res.dir === "string" ? res.dir.trim() : "";
       const saved = res && typeof res === "object" && Number.isFinite(Number(res.imagesSaved)) ? Number(res.imagesSaved) : null;
       const failed = res && typeof res === "object" && Number.isFinite(Number(res.imagesFailed)) ? Number(res.imagesFailed) : null;
@@ -344,10 +320,8 @@ export default function ProductWorkspacePage() {
     } finally {
       setLocalExportBusy(false);
     }
-  }, [decodedId]);
+  }, [decodedId, selectedMainImageUrl, workspace]);
 
-  const exportDone =
-    exportMsg?.kind === "ok" && typeof exportMsg.text === "string" && exportMsg.text.startsWith("Exportação concluída");
   const localExportDone =
     localExportMsg?.kind === "ok" &&
     typeof localExportMsg.text === "string" &&
@@ -1070,12 +1044,12 @@ export default function ProductWorkspacePage() {
             <div style={{ ...labelMuted, marginBottom: "0.55rem" }}>Ligações</div>
             <p style={{ margin: "0 0 0.55rem", fontSize: "0.69rem", lineHeight: 1.45, opacity: 0.78, maxWidth: "52rem" }}>
               As fotos mais abaixo vêm da <strong>última importação na BD</strong> (<code>pdpImages</code> no snapshot).{" "}
-              <strong>Enriquecer PDP</strong> dispara no servidor o script que escreve galeria PDP no <code>dados_produtos.json</code> consolidado
-              (pode demorar ~1 min.). <strong>Actualizar dados — import JSON→BD</strong> corre o mesmo import que na raiz (<code>npm run db:import:output</code>): lê o JSON e grava no Postgres — é o passo necessário para as novas fotos aparecerem aqui.{" "}
-              <strong>Refrescar da BD</strong> só volta a pedir à API os dados deste produto <em>sem</em> importar nada (útil se já importaste no terminal ou doutro separador, ou para rever o snapshot actual sem repetir o import).
+              <strong>Enriquecer PDP</strong> faz tudo automaticamente: abre o browser para coletar as fotos do produto, grava no <code>dados_produtos.json</code> e importa diretamente na BD (pode demorar ~1 min.).{" "}
+              <strong>Actualizar dados — import JSON→BD</strong> está aqui para casos especiais (ex.: se você alterar o JSON manualmente): corre <code>npm run db:import:output</code> no servidor.{" "}
+              <strong>Refrescar da BD</strong> só recarrega este painel sem importar nada (útil se já importaste noutro lugar).
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-start" }}>
-              <PdpEnrichButton productId={decodedId} />
+              <PdpEnrichButton productId={decodedId} onSuccess={reloadWorkspace} />
               <button
                 type="button"
                 disabled={importBusy || loading || !decodedId}
@@ -1098,34 +1072,9 @@ export default function ProductWorkspacePage() {
               </button>
               <button
                 type="button"
-                disabled={exportBusy || localExportBusy || loading || !decodedId}
-                onClick={() => void onExportImagesToSpaces()}
-                title="Exporta imagens deste produto para o DigitalOcean Spaces (não faz scraping)"
-                aria-busy={exportBusy}
-                style={{
-                  padding: "0.28rem 0.55rem",
-                  fontSize: "0.68rem",
-                  cursor: exportBusy ? "wait" : "pointer",
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  display: "inline-block",
-                  textAlign: "center",
-                  whiteSpace: "nowrap",
-                  border: exportDone ? "1px solid rgba(34, 197, 94, 0.55)" : "1px solid #567138",
-                  background: exportDone ? "rgba(34, 197, 94, 0.12)" : "#203014",
-                  color: "#dcedc8",
-                  opacity: exportBusy ? 0.7 : 1,
-                  alignSelf: "center"
-                }}
-              >
-                {exportBusy ? "Exportando…" : exportDone ? "Exportar ✓" : "Exportar"}
-              </button>
-              <button
-                type="button"
-                disabled={localExportBusy || exportBusy || importBusy || loading || !decodedId}
+                disabled={localExportBusy || importBusy || loading || !decodedId || !selectedMainImageUrl}
                 onClick={() => void onExportLocal()}
-                title="Exporta um kit local do produto no Windows (não faz scraping)"
+                title="Guarda um kit local do produto na raiz do projeto: exportado/<categoria>/<produto>/ com imagens e metadata (não faz scraping)"
                 aria-busy={localExportBusy}
                 style={{
                   padding: "0.28rem 0.55rem",
@@ -1146,6 +1095,9 @@ export default function ProductWorkspacePage() {
               >
                 {localExportBusy ? "Exportando local…" : localExportDone ? "Exportar local ✓" : "Exportar local"}
               </button>
+              <span style={{ fontSize: "0.7rem", opacity: 0.75, alignSelf: "center" }}>
+                {selectedMainImageUrl ? "Imagem principal selecionada ✓" : "Selecione uma imagem principal antes de exportar local."}
+              </span>
               <button
                 type="button"
                 disabled={loading || !decodedId}
@@ -1201,20 +1153,6 @@ export default function ProductWorkspacePage() {
                 }}
               >
                 {importFlash.text}
-              </p>
-            ) : null}
-            {exportMsg ? (
-              <p
-                role="status"
-                style={{
-                  marginTop: "0.35rem",
-                  marginBottom: 0,
-                  fontSize: "0.71rem",
-                  color: exportMsg.kind === "ok" ? "#9ed9b0" : "#f97373",
-                  lineHeight: 1.45
-                }}
-              >
-                {exportMsg.text}
               </p>
             ) : null}
             {localExportMsg ? (
@@ -1346,6 +1284,7 @@ export default function ProductWorkspacePage() {
               >
                 {workspace.imageUrls.map((u, idx) => {
                   const checked = selectedUrls.has(u);
+                  const isMain = selectedMainImageUrl === u;
                   return (
                     <div key={`${idx}-${u.slice(-32)}`} style={{ position: "relative", lineHeight: 0 }}>
                       <input
@@ -1365,6 +1304,27 @@ export default function ProductWorkspacePage() {
                         }}
                         disabled={zipBusy}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMainImageUrl(u)}
+                        disabled={zipBusy}
+                        title={isMain ? "Imagem principal selecionada" : "Selecionar como imagem principal"}
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          left: 6,
+                          zIndex: 2,
+                          padding: "0.18rem 0.35rem",
+                          fontSize: "0.62rem",
+                          borderRadius: 6,
+                          border: isMain ? "1px solid rgba(34, 197, 94, 0.65)" : "1px solid #45515c",
+                          background: isMain ? "rgba(34, 197, 94, 0.16)" : "rgba(15, 23, 30, 0.85)",
+                          color: isMain ? "#dcedc8" : "#e7e9ea",
+                          cursor: zipBusy ? "wait" : "pointer"
+                        }}
+                      >
+                        {isMain ? "Principal ✓" : "Selecionar principal"}
+                      </button>
                       <a href={u} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
                         <img
                           src={u}
@@ -1375,7 +1335,7 @@ export default function ProductWorkspacePage() {
                             aspectRatio: "1",
                             objectFit: "cover",
                             borderRadius: 6,
-                            border: checked ? "2px solid #1d9bf0" : "1px solid #334",
+                            border: isMain ? "2px solid rgba(34, 197, 94, 0.85)" : checked ? "2px solid #1d9bf0" : "1px solid #334",
                             boxSizing: "border-box"
                           }}
                         />
@@ -1387,8 +1347,7 @@ export default function ProductWorkspacePage() {
             </section>
           ) : (
             <p style={{ fontSize: "0.75rem", opacity: 0.65, lineHeight: 1.5 }}>
-              Sem imagens neste snapshot. Se já enriqueceu o PDP no JSON mas ainda só vê uma foto, rode «Actualizar dados — import
-              JSON→BD» em Ligações (ou espere ~1 min. após Enriquecer PDP e depois importe).
+              Sem imagens neste snapshot. Clique em <strong>Enriquecer PDP</strong> para coletar as fotos automaticamente (pode demorar ~1 min.).
             </p>
           )}
 

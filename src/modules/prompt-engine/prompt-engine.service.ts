@@ -5,12 +5,11 @@ import { buildNegativePrompt } from "./templates/negative-prompt.template";
 import { buildStoryboard } from "./templates/storyboard.template";
 
 export class PromptEngineService {
-  /**
-   * @param {EnrichedMetadata} enrichedMetadata
-   * @returns {PromptFiles}
-   */
-  generate(enrichedMetadata) {
+  generate(enrichedMetadata: EnrichedMetadata): PromptFiles {
     const ai = enrichedMetadata.aiCommercial;
+    if (!ai) {
+      throw new Error("EnrichedMetadata.aiCommercial is required");
+    }
     return {
       commercialPrompt: buildCommercialPrompt(enrichedMetadata),
       negativePrompt: buildNegativePrompt(ai),
@@ -18,4 +17,3 @@ export class PromptEngineService {
     };
   }
 }
-

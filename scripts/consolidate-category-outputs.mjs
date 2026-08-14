@@ -84,12 +84,18 @@ async function main() {
       prodJson = JSON.parse(pRaw);
       lojJson = JSON.parse(lRaw);
     } catch (e) {
-      if (e && (e.code === "ENOENT" || e instanceof SyntaxError)) {
+      if (e && e.code === "ENOENT") {
+        // Subpasta de categoria sem dados_*.json (coleta parcial/abortada, ex.: só a pasta `extra/`).
+        // Ignorar e continuar — senão um único resíduo aborta toda a consolidação e o import seguinte.
         // eslint-disable-next-line no-console
-        console.error(
-          `consolidate: falha a ler/parsing em ${d}:`,
-          e.message || e
+        console.warn(
+          `consolidate: subpasta ignorada (sem dados_*.json — coleta parcial?): ${d}`
         );
+        continue;
+      }
+      if (e instanceof SyntaxError) {
+        // eslint-disable-next-line no-console
+        console.error(`consolidate: JSON inválido em ${d}:`, e.message || e);
         process.exit(1);
       }
       throw e;

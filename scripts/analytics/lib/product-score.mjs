@@ -5,7 +5,7 @@
  * `ScrapeRun.collected_at` (empate em `run.id`), como em Top Products / Opportunities;
  * o crescimento comparado ao run anterior global e `computeProductScoreLine` mantêm‑se iguais.
  */
-import { getLatestAndPreviousRun } from "../_common.mjs";
+import { getLatestAndPreviousRun, getLatestAndBaselineRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
@@ -25,6 +25,11 @@ function toReportShape(line) {
     vendas: line.vendas,
     rating: line.rating,
     deltaVendas: line.deltaVendas,
+    // Ritmo + janela viajam juntos: sem saber em quantas horas foi medido, o
+    // "vendas/dia" não diz se é medição firme ou palpite de uma janela curta.
+    vendasPorDia: line.vendasPorDia ?? null,
+    janelaHoras: line.janelaHoras ?? null,
+    crescimentoMedido: Boolean(line.crescimentoMedido),
     motivos: line.motivos,
     link: line.link,
     enriched: Boolean(line.enriched),
@@ -38,23 +43,29 @@ function toReportShape(line) {
  * @param {import("@prisma/client").PrismaClient} prisma
  */
 async function buildLatestRunScoreRows(prisma) {
-  const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
+  // A base de comparação é o run mais recente suficientemente ATRÁS do último,
+  // não o run imediatamente anterior: coletas seguidas ficam a minutos umas das
+  // outras e a diferença de vendas nesse intervalo é sempre zero.
+  const { latest, baseline, janelaHoras } = await getLatestAndBaselineRun(prisma);
 
   if (!latest) {
     return { type: "no-run", message: "Sem dados: nenhum ScrapeRun. Importe primeiro (npm run db:import:output)." };
   }
+
+  const previous = baseline;
+  const count = baseline ? 2 : 1;
 
   const scrapeRunPayload = {
     id: latest.id,
     collectedAt: latest.collectedAt.toISOString()
   };
   const previousPayload = previous ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() } : null;
-  const hasGrowthComparableRuns = !!(count >= 2 && previous);
+  const hasGrowthComparableRuns = Boolean(baseline);
 
   const prevPorRef = new Map();
-  if (count >= 2 && previous) {
+  if (baseline) {
     const prevSnaps = await prisma.productSnapshot.findMany({
-      where: { scrapeRunId: previous.id, salesCount: { not: null } },
+      where: { scrapeRunId: baseline.id, salesCount: { not: null } },
       select: { productRefId: true, salesCount: true }
     });
     for (const ps of prevSnaps) prevPorRef.set(ps.productRefId, ps.salesCount);
@@ -77,7 +88,7 @@ async function buildLatestRunScoreRows(prisma) {
     };
   }
 
-  const ctx = { prevPorRef, count, previous };
+  const ctx = { prevPorRef, count, previous, janelaHoras };
   const linhas = [];
   for (const s of snaps) {
     linhas.push(toReportShape(computeProductScoreLine(s, ctx)));
@@ -89,6 +100,7 @@ async function buildLatestRunScoreRows(prisma) {
     scrapeRun: scrapeRunPayload,
     previousRun: previousPayload,
     hasGrowthComparableRuns,
+    janelaHoras: janelaHoras != null ? Math.round(janelaHoras * 10) / 10 : null,
     lines: linhas,
     totalSnapshotsInLatestRun: snaps.length
   };
@@ -126,7 +138,9 @@ function pickLatestSnapshotPerProductRef(snaps) {
  * @param {string} filterKey — `normalizeCategoryKey` já aplicado
  */
 export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, filterKey) {
-  const { latest, previous, count } = await getLatestAndPreviousRun(prisma);
+  // Mesmo critério de base do relatório global: run suficientemente atrás, não
+  // o imediatamente anterior (ver getLatestAndBaselineRun).
+  const { latest, baseline, janelaHoras } = await getLatestAndBaselineRun(prisma);
 
   if (!latest) {
     return {
@@ -136,17 +150,20 @@ export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, fi
     };
   }
 
+  const previous = baseline;
+  const count = baseline ? 2 : 1;
+
   const scrapeRun = {
     id: latest.id,
     collectedAt: latest.collectedAt.toISOString()
   };
   const previousRun = previous ? { id: previous.id, collectedAt: previous.collectedAt.toISOString() } : null;
-  const hasGrowthComparableRuns = !!(count >= 2 && previous);
+  const hasGrowthComparableRuns = Boolean(baseline);
 
   const prevPorRef = new Map();
-  if (count >= 2 && previous) {
+  if (baseline) {
     const prevSnaps = await prisma.productSnapshot.findMany({
-      where: { scrapeRunId: previous.id, salesCount: { not: null } },
+      where: { scrapeRunId: baseline.id, salesCount: { not: null } },
       select: { productRefId: true, salesCount: true }
     });
     for (const ps of prevSnaps) prevPorRef.set(ps.productRefId, ps.salesCount);
@@ -194,7 +211,7 @@ export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, fi
 
   const bestByProductRef = pickLatestSnapshotPerProductRef(snaps);
   const snapshots = [...bestByProductRef.values()];
-  const ctx = { prevPorRef, count, previous };
+  const ctx = { prevPorRef, count, previous, janelaHoras };
 
   return {
     ok: true,
@@ -203,6 +220,7 @@ export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, fi
     scrapeRun,
     previousRun,
     hasGrowthComparableRuns,
+    janelaHoras: janelaHoras != null ? Math.round(janelaHoras * 10) / 10 : null,
     categoryUrlFilter: filterKey
   };
 }
@@ -248,6 +266,7 @@ async function buildCategoryScoreRows(prisma, filterKey) {
     scrapeRun: r.scrapeRun,
     previousRun: r.previousRun,
     hasGrowthComparableRuns: r.hasGrowthComparableRuns,
+    janelaHoras: r.janelaHoras ?? null,
     lines: linhas,
     totalSnapshotsInLatestRun: linhas.length,
     categoryUrlFilter: r.categoryUrlFilter
@@ -337,6 +356,10 @@ export async function getProductScoreFull(prisma, opts = {}) {
     scrapeRun: b.scrapeRun,
     previousRun: b.previousRun,
     hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+    // Janela sobre a qual todo o crescimento desta resposta foi medido. Quem
+    // mostra "vendas/dia" precisa de a exibir junto, senão o número parece mais
+    // firme do que é.
+    janelaHoras: b.janelaHoras ?? null,
     lines: b.lines,
     totalSnapshotsInLatestRun: b.totalSnapshotsInLatestRun,
     scoredCount: b.lines.length
@@ -383,15 +406,23 @@ function pontosOportunidade(sc, avg, tot, price) {
 }
 
 /**
- * @param {number | null} delta
- * @param {boolean} podeCalcularDelta
+ * Pontos de crescimento a partir da VELOCIDADE (vendas/dia), não do total
+ * acumulado entre duas leituras.
+ *
+ * O delta cru não é comparável entre produtos: 50 vendas em 12 h e 50 vendas em
+ * 7 dias davam a mesma pontuação, apesar de serem ritmos 14× diferentes. Como o
+ * intervalo entre coletas varia (às vezes minutos, às vezes dias), pontuar o
+ * delta cru premiava sobretudo quem foi medido num intervalo longo.
+ *
+ * @param {number | null} vendasPorDia
+ * @param {boolean} podeCalcular
  */
-function pontosCrescimento(delta, podeCalcularDelta) {
-  if (!podeCalcularDelta || delta == null) return { pts: 0, delta: null };
-  if (delta > 100) return { pts: 10, delta };
-  if (delta > 30) return { pts: 6, delta };
-  if (delta > 0) return { pts: 3, delta };
-  return { pts: 0, delta };
+function pontosCrescimento(vendasPorDia, podeCalcular) {
+  if (!podeCalcular || vendasPorDia == null) return { pts: 0, vendasPorDia: null };
+  if (vendasPorDia >= 50) return { pts: 10, vendasPorDia };
+  if (vendasPorDia >= 10) return { pts: 6, vendasPorDia };
+  if (vendasPorDia > 0) return { pts: 3, vendasPorDia };
+  return { pts: 0, vendasPorDia };
 }
 
 export function rotuloScore(score) {
@@ -446,6 +477,16 @@ export function computeProductScoreLine(s, ctx) {
 
   const delta = podeDelta ? sc - prevSale : null;
 
+  // Ritmo em vez de total. `janelaHoras` vem de quem montou o contexto; sem ela
+  // não se sabe em quanto tempo o delta aconteceu e o número não é comparável
+  // entre produtos — nesse caso o crescimento fica sem base, e diz-se isso.
+  const janelaHoras = Number.isFinite(ctx.janelaHoras) ? Number(ctx.janelaHoras) : null;
+  const janelaUtil = janelaHoras != null && janelaHoras > 0;
+  const vendasPorDia =
+    podeDelta && delta != null && janelaUtil
+      ? Math.round(((delta * 24) / janelaHoras) * 10) / 10
+      : null;
+
   let semBaseGrowth = false;
   if (count < 2 || !previous) {
     semBaseGrowth = true;
@@ -453,11 +494,14 @@ export function computeProductScoreLine(s, ctx) {
     semBaseGrowth = true;
   } else if (delta == null || Number.isNaN(delta)) {
     semBaseGrowth = true;
+  } else if (!janelaUtil) {
+    // Houve delta, mas não se sabe em quanto tempo: não é crescimento medido.
+    semBaseGrowth = true;
   } else {
     semBaseGrowth = false;
   }
 
-  const { pts: gPts } = pontosCrescimento(delta ?? null, Boolean(podeDelta));
+  const { pts: gPts } = pontosCrescimento(vendasPorDia, Boolean(podeDelta) && janelaUtil);
 
   let totalPts = vPts + rPts + pPts + dPts + oPts + gPts;
   if (totalPts > 100) totalPts = 100;
@@ -506,6 +550,14 @@ export function computeProductScoreLine(s, ctx) {
     ratingAverage: avg ?? null,
     /** @type {number | null} */
     deltaNumeric: delta,
+    // Ritmo medido e a janela em que foi medido. A janela viaja junto com o
+    // número de propósito: "12 vendas/dia" medido em 12 h e em 7 dias não têm
+    // a mesma confiança, e quem lê tem de conseguir ver a diferença.
+    /** @type {number | null} */
+    vendasPorDia,
+    /** @type {number | null} */
+    janelaHoras: janelaUtil ? Math.round(janelaHoras * 10) / 10 : null,
+    crescimentoMedido: !semBaseGrowth,
     isOpportunityV1: oPts === 15
   };
 }
@@ -588,6 +640,7 @@ export async function getProductScoreReport(prisma, opts = {}) {
     scrapeRun: b.scrapeRun,
     previousRun: b.previousRun,
     hasGrowthComparableRuns: b.hasGrowthComparableRuns,
+    janelaHoras: b.janelaHoras ?? null,
     top,
     totalSnapshotsInLatestRun: b.totalSnapshotsInLatestRun,
     listedTop: top.length,

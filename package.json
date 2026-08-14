@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
-    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs",
+    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs test/checkpoint-falhas.test.mjs test/crescimento-por-dia.test.mjs test/rendimento-fila.test.mjs test/completude-coleta.test.mjs test/estatisticas-categoria.test.mjs",
+    "typecheck": "tsc --noEmit",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
     "setup:local": "node scripts/setup-local-env.mjs",
@@ -19,7 +20,7 @@
     "db:docker:down": "docker compose -f docker-compose.postgres-local.yml down",
     "db:docker:wait": "node scripts/wait-tcp.mjs 127.0.0.1 5433",
     "db:docker:bootstrap": "node scripts/ensure-local-database-url.mjs && docker compose -f docker-compose.postgres-local.yml up -d && node scripts/wait-tcp.mjs 127.0.0.1 5433 && npx prisma migrate deploy && npx prisma generate",
-    "pdp:enrich": "node scripts/pdp-enrich-products.mjs",
+    "pdp:enrich": "node --import ./scripts/load-root-env.mjs scripts/pdp-enrich-products.mjs",
     "images:upload": "node --import ./scripts/load-root-env.mjs scripts/images-upload.mjs",
     "validate:db-vs-json": "node --import ./scripts/load-root-env.mjs scripts/validate-db-vs-json.mjs",
     "analytics:top-products": "node --import ./scripts/load-root-env.mjs scripts/analytics/top-products.mjs",
@@ -32,6 +33,8 @@
     "analytics:category-map": "node --import ./scripts/load-root-env.mjs scripts/analytics/category-map-cli.mjs",
     "analytics:api": "node --import ./scripts/load-root-env.mjs scripts/analytics/server.mjs",
     "api:dev": "node --watch --import ./scripts/load-root-env.mjs scripts/analytics/server.mjs",
+    "dev:ollama": "node scripts/dev/start-ollama.mjs",
+    "dev": "npm run dev:ollama && npm run api:dev",
     "frontend:dev": "cd frontend && npm run dev",
     "dev:app": "concurrently -n API,FRONT -c green,blue \"npm run api:dev\" \"npm run frontend:dev\"",
     "dev:all": "npm run db:docker:up && npm run db:docker:wait && concurrently -n API,FRONT -c green,blue \"npm run api:dev\" \"npm run frontend:dev\"",
@@ -62,13 +65,19 @@
     "scraper:worker": "node --import ./scripts/load-root-env.mjs src/scrapeCategory.mjs --debug",
     "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
     "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
-    "scrape:categories:sample": "node scripts/scrape-both.mjs"
+    "scrape:categories:sample": "node scripts/scrape-both.mjs",
+    "descobrir:categorias": "node scripts/descobrir-categorias.mjs",
+    "coleta:todas": "node scripts/scrape-all-categories.mjs",
+    "coleta:todas:reset": "node scripts/scrape-all-categories.mjs --reset",
+    "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "ajv": "^8.20.0",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
-    "prisma": "5.22.0"
+    "prisma": "5.22.0",
+    "typescript": "^5.8.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",

@@ -9,16 +9,19 @@
 import { copyFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PrismaClient } from "@prisma/client";
 import {
   enrichByProductIdWithPdpGallery,
   installAntiPopupGuards,
   launchTikTokBrowser,
   toDadosProdutoClean
 } from "../src/scrapeCategory.mjs";
+import { extractOrderedImageUrls } from "./lib/extract-image-urls.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const DADOS_PATH = path.join(root, "output", "dados_produtos.json");
+const prisma = new PrismaClient();
 
 function pathRegionFromCategoryUrl(categoriaUrl) {
   if (!categoriaUrl) {
@@ -347,6 +350,79 @@ function backupStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function toNumberOrNull(value) {
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return value;
+  }
+  if (value == null || value === "") {
+    return null;
+  }
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * Cria uma entrada mínima compatível com `dados_produtos.json` quando o produto
+ * já existe na BD, mas não está presente no `output` consolidado atual.
+ * @param {string} productId
+ * @returns {Promise<Record<string, unknown> | null>}
+ */
+async function buildFallbackItemFromDb(productId) {
+  const product = await prisma.product.findUnique({
+    where: { productId },
+    include: {
+      seller: true,
+      snapshots: {
+        orderBy: [{ scrapeRun: { collectedAt: "desc" } }, { capturedAt: "desc" }],
+        take: 1
+      }
+    }
+  });
+  if (!product) {
+    return null;
+  }
+
+  const snap = product.snapshots[0] ?? null;
+  const orderedImages = snap ? extractOrderedImageUrls({ images: snap.images, pdpImages: null }) : [];
+  const pdpImages = snap ? extractOrderedImageUrls({ images: null, pdpImages: snap.pdpImages }) : [];
+  const dq = snap?.dataQuality && typeof snap.dataQuality === "object" ? snap.dataQuality : null;
+  const productDescription =
+    dq && typeof dq.productDescription === "string" && dq.productDescription.trim()
+      ? dq.productDescription.trim()
+      : null;
+
+  return {
+    product_id: product.productId,
+    nome: product.name ?? null,
+    link_produto: product.productUrl ?? `https://www.tiktok.com/shop/br/pdp/${encodeURIComponent(product.productId)}`,
+    categoria_url: product.categoryUrl ?? null,
+    moeda: product.currency ?? null,
+    preco: toNumberOrNull(snap?.price),
+    preco_original: toNumberOrNull(snap?.originalPrice),
+    tem_desconto: Boolean(snap?.hasDiscount),
+    preco_estimado_vitrine: toNumberOrNull(snap?.estimatedShowcasePrice),
+    preco_gap_estimado: toNumberOrNull(snap?.estimatedPriceGap),
+    preco_gap_estimado_percent: toNumberOrNull(snap?.estimatedPriceGapPercent),
+    vendas: toNumberOrNull(snap?.salesCount),
+    vendas_texto: snap?.salesText ?? null,
+    fotos: orderedImages.length > 0 ? orderedImages : null,
+    fotos_pdp: pdpImages.length > 0 ? pdpImages : null,
+    avaliacao_media: toNumberOrNull(snap?.ratingAverage),
+    avaliacoes_total: toNumberOrNull(snap?.ratingTotal),
+    votos_por_estrela: snap?.votesByStar ?? null,
+    seller_id: product.seller?.sellerId ?? null,
+    global_seller_id: product.seller?.globalSellerId ?? null,
+    nome_loja: product.seller?.name ?? null,
+    loja_logo_uri: product.seller?.logoUri ?? null,
+    loja_logo_urls: Array.isArray(product.seller?.logoUrls) ? product.seller.logoUrls : null,
+    productDescription
+  };
+}
+
 async function main() {
   const idsArg = parseIds(process.argv.slice(2));
   if (!idsArg.length) {
@@ -372,120 +448,173 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log(`[backup] ${backupPath}`);
 
-  const browser = await launchTikTokBrowser();
-  const page = await browser.newPage();
-  await installAntiPopupGuards(browser, page);
-  await page.setExtraHTTPHeaders({
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
-  });
+  // Resultado por produto. Sem isto o enriquecimento falhava em silêncio:
+  // `continue` no meio do laço, exit 0 no fim, e a interface dizia
+  // "enriquecido com sucesso" sobre um produto em que nada mudou.
+  /** @type {Map<string, { status: string, nota: string }>} */
+  const resultadoPorProduto = new Map();
+  const registar = (id, status, nota = "") => {
+    resultadoPorProduto.set(String(id), { status, nota });
+  };
 
   try {
-    for (const reqIdRaw of idsArg) {
-      const reqId = String(reqIdRaw).trim();
-      const indices = idIndex.get(reqId);
-      if (!indices?.length) {
-        // eslint-disable-next-line no-console
-        console.error(`[pdp:enrich] product_id=${reqId} não encontrado em itens[] — ignorado`);
-        continue;
-      }
+    const browser = await launchTikTokBrowser();
+    const page = await browser.newPage();
+    await installAntiPopupGuards(browser, page);
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+    });
 
-      const baseIdx = indices[0];
-      const item = itens[baseIdx];
-      const categoriaUrl = item?.categoria_url != null ? String(item.categoria_url) : "";
+    try {
+      for (const reqIdRaw of idsArg) {
+        const reqId = String(reqIdRaw).trim();
+        let indices = idIndex.get(reqId) ?? [];
+        if (!indices.length) {
+          const fallbackItem = await buildFallbackItemFromDb(reqId);
+          if (!fallbackItem) {
+            // eslint-disable-next-line no-console
+            console.error(`[pdp:enrich] product_id=${reqId} não encontrado em itens[] nem na BD — ignorado`);
+            registar(reqId, "erro", "produto não existe no output nem na base");
+            continue;
+          }
+          itens.push(fallbackItem);
+          indices = [itens.length - 1];
+          idIndex.set(reqId, indices);
+          // eslint-disable-next-line no-console
+          console.log(`[pdp:enrich] product_id=${reqId} carregado da BD para fallback do output`);
+        }
 
-      let pdpUrl = resolvePdpUrlForItem(item);
-      if (!pdpUrl || !/\/pdp\//i.test(pdpUrl)) {
-        // eslint-disable-next-line no-console
-        console.error(`[pdp:enrich] product_id=${reqId}: URL PDP inválida — ignorado`);
-        continue;
-      }
+        const baseIdx = indices[0];
+        const item = itens[baseIdx];
+        const categoriaUrl = item?.categoria_url != null ? String(item.categoria_url) : "";
 
-      const n = jsonItemToNormalized(item, pdpUrl);
-      const byProductId = new Map([[String(reqId), n]]);
+        let pdpUrl = resolvePdpUrlForItem(item);
+        if (!pdpUrl || !/\/pdp\//i.test(pdpUrl)) {
+          // eslint-disable-next-line no-console
+          console.error(`[pdp:enrich] product_id=${reqId}: URL PDP inválida — ignorado`);
+          registar(reqId, "url_invalida", "sem link de PDP utilizável");
+          continue;
+        }
 
-      let stats = { visited: 0, max: 0, eligible: 0 };
-      try {
-        stats = await enrichByProductIdWithPdpGallery(browser, page, byProductId, {
-          max: 1,
-          categoriaUrl
-        });
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(`[pdp:enrich] product_id=${reqId} falhou (browser): ${(e && e.message) || e}`);
-      }
+        const n = jsonItemToNormalized(item, pdpUrl);
+        const byProductId = new Map([[String(reqId), n]]);
 
-      const enrichedOk = stats.visited >= 1 && stats.eligible >= 1;
+        let stats = { visited: 0, max: 0, eligible: 0 };
+        let erroNavegador = "";
+        try {
+          stats = await enrichByProductIdWithPdpGallery(browser, page, byProductId, {
+            max: 1,
+            categoriaUrl
+          });
+        } catch (e) {
+          erroNavegador = String((e && e.message) || e);
+          // eslint-disable-next-line no-console
+          console.error(`[pdp:enrich] product_id=${reqId} falhou (browser): ${erroNavegador}`);
+        }
 
-      let productDescription = null;
-      if (stats.visited >= 1) {
-        const r0 = await captureProductDescriptionFromPdp(page);
-        if (r0.status === "ok") {
-          productDescription = r0.text;
-          console.log(`[pdp-description] found-before-scroll size=${r0.size} product_id=${reqId}`);
-        } else {
-          console.log(`[pdp-description] empty-before-scroll size=${r0.size} product_id=${reqId}`);
-          for (let s = 0; s < 2; s++) {
-            await smallLazyScrollDown(page, s);
-            const r1 = await captureProductDescriptionFromPdp(page);
-            if (r1.status === "ok") {
-              productDescription = r1.text;
-              console.log(`[pdp-description] found-after-scroll size=${r1.size} product_id=${reqId}`);
-              break;
+        const enrichedOk = stats.visited >= 1 && stats.eligible >= 1;
+
+        let productDescription = null;
+        if (stats.visited >= 1) {
+          const r0 = await captureProductDescriptionFromPdp(page);
+          if (r0.status === "ok") {
+            productDescription = r0.text;
+            console.log(`[pdp-description] found-before-scroll size=${r0.size} product_id=${reqId}`);
+          } else {
+            console.log(`[pdp-description] empty-before-scroll size=${r0.size} product_id=${reqId}`);
+            for (let s = 0; s < 2; s++) {
+              await smallLazyScrollDown(page, s);
+              const r1 = await captureProductDescriptionFromPdp(page);
+              if (r1.status === "ok") {
+                productDescription = r1.text;
+                console.log(`[pdp-description] found-after-scroll size=${r1.size} product_id=${reqId}`);
+                break;
+              }
+            }
+            if (!productDescription) {
+              console.log(`[pdp-description] empty-after-scroll size=0 product_id=${reqId}`);
             }
           }
-          if (!productDescription) {
-            console.log(`[pdp-description] empty-after-scroll size=0 product_id=${reqId}`);
-          }
         }
-      }
 
-      /** @type {object | null} */
-      let clean = null;
-      try {
-        const after = byProductId.get(String(reqId));
-        clean = toDadosProdutoClean(after, categoriaUrl);
-        if (clean && typeof productDescription === "string" && productDescription.trim()) {
-          clean.productDescription = productDescription.trim();
-        }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[pdp:enrich] product_id=${reqId} toDadosProdutoClean: ${(e && e.message) || e}`
-        );
-      }
-
-      if (!clean || !enrichedOk) {
-        if (!enrichedOk) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[pdp:enrich] product_id=${reqId} PDP não aplicado (visited=${stats.visited}, eligible=${stats.eligible}) — item original preservado`
-          );
-        }
-        continue;
-      }
-
-      for (const idx of indices) {
+        /** @type {object | null} */
+        let clean = null;
         try {
-          itens[idx] = mergePdpIntoItem(itens[idx], clean, true);
-          if (
-            enrichedOk &&
-            pdpUrl &&
-            typeof itens[idx] === "object" &&
-            itens[idx].link_produto !== pdpUrl
-          ) {
-            itens[idx].link_produto = pdpUrl;
+          const after = byProductId.get(String(reqId));
+          clean = toDadosProdutoClean(after, categoriaUrl);
+          if (clean && typeof productDescription === "string" && productDescription.trim()) {
+            clean.productDescription = productDescription.trim();
           }
         } catch (e) {
           // eslint-disable-next-line no-console
-          console.error(`[pdp:enrich] product_id=${reqId} idx=${idx}: ${(e && e.message) || e}`);
+          console.error(
+            `[pdp:enrich] product_id=${reqId} toDadosProdutoClean: ${(e && e.message) || e}`
+          );
         }
-      }
 
-      // eslint-disable-next-line no-console
-      console.log(`[pdp:enrich] OK product_id=${reqId} (${indices.length} linha(s) em itens[])`);
+        if (!clean || !enrichedOk) {
+          if (!enrichedOk) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[pdp:enrich] product_id=${reqId} PDP não aplicado (visited=${stats.visited}, eligible=${stats.eligible}) — item original preservado`
+            );
+          }
+          // Página nunca abriu = provável bloqueio (captcha/rede); abriu mas não
+          // rendeu galeria = produto sem material. São causas diferentes e pedem
+          // ações opostas: uma repete, a outra não vale repetir.
+          if (erroNavegador) {
+            registar(reqId, "erro", `navegador: ${erroNavegador}`.slice(0, 300));
+          } else if (stats.visited < 1) {
+            registar(reqId, "captcha", "a PDP não abriu — verificação de segurança ou bloqueio");
+          } else {
+            registar(reqId, "sem_galeria", "a PDP abriu mas não devolveu galeria utilizável");
+          }
+          continue;
+        }
+        for (const idx of indices) {
+          try {
+            itens[idx] = mergePdpIntoItem(itens[idx], clean, true);
+            if (
+              enrichedOk &&
+              pdpUrl &&
+              typeof itens[idx] === "object" &&
+              itens[idx].link_produto !== pdpUrl
+            ) {
+              itens[idx].link_produto = pdpUrl;
+            }
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error(`[pdp:enrich] product_id=${reqId} idx=${idx}: ${(e && e.message) || e}`);
+          }
+        }
+
+        registar(reqId, "ok");
+        // eslint-disable-next-line no-console
+        console.log(`[pdp:enrich] OK product_id=${reqId} (${indices.length} linha(s) em itens[])`);
+      }
+    } finally {
+      await browser.close().catch(() => {});
+    }
+
+    // Grava o estado de cada tentativa — inclusive as falhadas. É o que permite
+    // ver "este produto nunca enriquece, e porquê" em vez de o retentar sempre.
+    for (const [pid, r] of resultadoPorProduto) {
+      try {
+        await prisma.product.updateMany({
+          where: { productId: pid },
+          data: {
+            enrichStatus: r.status,
+            enrichCheckedAt: new Date(),
+            enrichNote: r.nota || null
+          }
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(`[pdp:enrich] não consegui gravar o estado de ${pid}: ${(e && e.message) || e}`);
+      }
     }
   } finally {
-    await browser.close().catch(() => {});
+    await prisma.$disconnect().catch(() => {});
   }
 
   payload.coletado_em = new Date().toISOString();
@@ -493,10 +622,31 @@ async function main() {
   await writeFile(DADOS_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   // eslint-disable-next-line no-console
   console.log(`[pdp:enrich] Gravado ${DADOS_PATH}`);
+
+  // Resumo + código de saída honesto. Antes, um produto que não enriquecia
+  // terminava com exit 0 e a interface anunciava sucesso: o utilizador só
+  // descobria ao ver que as fotos eram as mesmas de antes.
+  const resultados = [...resultadoPorProduto.values()];
+  const okCount = resultados.filter((r) => r.status === "ok").length;
+  const falhas = resultados.filter((r) => r.status !== "ok");
+  // eslint-disable-next-line no-console
+  console.log(`[pdp:enrich] resumo: ${okCount} enriquecido(s), ${falhas.length} falha(s) de ${idsArg.length} pedido(s)`);
+  for (const [pid, r] of resultadoPorProduto) {
+    if (r.status !== "ok") {
+      // eslint-disable-next-line no-console
+      console.log(`  • ${pid}: ${r.status} — ${r.nota}`);
+    }
+  }
+  // Nada enriquecido quando havia trabalho a fazer é falha, não sucesso.
+  return okCount === 0 && idsArg.length > 0 ? 4 : 0;
 }
 
-main().catch((e) => {
-  // eslint-disable-next-line no-console
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then((code) => {
+    process.exit(typeof code === "number" ? code : 0);
+  })
+  .catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exit(1);
+  });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
 import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
+import ScrapeAllPanel from "./ScrapeAllPanel.jsx";
 
 const EMPTY_LIST_MSG =
   "Nenhuma categoria importada ainda. Rode uma coleta e importe os dados para começar.";
@@ -106,6 +107,33 @@ function linesFromImportDetail(detail) {
 }
 
 /**
+ * Constrói o flash a partir da resposta de `POST /analytics/import-output`.
+ * @param {unknown} imp
+ * @param {string} okText texto quando houve import novo
+ * @returns {{ kind: "ok" | "info"; text: string; detailLines?: string[] }}
+ */
+function buildImportFlash(imp, okText) {
+  const impObj = /** @type {Record<string, unknown>} */ (imp ?? {});
+  const skipped = Boolean(impObj?.skipped);
+  const impMsg = typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
+  const detailLines = linesFromImportDetail(impObj?.detail);
+  if (skipped) {
+    return {
+      kind: "info",
+      text:
+        impMsg ||
+        "Import ignorado: o JSON é idêntico ao último import (input_hash). A base e os cartões não mudam até haver dados novos.",
+      detailLines: detailLines.length ? detailLines : undefined
+    };
+  }
+  return {
+    kind: "ok",
+    text: okText,
+    detailLines: detailLines.length ? detailLines : undefined
+  };
+}
+
+/**
  * Página inicial — categorias em grelha de cartões (layout inspirado em dashboards tipo HiperTMS).
  * Dados: GET `/analytics/categories`.
  */
@@ -116,6 +144,10 @@ export default function CategoriesPage() {
 
   /** Import JSON → Postgres (não executa TikTok/Puppeteer). */
   const [importBusy, setImportBusy] = useState(false);
+  /** Coleta das duas categorias fixas (toolbar, `POST /scrape/run-both`). */
+  const [scrapeBusy, setScrapeBusy] = useState(false);
+  /** Chave do cartão que está a ser colectado agora (`POST /scrape/run`). */
+  const [scrapingCardKey, setScrapingCardKey] = useState(/** @type {string | null} */ (null));
   /** Mensagem global (sucesso / erro / aviso, ex. import ignorado por input_hash). */
   const [flash, setFlash] = useState(
     /** @type {{ kind: "ok" | "err" | "info"; text: string; detailLines?: string[] } | null} */ (null)
@@ -134,25 +166,7 @@ export default function CategoriesPage() {
     try {
       const imp = await apiPost("/analytics/import-output", {});
       await reloadCategories();
-      const impObj = /** @type {Record<string, unknown>} */ (imp);
-      const skipped = Boolean(impObj?.skipped);
-      const impMsg = typeof impObj?.message === "string" ? String(impObj.message).trim() : "";
-      const detailLines = linesFromImportDetail(impObj?.detail);
-      if (skipped) {
-        setFlash({
-          kind: "info",
-          text:
-            impMsg ||
-            "Import ignorado: o JSON é idêntico ao último import (input_hash). A base e os cartões não mudam até haver dados novos.",
-          detailLines: detailLines.length ? detailLines : undefined
-        });
-      } else {
-        setFlash({
-          kind: "ok",
-          text: "Base actualizada a partir do JSON e lista de categorias recarregada.",
-          detailLines: detailLines.length ? detailLines : undefined
-        });
-      }
+      setFlash(buildImportFlash(imp, "Base actualizada a partir do JSON e lista de categorias recarregada."));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setFlash({ kind: "err", text: `Import falhou: ${msg} Corra na raiz: npm run db:import:output` });
@@ -160,6 +174,78 @@ export default function CategoriesPage() {
       setImportBusy(false);
     }
   }, [importBusy, reloadCategories]);
+
+  /**
+   * Coleta as duas categorias fixas do repo no servidor (`POST /scrape/run-both`)
+   * e, no fim, importa o JSON gerado para a base e recarrega os cartões.
+   */
+  const runScrapeBoth = useCallback(async () => {
+    if (scrapeBusy || importBusy || scrapingCardKey) return;
+    setScrapeBusy(true);
+    setFlash({
+      kind: "info",
+      text:
+        "Coleta iniciada no servidor (2 categorias, headless). Isto pode demorar vários minutos — mantenha o painel aberto."
+    });
+    try {
+      await apiPost("/scrape/run-both", {});
+      const imp = await apiPost("/analytics/import-output", {});
+      await reloadCategories();
+      setFlash(buildImportFlash(imp, "Coleta concluída, base actualizada e cartões recarregados."));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFlash({
+        kind: "err",
+        text:
+          `Coleta falhou: ${msg} Se o TikTok exigir login/captcha, use o modo assistido pelo terminal (comando abaixo).`
+      });
+    } finally {
+      setScrapeBusy(false);
+    }
+  }, [scrapeBusy, importBusy, scrapingCardKey, reloadCategories]);
+
+  /**
+   * Coleta uma única categoria já existente (`POST /scrape/run` com o `categoryUrl` do cartão)
+   * e importa o resultado para a base.
+   * @param {string} categoryUrl
+   * @param {string} cardKey
+   */
+  const runScrapeCard = useCallback(
+    async (categoryUrl, cardKey) => {
+      if (scrapeBusy || importBusy || scrapingCardKey) return;
+      setScrapingCardKey(cardKey);
+      setFlash({
+        kind: "info",
+        text: "Coleta desta categoria iniciada no servidor (headless). Pode demorar alguns minutos."
+      });
+      try {
+        await apiPost("/scrape/run", { categoryUrl });
+        const imp = await apiPost("/analytics/import-output", {});
+        await reloadCategories();
+        setFlash(buildImportFlash(imp, "Coleta da categoria concluída e base actualizada."));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setFlash({ kind: "err", text: `Coleta falhou: ${msg}` });
+      } finally {
+        setScrapingCardKey(null);
+      }
+    },
+    [scrapeBusy, importBusy, scrapingCardKey, reloadCategories]
+  );
+
+  /**
+   * Chamado pelo painel de coleta completa quando a coleta termina (ou é pausada).
+   * O servidor já consolidou e importou para a base automaticamente; aqui só recarregamos os cartões.
+   */
+  const handleScrapeAllFinished = useCallback(async () => {
+    try {
+      await reloadCategories();
+      setFlash({ kind: "ok", text: "Coleta completa: base actualizada e cartões recarregados." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFlash({ kind: "err", text: `Recarregar cartões falhou: ${msg}` });
+    }
+  }, [reloadCategories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +275,8 @@ export default function CategoriesPage() {
     );
   }, [categories]);
 
+  const anyBusy = importBusy || scrapeBusy || scrapingCardKey !== null;
+
   return (
     <main className="tk-page-body">
       <div className="tk-content-wrap">
@@ -206,11 +294,21 @@ export default function CategoriesPage() {
             <strong>{status === "ok" ? sortedCategories.length : "—"}</strong> categorias nesta vista
           </span>
           <span style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem", alignItems: "center" }}>
+            <button
+              type="button"
+              className="tk-btn-soft"
+              disabled={anyBusy}
+              title="Corre no servidor a coleta das 2 categorias fixas (headless) e importa para a base."
+              style={{ borderColor: "#3d7a6a", background: "#1a4a3d", color: "#d8f5ec", fontWeight: 600 }}
+              onClick={() => void runScrapeBoth()}
+            >
+              {scrapeBusy ? "A colectar…" : "Coletar TikTok agora"}
+            </button>
             {status === "ok" ? (
               <button
                 type="button"
                 className="tk-btn-soft"
-                disabled={importBusy}
+                disabled={anyBusy}
                 title="Importa output/dados_*.json para Postgres (não executa TikTok/Puppeteer)."
                 onClick={() => void runImportOnly()}
               >
@@ -220,7 +318,7 @@ export default function CategoriesPage() {
             <button
               type="button"
               className="tk-btn-soft"
-              disabled={status !== "ok" || importBusy}
+              disabled={status !== "ok" || anyBusy}
               title="Recarrega os cartões a partir da API."
               onClick={() => void reloadCategories()}
             >
@@ -232,9 +330,13 @@ export default function CategoriesPage() {
           </span>
         </div>
 
+        <ScrapeAllPanel disabled={anyBusy} onFinished={() => void handleScrapeAllFinished()} />
+
         <div style={{ marginTop: "0.65rem", maxWidth: "56rem" }}>
           <p style={{ margin: 0, fontSize: "0.82rem", opacity: 0.88, lineHeight: 1.5 }}>
-            <strong>Coleta automática desativada.</strong> Use o modo assistido pelo terminal.
+            <strong>Coleta pelo painel:</strong> use <strong>Coletar TikTok agora</strong> (2 categorias) ou o botão{" "}
+            <em>Coletar agora</em> em cada cartão. Corre no servidor em modo headless e importa para a base no fim.
+            Se o TikTok pedir <strong>login/captcha</strong>, use o modo assistido pelo terminal:
           </p>
           <pre
             style={{
@@ -473,10 +575,13 @@ export default function CategoriesPage() {
                     <button
                       type="button"
                       className="tk-category-card__scrape"
-                      disabled
-                      title="Coleta automática desativada. Use o modo assistido pelo terminal."
+                      disabled={anyBusy}
+                      title="Recolhe esta categoria no servidor (headless) e importa para a base."
+                      onClick={() =>
+                        void runScrapeCard(String(row.categoryUrl ?? row.categoryKey ?? key), key)
+                      }
                     >
-                      Coleta desativada
+                      {scrapingCardKey === key ? "A colectar…" : "Coletar agora"}
                     </button>
                     <Link to={to} state={statePayload} className="tk-category-card__cta">
                       Abrir análise →

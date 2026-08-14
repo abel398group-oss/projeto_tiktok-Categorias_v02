@@ -110,7 +110,7 @@ export function deriveProductLabels(row) {
     const rv = ratingValue(r);
     const rc = reviewsCount(r);
     if (sv != null && sv >= 1 && sv <= 300 && rv != null && rv >= 4.5 && rc != null && rc >= 5) {
-      out.push({ id: "hidden_gem", emoji: "💎", label: "Hidden Gem" });
+      out.push({ id: "hidden_gem", emoji: "💎", label: "Gema Escondida" });
     }
 
     if (sv != null && sv >= 10000) {

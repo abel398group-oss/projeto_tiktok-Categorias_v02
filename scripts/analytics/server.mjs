@@ -10,9 +10,7 @@
 import { PrismaClient } from "@prisma/client";
 import Fastify from "fastify";
 import { spawn } from "node:child_process";
-import fs from "node:fs";
 import fsp from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
@@ -24,7 +22,9 @@ import {
   getOpportunitiesReport,
   parseOpportunityMode
 } from "./lib/opportunities.mjs";
-import { getProductScoreReport } from "./lib/product-score.mjs";
+import { getProductScoreReport, getProductScoreFull } from "./lib/product-score.mjs";
+import { getCategoryStatsReport } from "./lib/category-stats.mjs";
+import { getSellersReport } from "./lib/sellers-report.mjs";
 import { clampTopProductsLimit, getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
@@ -33,9 +33,11 @@ import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { tryGenerateCommercialPromptOutputs } from "./lib/commercial-prompt-export.mjs";
 import { extractOrderedImageUrls } from "../lib/extract-image-urls.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
+import { buscarTudo } from "./lib/global-search.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
 import { registerImagesUploadRoute } from "./images-upload-route.mjs";
 import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
+import { registerScrapeAllRoute } from "./scrape-all-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
@@ -191,6 +193,18 @@ fastify.get("/analytics/category-map", async (req) => {
 
 fastify.get("/analytics/categories", async () => listImportedCategories(prisma));
 
+fastify.get("/analytics/sellers", async () => getSellersReport(prisma));
+
+fastify.get("/analytics/category-stats", async () =>
+  getCategoryStatsReport(prisma, (p) => getProductScoreFull(p, {}))
+);
+
+fastify.get("/analytics/search", async (req) => {
+  const raw = req.query?.q;
+  const q = typeof raw === "string" ? raw : Array.isArray(raw) ? String(raw[0] ?? "") : "";
+  return buscarTudo(prisma, q);
+});
+
 fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {
   const raw = req.params.productId != null ? String(req.params.productId).trim() : "";
   const result = await getProductWorkspaceDetail(prisma, decodeURIComponent(raw));
@@ -329,23 +343,6 @@ function categoryLabelFromUrl(categoryUrl) {
 function fmtPtPriceBRL(price) {
   if (price == null || !Number.isFinite(Number(price))) return "—";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(price));
-}
-
-async function pickDocumentsDir() {
-  const home = os.homedir();
-  const candidates = [
-    path.join(home, "Documents"),
-    path.join(home, "OneDrive", "Documents"),
-    path.join(home, "Documentos"),
-    path.join(home, "OneDrive", "Documentos")
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {
-    }
-  }
-  return candidates[0];
 }
 
 async function ensureDir(p) {
@@ -494,6 +491,7 @@ async function resolveProductSnapshotForExport(tiktokProductId) {
 fastify.post("/analytics/export-local", async (req, reply) => {
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const productIdRaw = body.productId != null ? String(body.productId).trim() : "";
+  const selectedImageUrlRaw = body.selectedImageUrl != null ? String(body.selectedImageUrl).trim() : "";
   if (!productIdRaw || !isDigitsOnly(productIdRaw)) {
     return reply.code(400).send({
       ok: false,
@@ -502,8 +500,8 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     });
   }
 
-  const docsDir = await pickDocumentsDir();
-  const baseDir = path.join(docsDir, "Scraper-TikTok-Produtos");
+  // Exporta para a raiz do projeto: exportado/<categoria>/<produto>/ (antes: Documentos/Scraper-TikTok-Produtos).
+  const baseDir = path.join(repoRoot, "exportado");
 
   let current = await resolveProductSnapshotForExport(productIdRaw);
   if ("error" in current) {
@@ -606,11 +604,16 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     });
   }
 
+  const selectedImageUrl =
+    selectedImageUrlRaw && selectedImageUrlRaw.startsWith("http") ? selectedImageUrlRaw : null;
+
   await ensureDir(baseDir);
 
   const nome = typeof product.name === "string" ? product.name.trim() : "";
   const slug = safeSlug(nome);
-  const productDir = path.join(baseDir, `${slug}_${productIdRaw}`);
+  // Subpasta por categoria dentro de exportado/ (ex.: exportado/womenswear-underwear/<nome>_<id>/).
+  const categoriaSlug = safeSlug(categoryLabelFromUrl(product.categoryUrl) ?? "sem-categoria");
+  const productDir = path.join(baseDir, categoriaSlug, `${slug}_${productIdRaw}`);
   const imagesDir = path.join(productDir, "imagens");
   await ensureDir(imagesDir);
 
@@ -640,6 +643,27 @@ fastify.post("/analytics/export-local", async (req, reply) => {
     } catch (e) {
       failed.push({ url, error: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  const isAllowedImageExt = (fileName) => {
+    const t = typeof fileName === "string" ? fileName.trim().toLowerCase() : "";
+    return t.endsWith(".jpg") || t.endsWith(".jpeg") || t.endsWith(".png") || t.endsWith(".webp");
+  };
+  const urlPathname = (u) => {
+    try {
+      return new URL(u).pathname || "";
+    } catch {
+      return "";
+    }
+  };
+
+  /** @type {{ file: string, url: string } | null} */
+  let selectedWritten = null;
+  if (selectedImageUrl) {
+    selectedWritten =
+      written.find((w) => w.url === selectedImageUrl) ??
+      written.find((w) => urlPathname(w.url) !== "" && urlPathname(w.url) === urlPathname(selectedImageUrl)) ??
+      null;
   }
 
   const legacyLinkTxtName = `link_${productIdRaw}.txt`;
@@ -728,6 +752,27 @@ fastify.post("/analytics/export-local", async (req, reply) => {
       categoriaLabel
     }
   };
+
+  if (selectedWritten && isAllowedImageExt(selectedWritten.file)) {
+    try {
+      const selectedDir = path.join(imagesDir, "imagem-selecionada");
+      await ensureDir(selectedDir);
+      const dst = path.join(selectedDir, "imagem-principal.jpg");
+      await fsp.copyFile(path.join(imagesDir, selectedWritten.file), dst);
+      meta.imagemSelecionada = {
+        arquivoOriginal: selectedWritten.file,
+        caminhoOriginal: `imagens/${selectedWritten.file}`,
+        caminhoSelecionado: "imagens/imagem-selecionada/imagem-principal.jpg",
+        selecionadoEm: ts
+      };
+    } catch (e) {
+      console.warn("[export-local] failed to copy selected image; continuing", {
+        productId: productIdRaw,
+        error: e instanceof Error ? e.message : String(e)
+      });
+    }
+  }
+
   const metaDir = path.join(productDir, metaDirName);
   await ensureDir(metaDir);
   await fsp.writeFile(path.join(metaDir, metaName), JSON.stringify(meta, null, 2), "utf8");
@@ -770,6 +815,7 @@ registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
 registerImagesUploadRoute(fastify);
 registerScrapeRunRoute(fastify);
+registerScrapeAllRoute(fastify);
 
 const graceful = async () => {
   await fastify.close();

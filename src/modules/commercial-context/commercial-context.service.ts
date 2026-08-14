@@ -9,12 +9,7 @@ export class CommercialContextService {
     this.builder = builder;
   }
 
-  /**
-   * @param {ExportLocalMetadata} metadata
-   * @returns {EnrichedMetadata}
-   */
-  build(metadata) {
+  build(metadata: ExportLocalMetadata): EnrichedMetadata {
     return this.builder.build(metadata);
   }
 }
-
