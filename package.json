@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
-    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs",
+    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs test/checkpoint-falhas.test.mjs test/crescimento-por-dia.test.mjs test/rendimento-fila.test.mjs test/completude-coleta.test.mjs test/estatisticas-categoria.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",
@@ -66,6 +66,7 @@
     "scrape:cat:womenswear": "cross-env OUTPUT_DIR=output/categorias/womenswear-underwear node src/scrapeCategory.mjs",
     "scrape:cat:roupas-intimas": "cross-env OUTPUT_DIR=output/categorias/roupas-intimas-femininas CATEGORY_URL=https://shop.tiktok.com/br/c/women-s-underwear/842888?source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo node src/scrapeCategory.mjs",
     "scrape:categories:sample": "node scripts/scrape-both.mjs",
+    "descobrir:categorias": "node scripts/descobrir-categorias.mjs",
     "coleta:todas": "node scripts/scrape-all-categories.mjs",
     "coleta:todas:reset": "node scripts/scrape-all-categories.mjs --reset",
     "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list"

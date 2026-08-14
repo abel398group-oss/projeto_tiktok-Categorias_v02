@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, apiPost } from "./api.js";
 import { translateSlugToPt } from "./tiktokCategoryLabelsPt.js";
+import ScrapeAllPanel from "./ScrapeAllPanel.jsx";
 
 const EMPTY_LIST_MSG =
   "Nenhuma categoria importada ainda. Rode uma coleta e importe os dados para começar.";
@@ -232,6 +233,20 @@ export default function CategoriesPage() {
     [scrapeBusy, importBusy, scrapingCardKey, reloadCategories]
   );
 
+  /**
+   * Chamado pelo painel de coleta completa quando a coleta termina (ou é pausada).
+   * O servidor já consolidou e importou para a base automaticamente; aqui só recarregamos os cartões.
+   */
+  const handleScrapeAllFinished = useCallback(async () => {
+    try {
+      await reloadCategories();
+      setFlash({ kind: "ok", text: "Coleta completa: base actualizada e cartões recarregados." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFlash({ kind: "err", text: `Recarregar cartões falhou: ${msg}` });
+    }
+  }, [reloadCategories]);
+
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
@@ -314,6 +329,8 @@ export default function CategoriesPage() {
             </Link>
           </span>
         </div>
+
+        <ScrapeAllPanel disabled={anyBusy} onFinished={() => void handleScrapeAllFinished()} />
 
         <div style={{ marginTop: "0.65rem", maxWidth: "56rem" }}>
           <p style={{ margin: 0, fontSize: "0.82rem", opacity: 0.88, lineHeight: 1.5 }}>

@@ -70,6 +70,21 @@ model Product {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  /// Resultado da última tentativa de enriquecimento pela PDP.
+  ///
+  /// Existe porque o enriquecimento falhava em silêncio: quando a galeria não
+  /// era aplicada, o script seguia para o próximo produto e terminava com
+  /// sucesso — a interface dizia "enriquecido" e nada tinha mudado. Sem um
+  /// campo de estado, o fracasso não deixa rastro e o mesmo produto é tentado
+  /// para sempre, sem ninguém perceber que nunca dá certo.
+  ///
+  /// null = nunca tentado. Valores: ok | sem_galeria | captcha | url_invalida | erro
+  enrichStatus    String?   @map("enrich_status")
+  /// Quando foi a última tentativa — inclusive as falhadas.
+  enrichCheckedAt DateTime? @map("enrich_checked_at")
+  /// Motivo legível da última falha (vazio quando `enrichStatus` = ok).
+  enrichNote      String?   @map("enrich_note")
+
   snapshots      ProductSnapshot[]
   rawPayloadRefs RawPayload[]
 
@@ -77,6 +92,8 @@ model Product {
   @@index([sellerRefId])
   @@index([categoryUrl])
   @@index([name])
+  @@index([enrichStatus])
+  @@index([enrichCheckedAt])
   @@map("products")
 }
 

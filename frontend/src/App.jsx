@@ -9,9 +9,14 @@ import { Suspense, lazy, useState, useCallback, useMemo } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { AnalyticsDashboardCacheProvider, useAnalyticsDashboardCache } from "./analyticsDashboardCache.jsx";
 import AppShell from "./AppShell.jsx";
+import BuscarPage from "./BuscarPage.jsx";
+import EstatisticasPage from "./EstatisticasPage.jsx";
+import LojasPage from "./LojasPage.jsx";
+import ParametrosPage from "./ParametrosPage.jsx";
 import CategoriesPage from "./CategoriesPage.jsx";
 import HandsOnPage from "./HandsOnPage.jsx";
 import ProductWorkspacePage from "./ProductWorkspacePage.jsx";
+import RankingPage from "./RankingPage.jsx";
 import ShortlistPage from "./ShortlistPage.jsx";
 import { localizeCategoryBread } from "./mapCategoryUi.js";
 
@@ -140,6 +145,27 @@ export function AnalyticsDashboard({ variant = "global", pageTitle, categoryBrea
   );
 }
 
+/** Endereço que não existe: diz onde se está e oferece a saída. */
+function PaginaNaoEncontrada() {
+  return (
+    <main className="tk-page-body">
+      <div className="tk-content-wrap" style={{ color: "var(--tk-text)" }}>
+        <h1 style={{ fontSize: "1.15rem", fontWeight: 600, margin: "0 0 0.4rem" }}>
+          Página não encontrada
+        </h1>
+        <p style={{ opacity: 0.85, lineHeight: 1.5 }}>
+          O endereço <code>{window.location.pathname}</code> não existe neste painel.
+        </p>
+        <p style={{ marginTop: "0.8rem" }}>
+          <Link to="/" className="tk-nav-link">
+            ← Voltar às categorias
+          </Link>
+        </p>
+      </div>
+    </main>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
@@ -163,9 +189,18 @@ export default function App() {
               </Suspense>
             }
           />
+          <Route path="ranking" element={<RankingPage />} />
+          <Route path="buscar" element={<BuscarPage />} />
+          <Route path="estatisticas" element={<EstatisticasPage />} />
+          <Route path="lojas" element={<LojasPage />} />
+          <Route path="parametros" element={<ParametrosPage />} />
           <Route path="a-mao" element={<HandsOnPage />} />
           <Route path="shortlist" element={<ShortlistPage />} />
           <Route path="produto/:productId" element={<ProductWorkspacePage />} />
+          {/* Sem esta rota, um endereço errado montava a app vazia: página em
+              branco, sem explicação e sem caminho de volta. Encontrado pelo
+              smoke test de rotas. */}
+          <Route path="*" element={<PaginaNaoEncontrada />} />
         </Route>
       </Routes>
     </BrowserRouter>

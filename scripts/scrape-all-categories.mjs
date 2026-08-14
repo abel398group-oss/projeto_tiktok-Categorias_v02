@@ -1,41 +1,50 @@
 /**
- * Coleta TODAS as subcategorias do TikTok Shop BR em sequência.
+ * Coleta TODAS as subcategorias do TikTok Shop BR em sequência (1 só navegador).
  *
- * CHECKPOINT (resume):
- *   Salva progresso em output/scrape-checkpoint.json após cada categoria.
- *   Ao parar e reiniciar, categorias já concluídas são automaticamente puladas.
+ * CHECKPOINT (parar/continuar sem perder nada):
+ *   - Após CADA categoria concluída, grava output/scrape-checkpoint.json.
+ *   - Ao reiniciar, categorias já concluídas são puladas automaticamente.
+ *   - Parada graciosa: se existir output/scrape-all.stop, o loop para ANTES
+ *     da próxima categoria, fecha o Chrome limpo e sai. A categoria em curso
+ *     no momento da parada apenas será refeita na próxima execução (sem duplicar).
  *
- * USO:
- *   node scripts/scrape-all-categories.mjs               # coleta tudo (ou continua de onde parou)
- *   node scripts/scrape-all-categories.mjs --reset       # zera checkpoint e começa do zero
- *   node scripts/scrape-all-categories.mjs --list        # lista todas as categorias e status
- *   node scripts/scrape-all-categories.mjs --only beleza,roupas   # filtra por slugs (substrings)
+ * ARQUIVOS DE ESTADO (em output/):
+ *   scrape-checkpoint.json    → categorias concluídas (fonte da verdade do progresso)
+ *   scrape-all-progress.json  → categoria atual + contadores (para a UI)
+ *   scrape-all.stop           → flag de parada (a rota da API cria/remove)
+ *
+ * USO (terminal):
+ *   node scripts/scrape-all-categories.mjs             # coleta tudo / continua de onde parou
+ *   node scripts/scrape-all-categories.mjs --reset     # zera checkpoint e recomeça
+ *   node scripts/scrape-all-categories.mjs --list      # lista categorias e status
+ *   node scripts/scrape-all-categories.mjs --only beleza,sapatos   # filtra por substrings
  *
  * VARIÁVEIS DE AMBIENTE:
- *   PAUSE_BETWEEN_CATEGORIES_MS=15000   pausa entre categorias em ms (padrão: 10–15s aleatório)
- *   VIEW_MORE_MAX_CLICKS=30             cliques em "Ver mais" por categoria (padrão: 8)
- *   PDP_GALLERY=1                       ativa coleta de galeria PDP
- *   PDP_GALLERY_MAX=25                  máximo de produtos com PDP
- *   HEADED=1                            abre navegador visível
+ *   PAUSE_BETWEEN_CATEGORIES_MS=15000   pausa entre categorias (padrão: 10–15s aleatório)
+ *   VIEW_MORE_MAX_CLICKS=30             cliques em "Ver mais" por categoria (padrão do scraper: 8)
+ *   PDP_GALLERY=1 / PDP_GALLERY_MAX=25  ativa galeria de PDP
+ *   HEADED=1                            navegador visível
  */
 
 import path from "node:path";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { scrapeCategoriesSequentialSharedBrowser } from "../src/scrapeCategory.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, "..");
-const CHECKPOINT_FILE = path.join(ROOT, "output", "scrape-checkpoint.json");
+export const ROOT = path.join(__dirname, "..");
+export const OUTPUT_ROOT = path.join(ROOT, "output");
+export const CHECKPOINT_FILE = path.join(OUTPUT_ROOT, "scrape-checkpoint.json");
+export const PROGRESS_FILE = path.join(OUTPUT_ROOT, "scrape-all-progress.json");
+export const STOP_FLAG_FILE = path.join(OUTPUT_ROOT, "scrape-all.stop");
+export const BASE = "https://shop.tiktok.com";
 const Q = "source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo";
-const BASE = "https://shop.tiktok.com";
 
 // ---------------------------------------------------------------------------
 // Catálogo de SUBCATEGORIAS (folhas) — 212 categorias, sem duplicar pais.
-// Pais (ex: /womenswear-underwear/601152) foram excluídos propositalmente:
-// seus produtos aparecem nas subcategorias, evitando coleta dupla.
 // ---------------------------------------------------------------------------
-const CATALOG = [
+export const CATALOG = [
   // ── Roupas femininas e roupas íntimas femininas ──────────────────────────
   { label: "Roupas íntimas femininas",             slug: "women-s-underwear",            id: "842888" },
   { label: "Ternos e macacões femininos",           slug: "women-s-suits-sets",           id: "842760" },
@@ -306,24 +315,75 @@ const CATALOG = [
 ];
 
 // ---------------------------------------------------------------------------
-// Funções de checkpoint
+// Chaves e checkpoint
 // ---------------------------------------------------------------------------
 
-async function loadCheckpoint() {
+/** Chave única e estável por categoria (sem query string). */
+export function keyForCat(cat) {
+  return `${BASE}/br/c/${cat.slug}/${cat.id}`;
+}
+
+/** Chave a partir de uma URL completa (remove query string). */
+export function keyForUrl(url) {
+  return String(url).split("?")[0];
+}
+
+/**
+ * Quantas vezes uma categoria pode falhar antes de ser posta de lado.
+ *
+ * Não pode ser 1 (captcha e queda de rede são passageiros: desistir na
+ * primeira perde categoria boa), nem infinito (categoria que falha sempre
+ * seguraria a fila para sempre e a coleta nunca terminaria). Ao esgotar as
+ * tentativas ela sai da fila com o motivo registado, em vez de desaparecer
+ * como se tivesse sido colhida.
+ */
+export const MAX_TENTATIVAS_POR_CATEGORIA = 3;
+
+export async function loadCheckpoint() {
   try {
     const raw = await fs.readFile(CHECKPOINT_FILE, "utf8");
     const data = JSON.parse(raw);
     return {
       completed: new Set(Array.isArray(data.completed) ? data.completed : []),
+      // Checkpoint antigo não tem `failures`/`rendimento`; ausência vira objeto vazio.
+      failures: data.failures && typeof data.failures === "object" ? { ...data.failures } : {},
+      rendimento: data.rendimento && typeof data.rendimento === "object" ? { ...data.rendimento } : {},
       startedAt: data.startedAt ?? new Date().toISOString(),
     };
   } catch {
-    return { completed: new Set(), startedAt: new Date().toISOString() };
+    return { completed: new Set(), failures: {}, rendimento: {}, startedAt: new Date().toISOString() };
   }
 }
 
-async function saveCheckpoint(completed, startedAt) {
+/**
+ * Quantos produtos a última coleta desta categoria trouxe.
+ *
+ * Serve para ordenar a fila: categoria que rende 300 produtos vale mais tempo
+ * de navegador do que a que rende 4. Sem isto, a ordem é a do catálogo — uma
+ * lista escrita à mão que não sabe nada sobre o que cada categoria produz.
+ *
+ * @param {string} outputDir pasta de saída da categoria
+ * @returns {Promise<number|null>} null quando não há ficheiro legível
+ */
+export async function contarProdutosColhidos(outputDir) {
+  try {
+    const bruto = await fs.readFile(path.join(outputDir, "dados_produtos.json"), "utf8");
+    const dados = JSON.parse(bruto);
+    return Array.isArray(dados?.itens) ? dados.itens.length : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Categoria que esgotou as tentativas: sai da fila, mas fica registada como falha. */
+export function desistiuDe(failures, key) {
+  const f = failures?.[key];
+  return Boolean(f && Number(f.tentativas) >= MAX_TENTATIVAS_POR_CATEGORIA);
+}
+
+async function saveCheckpoint(completed, startedAt, failures = {}, rendimento = {}) {
   await fs.mkdir(path.dirname(CHECKPOINT_FILE), { recursive: true });
+  const desistidas = Object.keys(failures).filter((k) => desistiuDe(failures, k));
   await fs.writeFile(
     CHECKPOINT_FILE,
     JSON.stringify(
@@ -332,7 +392,13 @@ async function saveCheckpoint(completed, startedAt) {
         lastUpdatedAt: new Date().toISOString(),
         completedCount: completed.size,
         totalCount: CATALOG.length,
+        // Falhas ficam fora de `completed` de propósito: só o sucesso conta como
+        // colhido. Estes dois números separam "não coletei" de "coletei vazio".
+        failedCount: Object.keys(failures).length,
+        gaveUpCount: desistidas.length,
         completed: [...completed],
+        failures,
+        rendimento,
       },
       null,
       2
@@ -343,17 +409,40 @@ async function saveCheckpoint(completed, startedAt) {
 
 async function resetCheckpoint() {
   try { await fs.unlink(CHECKPOINT_FILE); } catch { /* ok */ }
+  try { await fs.unlink(PROGRESS_FILE); } catch { /* ok */ }
   console.log("[checkpoint] Resetado. Começando do zero.");
 }
 
-// ---------------------------------------------------------------------------
-// Construção dos runs
-// ---------------------------------------------------------------------------
+async function writeProgress(patch) {
+  try {
+    await fs.mkdir(OUTPUT_ROOT, { recursive: true });
+    // O pid permite a quem lê (API, vigias) confirmar se o processo ainda
+    // existe — `running: true` com processo morto é o estado fantasma que
+    // aparecia quando a coleta era morta sem escrever o fim.
+    await fs.writeFile(
+      PROGRESS_FILE,
+      JSON.stringify({ ...patch, pid: process.pid, updatedAt: new Date().toISOString() }, null, 2),
+      "utf8"
+    );
+  } catch { /* progresso é best-effort */ }
+}
 
-function buildRun(cat) {
-  const outputDir = path.join(ROOT, "output", "categorias", `${cat.slug}-${cat.id}`);
+export async function readProgress() {
+  try {
+    return JSON.parse(await fs.readFile(PROGRESS_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function buildRun(cat) {
+  const outputDir = path.join(OUTPUT_ROOT, "categorias", `${cat.slug}-${cat.id}`);
   const url = `${BASE}/br/c/${cat.slug}/${cat.id}?${Q}`;
   return { label: cat.label, OUTPUT_DIR: outputDir, CATEGORY_URL: url };
+}
+
+function stopRequested() {
+  return existsSync(STOP_FLAG_FILE);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,85 +450,250 @@ function buildRun(cat) {
 // ---------------------------------------------------------------------------
 
 async function listCategories() {
-  const { completed } = await loadCheckpoint();
+  const { completed, failures, rendimento } = await loadCheckpoint();
   console.log(`\nTotal: ${CATALOG.length} categorias\n`);
+  let comFalha = 0;
+  let desistidas = 0;
   for (let i = 0; i < CATALOG.length; i++) {
     const cat = CATALOG[i];
-    const key = `${BASE}/br/c/${cat.slug}/${cat.id}`;
+    const key = keyForCat(cat);
     const done = completed.has(key);
-    const status = done ? "✅" : "⏳";
-    console.log(`${status} [${String(i + 1).padStart(3)}] ${cat.label}`);
+    const f = failures[key];
+    const rend = rendimento[key];
+    let icone = "⏳";
+    let sufixo = "";
+    if (done) {
+      icone = "✅";
+      if (Number.isFinite(rend?.produtos)) {
+        sufixo = `  (${rend.produtos} produtos)`;
+      }
+    } else if (f) {
+      comFalha++;
+      if (desistiuDe(failures, key)) {
+        desistidas++;
+        icone = "❌";
+        sufixo = `  ← desisti após ${f.tentativas} tentativas: ${f.motivo}`;
+      } else {
+        icone = "🔁";
+        sufixo = `  ← falhou ${f.tentativas}×, volta à fila: ${f.motivo}`;
+      }
+    }
+    console.log(`${icone} [${String(i + 1).padStart(3)}] ${cat.label}${sufixo}`);
   }
-  const remaining = CATALOG.length - completed.size;
-  console.log(`\n✅ Concluídas: ${completed.size} | ⏳ Restantes: ${remaining}`);
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-const args = process.argv.slice(2);
-
-if (args.includes("--list")) {
-  await listCategories();
-  process.exit(0);
-}
-
-if (args.includes("--reset")) {
-  await resetCheckpoint();
-}
-
-const filterArg = args.find((a) => a.startsWith("--only="))?.slice(7) ??
-                  args[args.indexOf("--only") + 1];
-const filters = filterArg ? filterArg.split(",").map((s) => s.trim().toLowerCase()) : null;
-
-const { completed, startedAt } = await loadCheckpoint();
-
-// Filtra o catálogo
-let catalog = CATALOG;
-if (filters) {
-  catalog = catalog.filter((cat) =>
-    filters.some((f) => cat.label.toLowerCase().includes(f) || cat.slug.toLowerCase().includes(f))
+  console.log(
+    `\n✅ Concluídas: ${completed.size} | 🔁 A repetir: ${comFalha - desistidas} | ` +
+    `❌ De fora: ${desistidas} | ⏳ Nunca tentadas: ${CATALOG.length - completed.size - comFalha}`
   );
-  console.log(`[filtro] ${catalog.length} categorias correspondem a: ${filters.join(", ")}`);
 }
 
-// Remove já concluídas
-const pending = catalog.filter((cat) => {
-  const key = `${BASE}/br/c/${cat.slug}/${cat.id}`;
-  return !completed.has(key);
-});
+// ---------------------------------------------------------------------------
+// Main (CLI)
+// ---------------------------------------------------------------------------
 
-if (pending.length === 0) {
-  console.log("\n✅ Todas as categorias já foram coletadas! Use --reset para recomeçar.\n");
-  process.exit(0);
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args.includes("--list")) {
+    await listCategories();
+    return 0;
+  }
+
+  // Sempre limpa flag de parada de execuções anteriores ao iniciar.
+  try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
+
+  if (args.includes("--reset")) {
+    await resetCheckpoint();
+  }
+
+  const filterArg = args.find((a) => a.startsWith("--only="))?.slice(7) ??
+                    (args.includes("--only") ? args[args.indexOf("--only") + 1] : undefined);
+  const filters = filterArg ? filterArg.split(",").map((s) => s.trim().toLowerCase()) : null;
+
+  const { completed, failures, rendimento, startedAt } = await loadCheckpoint();
+
+  let catalog = CATALOG;
+  if (filters) {
+    catalog = catalog.filter((cat) =>
+      filters.some((f) => cat.label.toLowerCase().includes(f) || cat.slug.toLowerCase().includes(f))
+    );
+    console.log(`[filtro] ${catalog.length} categorias correspondem a: ${filters.join(", ")}`);
+  }
+
+  // Volta à fila tudo o que não foi colhido com sucesso — inclusive o que
+  // falhou nas execuções anteriores — menos aquilo de que já se desistiu.
+  const pending = catalog.filter((cat) => {
+    const key = keyForCat(cat);
+    if (completed.has(key)) return false;
+    return !desistiuDe(failures, key);
+  });
+
+  if (pending.length === 0) {
+    const desistidas = Object.keys(failures).filter((k) => desistiuDe(failures, k));
+    console.log("\n✅ Todas as categorias já foram coletadas! Use --reset para recomeçar.\n");
+    if (desistidas.length > 0) {
+      console.log(`⚠️  ${desistidas.length} categoria(s) ficaram de fora após ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas:`);
+      for (const k of desistidas) {
+        console.log(`   • ${k} — ${failures[k]?.motivo ?? "motivo não registado"}`);
+      }
+      console.log("");
+    }
+    await writeProgress({
+      running: false, completedCount: completed.size, totalCount: CATALOG.length,
+      remaining: 0, done: true, failedCount: Object.keys(failures).length, gaveUpCount: desistidas.length
+    });
+    return 0;
+  }
+
+  // Ordem da fila: primeiro o que nunca foi colhido (só se descobre o
+  // rendimento de uma categoria colhendo-a), depois as historicamente mais
+  // produtivas. Numa coleta interrompida a meio, isto garante que o tempo de
+  // navegador vai para onde há produto — em vez de seguir a ordem em que
+  // alguém escreveu o catálogo à mão.
+  const rendimentoDe = (cat) => {
+    const r = rendimento[keyForCat(cat)];
+    return Number.isFinite(r?.produtos) ? Number(r.produtos) : null;
+  };
+  pending.sort((a, b) => {
+    const ra = rendimentoDe(a);
+    const rb = rendimentoDe(b);
+    if (ra == null && rb == null) return 0;
+    if (ra == null) return -1; // nunca medida vem primeiro
+    if (rb == null) return 1;
+    return rb - ra; // depois, mais produtiva primeiro
+  });
+
+  const alreadyDone = catalog.length - pending.length;
+  const nuncaMedidas = pending.filter((c) => rendimentoDe(c) == null).length;
+  console.log(`\n📋 Categorias: ${catalog.length} total | ${alreadyDone} já concluídas | ${pending.length} restantes`);
+  console.log(`🎯 Fila: ${nuncaMedidas} nunca medida(s) primeiro, depois ${pending.length - nuncaMedidas} por rendimento`);
+  console.log(`📁 Checkpoint: ${CHECKPOINT_FILE}`);
+  console.log(`⏱  Pausa entre categorias: ${process.env.PAUSE_BETWEEN_CATEGORIES_MS ?? "10–15s (padrão)"}\n`);
+
+  const runs = pending.map(buildRun);
+
+  await writeProgress({
+    running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+    remaining: pending.length, currentLabel: null, currentIndex: 0, stopping: false
+  });
+
+  // Antes de cada categoria: reporta a atual e verifica parada.
+  async function onCategoryStart(url, label, index, total) {
+    await writeProgress({
+      running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+      remaining: total - index + 1, currentLabel: label, currentUrl: url, currentIndex: alreadyDone + index, stopping: false
+    });
+  }
+
+  async function onCategoryComplete(url, _code, index, total) {
+    const key = keyForUrl(url);
+    completed.add(key);
+    // Sucesso limpa o histórico de falhas: a categoria voltou a responder e
+    // não deve carregar tentativas velhas para a próxima vez que falhar.
+    delete failures[key];
+
+    // Rendimento medido: quantos produtos esta categoria deu de facto.
+    const produtos = await contarProdutosColhidos(runs[index - 1]?.OUTPUT_DIR ?? "");
+    if (produtos != null) {
+      rendimento[key] = { produtos, em: new Date().toISOString() };
+    }
+
+    await saveCheckpoint(completed, startedAt, failures, rendimento);
+    await writeProgress({
+      running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+      remaining: total - index, currentLabel: null, currentIndex: completed.size, stopping: false
+    });
+    console.log(
+      `[checkpoint] salvo (${completed.size}/${CATALOG.length} concluídas` +
+      `${produtos != null ? `, ${produtos} produto(s) nesta categoria` : ""})`
+    );
+  }
+
+  async function onCategoryFailed(url, code, index, total, motivo) {
+    const key = keyForUrl(url);
+    const anterior = failures[key];
+    const tentativas = Number(anterior?.tentativas ?? 0) + 1;
+    failures[key] = { tentativas, codigo: code, motivo, em: new Date().toISOString() };
+    // NÃO entra em `completed`: na próxima execução volta à fila sozinha.
+    await saveCheckpoint(completed, startedAt, failures, rendimento);
+    await writeProgress({
+      running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+      remaining: total - index, currentLabel: null, currentIndex: completed.size, stopping: false,
+      failedCount: Object.keys(failures).length
+    });
+    const restantes = MAX_TENTATIVAS_POR_CATEGORIA - tentativas;
+    console.log(
+      restantes > 0
+        ? `[falha] ${key} — ${motivo}. Volta à fila (${restantes} tentativa(s) restante(s)).`
+        : `[falha] ${key} — ${motivo}. ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas sem sucesso: fica de fora até um --reset.`
+    );
+  }
+
+  const exitCode = await scrapeCategoriesSequentialSharedBrowser(runs, {
+    onCategoryStart,
+    onCategoryComplete,
+    onCategoryFailed,
+    shouldStop: stopRequested
+  }).catch((e) => {
+    console.error(e);
+    return 1;
+  });
+
+  const stopped = stopRequested();
+  // "Terminou" = nada mais na fila. Categoria de que se desistiu conta como
+  // resolvida para este fim, senão a coleta ficaria eternamente incompleta por
+  // causa de uma categoria que nunca responde.
+  const desistidas = Object.keys(failures).filter((k) => desistiuDe(failures, k));
+  const resolvidas = completed.size + desistidas.length;
+  await writeProgress({
+    running: false, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+    remaining: CATALOG.length - resolvidas, currentLabel: null, stopping: false,
+    stoppedByUser: stopped, done: resolvidas >= CATALOG.length,
+    failedCount: Object.keys(failures).length, gaveUpCount: desistidas.length
+  });
+  try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
+
+  if (stopped) {
+    console.log(`\n⏸  Coleta pausada a pedido. Concluídas: ${completed.size}/${CATALOG.length}. Reinicie para continuar de onde parou.`);
+  } else {
+    console.log(`\n🏁 Coleta finalizada (código ${exitCode}). Concluídas: ${completed.size}/${CATALOG.length}`);
+    if (desistidas.length > 0) {
+      console.log(`⚠️  ${desistidas.length} categoria(s) de fora após ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas (veja "failures" no checkpoint).`);
+    }
+    if (resolvidas < CATALOG.length) {
+      console.log(`   Para continuar: node scripts/scrape-all-categories.mjs`);
+    }
+  }
+
+  // --depois-importa: consolida e importa AQUI, no próprio processo da coleta.
+  //
+  // Antes isso morava no handler `close` da API — e a API roda com
+  // `node --watch`: qualquer edição num ficheiro do servidor a reinicia, o que
+  // MATA os filhos e perde o handler. Foi assim que uma coleta morreu aos
+  // 3/212 sem deixar erro nenhum (08/08/2026). Com o pós-processamento aqui, a
+  // coleta é dona do próprio ciclo e sobrevive à API inteira.
+  if (process.argv.includes("--depois-importa")) {
+    const { spawnSync } = await import("node:child_process");
+    console.log("\n[pós] a consolidar categorias…");
+    const c1 = spawnSync(process.execPath, ["scripts/consolidate-category-outputs.mjs"], { cwd: ROOT, stdio: "inherit" });
+    if (c1.status === 0) {
+      console.log("[pós] a importar para a base…");
+      const c2 = spawnSync(
+        process.execPath,
+        ["--import", "./scripts/load-root-env.mjs", "scripts/import-output-to-db.mjs"],
+        { cwd: ROOT, stdio: "inherit" }
+      );
+      console.log(c2.status === 0 ? "[pós] base atualizada." : `[pós] import falhou (código ${c2.status}).`);
+    } else {
+      console.log(`[pós] consolidação falhou (código ${c1.status}) — import não executado.`);
+    }
+  }
+
+  return exitCode;
 }
 
-const alreadyDone = catalog.length - pending.length;
-console.log(`\n📋 Categorias: ${catalog.length} total | ${alreadyDone} já concluídas | ${pending.length} restantes`);
-console.log(`📁 Checkpoint: ${CHECKPOINT_FILE}`);
-console.log(`⏱  Pausa entre categorias: ${process.env.PAUSE_BETWEEN_CATEGORIES_MS ?? "10–15s (padrão)"}\n`);
-
-const runs = pending.map(buildRun);
-
-// Callback de checkpoint: salva após cada categoria concluída
-async function onCategoryComplete(url, _code, index, total) {
-  // normaliza URL (remove query string) para a chave do checkpoint
-  const key = url.split("?")[0];
-  completed.add(key);
-  await saveCheckpoint(completed, startedAt);
-  console.log(`[checkpoint] salvo (${completed.size}/${total + alreadyDone} concluídas)`);
+// Só executa o main quando chamado diretamente (não em import pela rota da API).
+const isEntry = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntry) {
+  const code = await main();
+  process.exit(typeof code === "number" ? code : 0);
 }
-
-const exitCode = await scrapeCategoriesSequentialSharedBrowser(runs, { onCategoryComplete }).catch((e) => {
-  console.error(e);
-  return 1;
-});
-
-console.log(`\n🏁 Coleta finalizada. Código de saída: ${exitCode}`);
-console.log(`   Total concluídas: ${completed.size}/${CATALOG.length}`);
-if (completed.size < CATALOG.length) {
-  console.log(`   Para continuar: node scripts/scrape-all-categories.mjs`);
-}
-
-process.exit(exitCode);

@@ -22,7 +22,9 @@ import {
   getOpportunitiesReport,
   parseOpportunityMode
 } from "./lib/opportunities.mjs";
-import { getProductScoreReport } from "./lib/product-score.mjs";
+import { getProductScoreReport, getProductScoreFull } from "./lib/product-score.mjs";
+import { getCategoryStatsReport } from "./lib/category-stats.mjs";
+import { getSellersReport } from "./lib/sellers-report.mjs";
 import { clampTopProductsLimit, getTopProductsReport } from "./lib/top-products.mjs";
 import { getScalableProductsReport } from "./scalable-products.mjs";
 import { getCategoryMapReport } from "./category-map.mjs";
@@ -31,9 +33,11 @@ import { buildImagesZipBuffer } from "./lib/product-images-zip.mjs";
 import { tryGenerateCommercialPromptOutputs } from "./lib/commercial-prompt-export.mjs";
 import { extractOrderedImageUrls } from "../lib/extract-image-urls.mjs";
 import { registerPdpEnrichRoute } from "./pdp-enrich-route.mjs";
+import { buscarTudo } from "./lib/global-search.mjs";
 import { registerImportOutputRoute } from "./import-output-route.mjs";
 import { registerImagesUploadRoute } from "./images-upload-route.mjs";
 import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
+import { registerScrapeAllRoute } from "./scrape-all-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 
 requireDatabaseUrl();
@@ -188,6 +192,18 @@ fastify.get("/analytics/category-map", async (req) => {
 });
 
 fastify.get("/analytics/categories", async () => listImportedCategories(prisma));
+
+fastify.get("/analytics/sellers", async () => getSellersReport(prisma));
+
+fastify.get("/analytics/category-stats", async () =>
+  getCategoryStatsReport(prisma, (p) => getProductScoreFull(p, {}))
+);
+
+fastify.get("/analytics/search", async (req) => {
+  const raw = req.query?.q;
+  const q = typeof raw === "string" ? raw : Array.isArray(raw) ? String(raw[0] ?? "") : "";
+  return buscarTudo(prisma, q);
+});
 
 fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {
   const raw = req.params.productId != null ? String(req.params.productId).trim() : "";
@@ -799,6 +815,7 @@ registerPdpEnrichRoute(fastify);
 registerImportOutputRoute(fastify);
 registerImagesUploadRoute(fastify);
 registerScrapeRunRoute(fastify);
+registerScrapeAllRoute(fastify);
 
 const graceful = async () => {
   await fastify.close();

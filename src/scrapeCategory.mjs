@@ -47,6 +47,7 @@ import {
   extractImages,
   extractHttpImageUrlsDeep
 } from "./scrape/image-utils.mjs";
+import { medirCompletude, avaliarCompletude } from "./scrape/completude.mjs";
 import {
   pickString,
   pickNumber,
@@ -641,6 +642,80 @@ function extractPdpImageUrlsFromModernRouterRoot(root, productId) {
  * @param {import("puppeteer").Page} page
  * @returns {Promise<string[]>}
  */
+/**
+ * Recolhe as mídias publicadas por clientes nas avaliações (fotos e vídeos).
+ *
+ * O coletor da galeria (`collectPdpGalleryUrlsInBrowser`) descarta esta secção
+ * de propósito, porque para catálogo é ruído. Para vídeo de divulgação é o
+ * oposto: é o único material com uma pessoa real a usar o produto certo — que é
+ * o que o TikTok premia e o que fotos de catálogo não têm.
+ *
+ * Fica num campo separado (`fotos_review`) e nunca é misturado com a galeria:
+ * são conteúdos de terceiros, e usá-los exige decisão caso a caso de quem
+ * publica, não automatismo.
+ */
+function collectReviewMediaInBrowser() {
+  const seen = new Set();
+  const fotos = [];
+  const videos = [];
+
+  const eSeccaoDeAvaliacao = (el) => {
+    let a = el;
+    for (let d = 0; d < 14 && a; d++) {
+      const id = a.id != null ? String(a.id) : "";
+      const cn = a.className != null ? String(a.className) : "";
+      const e2e = a.getAttribute && a.getAttribute("data-e2e");
+      const blob = `${id} ${cn} ${e2e || ""}`.toLowerCase();
+      if (/review|avalia|comment|uploader|ugc|buyer|photo-?review|user-?media/.test(blob)) {
+        return true;
+      }
+      a = a.parentElement;
+    }
+    return false;
+  };
+
+  const juntar = (url, destino) => {
+    const t = typeof url === "string" ? url.trim() : "";
+    if (!t || !t.startsWith("http") || seen.has(t)) {
+      return;
+    }
+    // Avatares nao servem: mostram a cara do autor, nao o produto.
+    if (/\/(avt|sign\/)/i.test(t) || /aweme-avt|user_?avator|user_avatar|user_nick/i.test(t)) {
+      return;
+    }
+    seen.add(t);
+    destino.push(t);
+  };
+
+  for (const img of document.querySelectorAll("img[src]")) {
+    if (img.src && eSeccaoDeAvaliacao(img)) {
+      juntar(img.src, fotos);
+    }
+  }
+
+  for (const v of document.querySelectorAll("video")) {
+    if (!eSeccaoDeAvaliacao(v)) {
+      continue;
+    }
+    juntar(v.getAttribute("src"), videos);
+    juntar(v.getAttribute("poster"), fotos);
+    for (const s of v.querySelectorAll("source[src]")) {
+      juntar(s.getAttribute("src"), videos);
+    }
+  }
+
+  return { fotos, videos };
+}
+
+async function collectReviewMediaFromPage(page) {
+  try {
+    return await page.evaluate(collectReviewMediaInBrowser);
+  } catch {
+    // Falhar aqui nunca pode parar a coleta: e material extra, nao essencial.
+    return { fotos: [], videos: [] };
+  }
+}
+
 async function collectPdpGalleryUrlsFromPage(page) {
   return page.evaluate(collectPdpGalleryUrlsInBrowser);
 }
@@ -917,6 +992,12 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
           routerRoot
         );
         n.images_pdp = merged.length > 0 ? merged : null;
+
+        // Mídias das avaliações — conteúdo de clientes, guardado à parte.
+        const review = await collectReviewMediaFromPage(workerPage);
+        n.fotos_review = review.fotos.length > 0 ? review.fotos : null;
+        n.videos_review = review.videos.length > 0 ? review.videos : null;
+
         applyPdpDomPrices(n, pdpDom);
         if (debugLines && merged.length) {
           const rN = fromRouter.length;
@@ -2798,6 +2879,34 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const itensDados = [...byProductId.values()]
     .map((n) => toDadosProdutoClean(n, startUrl))
     .sort((a, b) => String(a.product_id ?? "").localeCompare(String(b.product_id ?? "")));
+  // Qualidade da própria colheita, medida antes de qualquer análise.
+  //
+  // Colher 100 produtos todos sem preço é uma falha que se disfarça de sucesso:
+  // há itens, o status é "ok", a categoria conta como concluída e os dados
+  // entram na base — só que sem o campo que os torna úteis. Acontece sozinho
+  // quando o TikTok mexe no layout, porque o preço é encontrado por tamanho de
+  // letra (28–48 px) e o nome/vendas por posição no DOM; um teste A/B de design
+  // do outro lado chega para partir a extração sem partir a navegação.
+  //
+  // Medir aqui transforma isso num número que se pode ver cair.
+  const completude = medirCompletude(itensDados);
+  const alertaCompletude = avaliarCompletude(completude, itensDados.length);
+  if (alertaCompletude) {
+    // eslint-disable-next-line no-console
+    console.warn(`[completude] ${alertaCompletude.mensagem}`);
+    if (status === "ok") {
+      status = "campos_em_falta";
+      note = alertaCompletude.mensagem;
+      failureCode = failureCode ?? "CAMPOS_EM_FALTA";
+      // Código próprio (3), não o genérico: colher itens vazios é um problema
+      // diferente de não colher nada, e pede outra reacção — aqui repetir não
+      // costuma resolver, é a extração que precisa de manutenção. Sair com
+      // código de erro é o que impede a categoria de entrar no checkpoint como
+      // concluída e faz o motivo aparecer no painel.
+      exitCode = 3;
+    }
+  }
+
   const dadosPayload = {
     coletado_em: new Date().toISOString(),
     categoria_url: startUrl,
@@ -2808,6 +2917,8 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     filtro: pdpGalleryEnv
       ? "XHR/JSON (categoria) + #__MODERN_ROUTER_DATA__ + PDP_GALLERY (fotos + preço hero no DOM em .../pdp/...)"
       : "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
+    completude,
+    alerta_completude: alertaCompletude?.mensagem ?? null,
     itens: itensDados,
     diagnostic
   };
@@ -2887,32 +2998,109 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
 /**
  * Duas+ categorias no mesmo processo Chrome (sem fechar o browser entre elas). Nova `Page` por categoria
  * para evitar listeners duplicados. `runs[]`: `{ OUTPUT_DIR, CATEGORY_URL, label? }`.
+ *
+ * Parada graciosa: se `shouldStop()` retornar verdadeiro ANTES de uma categoria (ou durante a
+ * pausa entre categorias), o loop encerra, o browser é fechado limpo e o progresso já gravado
+ * pelos callbacks é preservado. A categoria em curso no momento não é interrompida no meio.
+ *
  * @param {Array<{ OUTPUT_DIR: string, CATEGORY_URL: string, label?: string }>} runs
- * @param {{ pauseMs?: number, onCategoryComplete?: (url: string, code: number, index: number, total: number) => Promise<void> }} [opts]
+ * @param {{
+ *   pauseMs?: number,
+ *   onCategoryStart?: (url: string, label: string, index: number, total: number) => Promise<void>,
+ *   onCategoryComplete?: (url: string, code: number, index: number, total: number) => Promise<void>,
+ *   onCategoryFailed?: (url: string, code: number, index: number, total: number, motivo: string) => Promise<void>,
+ *   shouldStop?: () => (boolean | Promise<boolean>)
+ * }} [opts]
  */
 export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
   if (!Array.isArray(runs) || runs.length === 0) {
     throw new Error("scrapeCategoriesSequentialSharedBrowser: runs[] vazio");
   }
-  const { pauseMs, onCategoryComplete } = opts;
+  const { pauseMs, onCategoryStart, onCategoryComplete, onCategoryFailed, shouldStop } = opts;
   const defaultPause = Number(process.env.PAUSE_BETWEEN_CATEGORIES_MS);
-  const browser = await launchTikTokBrowser();
+  const askStop = async () => {
+    if (typeof shouldStop !== "function") return false;
+    try { return Boolean(await shouldStop()); } catch { return false; }
+  };
+
+  /** Relança o Chrome quando ele cai/desconecta no meio de uma coleta longa. */
+  let browser = await launchTikTokBrowser();
+  const ensureBrowser = async () => {
+    if (browser && browser.isConnected && browser.isConnected()) return browser;
+    // eslint-disable-next-line no-console
+    console.warn("[scrape] navegador desconectado — relançando…");
+    try { if (browser) await browser.close().catch(() => {}); } catch { /* ok */ }
+    // Pequena espera para o perfil liberar o lock antes de reabrir.
+    await new Promise((res) => setTimeout(res, 2500));
+    browser = await launchTikTokBrowser();
+    return browser;
+  };
+
   let exitCode = 0;
   try {
     for (let i = 0; i < runs.length; i++) {
+      if (await askStop()) {
+        // eslint-disable-next-line no-console
+        console.log(`[scrape] parada solicitada — encerrando antes da categoria ${i + 1}/${runs.length}. Progresso preservado.`);
+        break;
+      }
       const r = runs[i];
       const label = r.label || r.CATEGORY_URL;
       process.env.OUTPUT_DIR = r.OUTPUT_DIR;
       initOutputPaths();
       // eslint-disable-next-line no-console
       console.log(`\n--- [${i + 1}/${runs.length}] ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
-      const page = await browser.newPage();
-      await installAntiPopupGuards(browser, page);
-      const code = await runCategoryHarvest(browser, page, r.CATEGORY_URL);
+      if (onCategoryStart) {
+        await onCategoryStart(r.CATEGORY_URL, label, i + 1, runs.length).catch(() => {});
+      }
+
+      // Coleta resiliente: erro/queda numa categoria NÃO derruba a corrida inteira.
+      // Tenta relançar o browser e refazer a categoria uma vez; se ainda falhar, segue para a próxima.
+      let code = 1;
+      let ok = false;
+      for (let attempt = 1; attempt <= 2 && !ok; attempt++) {
+        let page = null;
+        try {
+          await ensureBrowser();
+          page = await browser.newPage();
+          await installAntiPopupGuards(browser, page);
+          code = await runCategoryHarvest(browser, page, r.CATEGORY_URL);
+          ok = true;
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error(`[scrape] categoria ${i + 1}/${runs.length} falhou (tentativa ${attempt}/2): ${e?.message ?? e}`);
+          exitCode = Math.max(exitCode, 1);
+          try { if (browser) await browser.close().catch(() => {}); } catch { /* ok */ }
+          browser = null;
+          if (attempt < 2) await new Promise((res) => setTimeout(res, 3000));
+        } finally {
+          if (page) await page.close().catch(() => {});
+        }
+      }
+
       exitCode = Math.max(exitCode, code);
-      await page.close().catch(() => {});
-      if (onCategoryComplete) {
-        await onCategoryComplete(r.CATEGORY_URL, code, i + 1, runs.length).catch(() => {});
+
+      // Concluída = a coleta correu E devolveu sucesso (código 0).
+      //
+      // Antes bastava não ter lançado exceção (`ok`), e o código de saída era
+      // ignorado: categoria que caiu no captcha (2) ou voltou sem produto (1)
+      // entrava no checkpoint como concluída e nunca mais era tentada — o
+      // buraco fica invisível porque a barra de progresso mostra 100%.
+      // Fracasso agora avisa quem chamou, que decide se devolve à fila.
+      const MOTIVO_POR_CODIGO = {
+        1: "sem produtos ou sessão fora do shop.tiktok.com",
+        2: "verificação de segurança do TikTok (captcha)",
+        3: "produtos colhidos mas com campos críticos vazios (provável mudança de layout do TikTok)"
+      };
+      if (ok && code === 0) {
+        if (onCategoryComplete) {
+          await onCategoryComplete(r.CATEGORY_URL, code, i + 1, runs.length).catch(() => {});
+        }
+      } else if (onCategoryFailed) {
+        const motivo = ok
+          ? (MOTIVO_POR_CODIGO[code] ?? `coleta terminou com código ${code}`)
+          : "erro/queda do navegador durante a coleta";
+        await onCategoryFailed(r.CATEGORY_URL, code, i + 1, runs.length, motivo).catch(() => {});
       }
       if (i < runs.length - 1) {
         const delay =
@@ -2921,11 +3109,16 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
           10_000 + Math.random() * 5_000;
         // eslint-disable-next-line no-console
         console.log(`[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`);
-        await new Promise((res) => setTimeout(res, delay));
+        // Pausa abortável: verifica parada a cada 500ms para reagir rápido ao botão Parar.
+        const step = 500;
+        for (let waited = 0; waited < delay; waited += step) {
+          if (await askStop()) break;
+          await new Promise((res) => setTimeout(res, Math.min(step, delay - waited)));
+        }
       }
     }
   } finally {
-    await browser.close();
+    try { if (browser) await browser.close(); } catch { /* ok */ }
   }
   return exitCode;
 }

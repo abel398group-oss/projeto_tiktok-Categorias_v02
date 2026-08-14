@@ -448,6 +448,15 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log(`[backup] ${backupPath}`);
 
+  // Resultado por produto. Sem isto o enriquecimento falhava em silêncio:
+  // `continue` no meio do laço, exit 0 no fim, e a interface dizia
+  // "enriquecido com sucesso" sobre um produto em que nada mudou.
+  /** @type {Map<string, { status: string, nota: string }>} */
+  const resultadoPorProduto = new Map();
+  const registar = (id, status, nota = "") => {
+    resultadoPorProduto.set(String(id), { status, nota });
+  };
+
   try {
     const browser = await launchTikTokBrowser();
     const page = await browser.newPage();
@@ -465,6 +474,7 @@ async function main() {
           if (!fallbackItem) {
             // eslint-disable-next-line no-console
             console.error(`[pdp:enrich] product_id=${reqId} não encontrado em itens[] nem na BD — ignorado`);
+            registar(reqId, "erro", "produto não existe no output nem na base");
             continue;
           }
           itens.push(fallbackItem);
@@ -482,6 +492,7 @@ async function main() {
         if (!pdpUrl || !/\/pdp\//i.test(pdpUrl)) {
           // eslint-disable-next-line no-console
           console.error(`[pdp:enrich] product_id=${reqId}: URL PDP inválida — ignorado`);
+          registar(reqId, "url_invalida", "sem link de PDP utilizável");
           continue;
         }
 
@@ -489,14 +500,16 @@ async function main() {
         const byProductId = new Map([[String(reqId), n]]);
 
         let stats = { visited: 0, max: 0, eligible: 0 };
+        let erroNavegador = "";
         try {
           stats = await enrichByProductIdWithPdpGallery(browser, page, byProductId, {
             max: 1,
             categoriaUrl
           });
         } catch (e) {
+          erroNavegador = String((e && e.message) || e);
           // eslint-disable-next-line no-console
-          console.error(`[pdp:enrich] product_id=${reqId} falhou (browser): ${(e && e.message) || e}`);
+          console.error(`[pdp:enrich] product_id=${reqId} falhou (browser): ${erroNavegador}`);
         }
 
         const enrichedOk = stats.visited >= 1 && stats.eligible >= 1;
@@ -546,6 +559,16 @@ async function main() {
               `[pdp:enrich] product_id=${reqId} PDP não aplicado (visited=${stats.visited}, eligible=${stats.eligible}) — item original preservado`
             );
           }
+          // Página nunca abriu = provável bloqueio (captcha/rede); abriu mas não
+          // rendeu galeria = produto sem material. São causas diferentes e pedem
+          // ações opostas: uma repete, a outra não vale repetir.
+          if (erroNavegador) {
+            registar(reqId, "erro", `navegador: ${erroNavegador}`.slice(0, 300));
+          } else if (stats.visited < 1) {
+            registar(reqId, "captcha", "a PDP não abriu — verificação de segurança ou bloqueio");
+          } else {
+            registar(reqId, "sem_galeria", "a PDP abriu mas não devolveu galeria utilizável");
+          }
           continue;
         }
         for (const idx of indices) {
@@ -565,11 +588,30 @@ async function main() {
           }
         }
 
+        registar(reqId, "ok");
         // eslint-disable-next-line no-console
         console.log(`[pdp:enrich] OK product_id=${reqId} (${indices.length} linha(s) em itens[])`);
       }
     } finally {
       await browser.close().catch(() => {});
+    }
+
+    // Grava o estado de cada tentativa — inclusive as falhadas. É o que permite
+    // ver "este produto nunca enriquece, e porquê" em vez de o retentar sempre.
+    for (const [pid, r] of resultadoPorProduto) {
+      try {
+        await prisma.product.updateMany({
+          where: { productId: pid },
+          data: {
+            enrichStatus: r.status,
+            enrichCheckedAt: new Date(),
+            enrichNote: r.nota || null
+          }
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(`[pdp:enrich] não consegui gravar o estado de ${pid}: ${(e && e.message) || e}`);
+      }
     }
   } finally {
     await prisma.$disconnect().catch(() => {});
@@ -580,10 +622,31 @@ async function main() {
   await writeFile(DADOS_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   // eslint-disable-next-line no-console
   console.log(`[pdp:enrich] Gravado ${DADOS_PATH}`);
+
+  // Resumo + código de saída honesto. Antes, um produto que não enriquecia
+  // terminava com exit 0 e a interface anunciava sucesso: o utilizador só
+  // descobria ao ver que as fotos eram as mesmas de antes.
+  const resultados = [...resultadoPorProduto.values()];
+  const okCount = resultados.filter((r) => r.status === "ok").length;
+  const falhas = resultados.filter((r) => r.status !== "ok");
+  // eslint-disable-next-line no-console
+  console.log(`[pdp:enrich] resumo: ${okCount} enriquecido(s), ${falhas.length} falha(s) de ${idsArg.length} pedido(s)`);
+  for (const [pid, r] of resultadoPorProduto) {
+    if (r.status !== "ok") {
+      // eslint-disable-next-line no-console
+      console.log(`  • ${pid}: ${r.status} — ${r.nota}`);
+    }
+  }
+  // Nada enriquecido quando havia trabalho a fazer é falha, não sucesso.
+  return okCount === 0 && idsArg.length > 0 ? 4 : 0;
 }
 
-main().catch((e) => {
-  // eslint-disable-next-line no-console
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then((code) => {
+    process.exit(typeof code === "number" ? code : 0);
+  })
+  .catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exit(1);
+  });

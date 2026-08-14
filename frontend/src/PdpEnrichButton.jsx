@@ -10,7 +10,12 @@ const btn = {
   background: "#1a4a3d",
   color: "#d8f5ec",
   fontWeight: 600,
-  whiteSpace: "nowrap"
+  whiteSpace: "nowrap",
+  // Altura mínima para o dedo acertar. Media 21 px e, no telemóvel, isso
+  // obriga a mirar — e este botão dispara um trabalho de minutos, por isso
+  // errar o alvo (ou acertar sem querer) custa caro. Detectado pela suíte de
+  // viewport móvel.
+  minHeight: 28
 };
 
 /**

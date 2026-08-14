@@ -100,6 +100,32 @@ export function registerPdpEnrichRoute(fastify) {
       if (pdpExitCode !== 0) {
         const tail = pdpLog.length > 3800 ? `…${pdpLog.slice(-3700)}` : pdpLog.trim() || `exit ${pdpExitCode}`;
         console.error("[pdp-enrich] pdp:enrich falhou exitCode=%s · tail:\n%s", pdpExitCode, tail.slice(0, 1200));
+
+        // Código 4 = correu até ao fim mas não enriqueceu nada. É diferente de
+        // ter rebentado: o motivo por produto está no log e na coluna
+        // enrich_status. Antes isto saía como sucesso e ninguém percebia.
+        if (pdpExitCode === 4) {
+          const motivos = [...pdpLog.matchAll(/^ {2}• (\S+): (\S+) — (.+)$/gm)]
+            .map((m) => ({ productId: m[1], status: m[2], nota: m[3] }));
+          const status = motivos[0]?.status ?? "";
+          const detalhe =
+            status === "captcha"
+              ? "A página do produto não abriu — o TikTok pediu verificação de segurança."
+              : status === "sem_galeria"
+                ? "A página abriu, mas não tinha galeria utilizável para este produto."
+                : status === "url_invalida"
+                  ? "Este produto não tem link de PDP utilizável."
+                  : "";
+          return reply.code(502).send({
+            ok: false,
+            enriched: 0,
+            motivos,
+            message:
+              `Nenhum produto foi enriquecido.${detalhe ? " " + detalhe : ""} ` +
+              "O estado de cada tentativa ficou gravado na base (enrich_status)."
+          });
+        }
+
         return reply.code(502).send({
           ok: false,
           message: `pdp:enrich falhou com código ${pdpExitCode}: ${tail}`
