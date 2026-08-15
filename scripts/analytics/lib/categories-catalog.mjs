@@ -111,6 +111,23 @@ function computeOperationalHealth(p) {
 }
 
 /**
+ * Divide uma lista em blocos com tamanho máximo seguro para consultas Prisma/Postgres.
+ * @template T
+ * @param {T[]} items
+ * @param {number} chunkSize
+ * @returns {T[][]}
+ */
+export function chunkArray(items, chunkSize) {
+  const size = Number.isFinite(chunkSize) && chunkSize > 0 ? Math.floor(chunkSize) : 1;
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const out = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+/**
  * @returns {Promise<{ categories: Array<{
  *   categoryUrl: string,
  *   categoryKey: string,
@@ -298,20 +315,28 @@ async function enrichCategoriesWithImportAndSellers(prisma, categories) {
     return;
   }
 
-  const snapshotRows =
-    runIds.length > 0
-      ? await prisma.productSnapshot.findMany({
+  const snapshotRows = [];
+  if (runIds.length > 0 && allPid.length > 0) {
+    const productIdBatches = chunkArray(allPid, 1000);
+    const runIdBatches = chunkArray(runIds, 500);
+
+    for (const pidBatch of productIdBatches) {
+      for (const runBatch of runIdBatches) {
+        const rows = await prisma.productSnapshot.findMany({
           where: {
-            scrapeRunId: { in: runIds },
-            productRefId: { in: allPid }
+            scrapeRunId: { in: runBatch },
+            productRefId: { in: pidBatch }
           },
           select: {
             scrapeRunId: true,
             productRefId: true,
             product: { select: { sellerRefId: true, firstSeenAt: true } }
           }
-        })
-      : [];
+        });
+        snapshotRows.push(...rows);
+      }
+    }
+  }
 
   /** @type {Map<string, { status: string, totalProducts: number | null, collectedAt: Date, categoryUrl: string | null, filterDescription: string | null, inputHash: string | null }>} */
   const runMeta = new Map();
