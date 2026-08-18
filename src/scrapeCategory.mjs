@@ -945,6 +945,22 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
     Math.max(1, Number.parseInt(String(process.env.PDP_GALLERY_CONCURRENCY || "2"), 10) || 1)
   );
 
+  // Policy de PDP: muito mais agressivo que scraping de categoria (o TikTok fica agressivo em PDPs)
+  const pdpRetryPolicy = createRetryPolicy({
+    baseDelayMs: 8000,      // Começa com 8s
+    maxDelayMs: 90000,      // Até 90s entre tentativas
+    maxRetries: 3,          // Máximo 3 tentativas
+    multiplier: 2.2         // Escalona mais rápido que normal
+  });
+
+  const pdpAntiBanPolicy = createAntiBanPolicy({
+    baseMinMs: 4000,        // Mínimo 4s entre ações
+    baseMaxMs: 8000,        // Máximo 8s
+    maxDelayMs: 45000,      // Teto muito maior
+    maxActionsPerWindow: 2, // Bem restritivo (2 ações por 120s)
+    windowMs: 120000        // 120s de janela
+  });
+
   /** @type {import("puppeteer").Page | null} */
   let secondary = null;
   try {
@@ -961,72 +977,140 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
      * @returns {Promise<boolean>}
      */
     const visitOnePdp = async (workerPage, n) => {
-      try {
-        await workerPage.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
-        await syncBrazilEnvToLivePage(workerPage);
-        await humanPause(workerPage, 900, 1800);
-        await workerPage
-          .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
-          .catch(() => undefined);
-        await workerPage.waitForSelector("#__MODERN_ROUTER_DATA__", { timeout: 22_000 }).catch(() => undefined);
-        await workerPage
-          .waitForFunction(
-            () => {
-              const el = document.getElementById("__MODERN_ROUTER_DATA__");
-              const t = el?.textContent != null ? String(el.textContent).trim() : "";
-              return t.length > 80 && t.includes("{") && t.includes("}");
-            },
-            { timeout: 14_000 }
-          )
-          .catch(() => undefined);
-        await humanPause(workerPage, 175, 400);
-        const rawDom = await collectPdpGalleryUrlsFromPage(workerPage);
-        let routerRoot = await getModernRouterDataFromPage(workerPage);
-        if (
-          routerRoot == null ||
-          (typeof routerRoot === "object" && Object.keys(routerRoot).length === 0)
-        ) {
-          await humanPause(workerPage, 375, 750);
-          routerRoot = await getModernRouterDataFromPage(workerPage);
-        }
-        const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
-        const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
-        const pdpDom = await collectPdpProductPricesFromPage(
-          workerPage,
-          String(n.product_id),
-          categoriaUrl,
-          routerRoot
-        );
-        n.images_pdp = merged.length > 0 ? merged : null;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        attempts += 1;
+        try {
+          // Detecta security check antes de ir
+          let hasSecurityCheck = await detectTiktokSecurityChallenge(workerPage).catch(() => false);
+          if (hasSecurityCheck) {
+            const cooldownMs = pdpRetryPolicy.nextRetryDelay({ status: "pdp_security_check" });
+            console.log(`[pdp-anti-ban] ${n.product_id}: Security check antes de goto. Cooldown ${cooldownMs}ms...`);
+            await sleepMs(cooldownMs);
+            pdpRetryPolicy.recordFailure({ status: "pdp_security_check" });
+            continue;
+          }
 
-        // Mídias das avaliações — conteúdo de clientes, guardado à parte.
-        const review = await collectReviewMediaFromPage(workerPage);
-        n.fotos_review = review.fotos.length > 0 ? review.fotos : null;
-        n.videos_review = review.videos.length > 0 ? review.videos : null;
+          await workerPage.goto(String(n.product_url), { waitUntil: "domcontentloaded", timeout: 90_000 });
+          await syncBrazilEnvToLivePage(workerPage);
+          
+          // Detecta security check após goto
+          hasSecurityCheck = await detectTiktokSecurityChallenge(workerPage).catch(() => false);
+          if (hasSecurityCheck) {
+            const cooldownMs = pdpRetryPolicy.nextRetryDelay({ status: "pdp_security_check" });
+            console.log(`[pdp-anti-ban] ${n.product_id}: Security check detectado em PDP. Retry ${attempts}/${maxAttempts}. Cooldown ${cooldownMs}ms...`);
+            await sleepMs(cooldownMs);
+            pdpRetryPolicy.recordFailure({ status: "pdp_security_check" });
+            
+            if (attempts < maxAttempts) {
+              await workerPage.close().catch(() => {});
+              const newWorkerPage = await browser.newPage();
+              await applyBrazilBrowsingContext(newWorkerPage);
+              const idx = workers.indexOf(workerPage);
+              if (idx >= 0) workers[idx] = newWorkerPage;
+              Object.assign(workerPage, newWorkerPage);
+            }
+            continue;
+          }
 
-        applyPdpDomPrices(n, pdpDom);
-        if (debugLines && merged.length) {
-          const rN = fromRouter.length;
-          const dN = rawDom.length;
-          debugLines.push(
-            `[pdp_gallery] ${n.product_id} → ${merged.length} url(s) (router:${rN} dom:${dN})`
+          // Recorde anti-ban da política de PDP
+          pdpAntiBanPolicy.recordAction();
+          await humanPause(workerPage, 900, 1800);
+          
+          await workerPage
+            .waitForSelector("span[class*='Headline']", { timeout: 15_000 })
+            .catch(() => undefined);
+          await workerPage.waitForSelector("#__MODERN_ROUTER_DATA__", { timeout: 22_000 }).catch(() => undefined);
+          await workerPage
+            .waitForFunction(
+              () => {
+                const el = document.getElementById("__MODERN_ROUTER_DATA__");
+                const t = el?.textContent != null ? String(el.textContent).trim() : "";
+                return t.length > 80 && t.includes("{") && t.includes("}");
+              },
+              { timeout: 14_000 }
+            )
+            .catch(() => undefined);
+          
+          // Detecta security check após render
+          const hasSecCheckAfterRender = await detectTiktokSecurityChallenge(workerPage).catch(() => false);
+          if (hasSecCheckAfterRender) {
+            const cooldownMs = pdpRetryPolicy.nextRetryDelay({ status: "pdp_security_check_render" });
+            console.log(`[pdp-anti-ban] ${n.product_id}: Security check após render. Retry ${attempts}/${maxAttempts}. Cooldown ${cooldownMs}ms...`);
+            await sleepMs(cooldownMs);
+            pdpRetryPolicy.recordFailure({ status: "pdp_security_check_render" });
+            continue;
+          }
+
+          await humanPause(workerPage, 175, 400);
+          const rawDom = await collectPdpGalleryUrlsFromPage(workerPage);
+          let routerRoot = await getModernRouterDataFromPage(workerPage);
+          if (
+            routerRoot == null ||
+            (typeof routerRoot === "object" && Object.keys(routerRoot).length === 0)
+          ) {
+            await humanPause(workerPage, 375, 750);
+            routerRoot = await getModernRouterDataFromPage(workerPage);
+          }
+          const fromRouter = extractPdpImageUrlsFromModernRouterRoot(routerRoot, String(n.product_id));
+          const merged = dedupePdpImageUrls([...fromRouter, ...rawDom]);
+          const pdpDom = await collectPdpProductPricesFromPage(
+            workerPage,
+            String(n.product_id),
+            categoriaUrl,
+            routerRoot
           );
-        }
-        if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
-          const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
-          debugLines.push(`[pdp_gallery] ${n.product_id} preço: ${pdpDom.sale}${o}`);
-        }
-        return true;
-      } catch (e) {
-        n.images_pdp = null;
-        if (debugLines) {
-          debugLines.push(`[pdp_gallery] ${n.product_id} falhou: ${(e && e.message) || String(e)}`);
-        } else {
+          n.images_pdp = merged.length > 0 ? merged : null;
+
+          // Mídias das avaliações — conteúdo de clientes, guardado à parte.
+          const review = await collectReviewMediaFromPage(workerPage);
+          n.fotos_review = review.fotos.length > 0 ? review.fotos : null;
+          n.videos_review = review.videos.length > 0 ? review.videos : null;
+
+          applyPdpDomPrices(n, pdpDom);
+          if (debugLines && merged.length) {
+            const rN = fromRouter.length;
+            const dN = rawDom.length;
+            debugLines.push(
+              `[pdp_gallery] ${n.product_id} → ${merged.length} url(s) (router:${rN} dom:${dN})`
+            );
+          }
+          if (debugLines && pdpDom && typeof pdpDom.sale === "number" && !Number.isNaN(pdpDom.sale)) {
+            const o = pdpDom.listPrice != null ? `, "de" DOM: ${pdpDom.listPrice}` : ", sem riscado";
+            debugLines.push(`[pdp_gallery] ${n.product_id} preço: ${pdpDom.sale}${o}`);
+          }
+          
+          // Sucesso! Registra nas políticas
+          pdpRetryPolicy.recordSuccess();
+          pdpAntiBanPolicy.recordSuccess();
           // eslint-disable-next-line no-console
-          console.warn(`[pdp_gallery] ${n.product_id}: ${(e && e.message) || e}`);
+          console.log(`[pdp-anti-ban] ${n.product_id}: ✅ PDP concluído com sucesso. images_pdp=${merged.length}, preço=${pdpDom?.sale || 'N/A'}`);
+          return true;
+        } catch (e) {
+          n.images_pdp = null;
+          pdpRetryPolicy.recordFailure({ status: "pdp_error" });
+          pdpAntiBanPolicy.recordFailure({ reason: "pdp_error" });
+          
+          if (attempts < maxAttempts) {
+            const cooldownMs = pdpRetryPolicy.nextRetryDelay({ status: "pdp_error" });
+            console.log(`[pdp-anti-ban] ${n.product_id}: Erro na tentativa ${attempts}/${maxAttempts}. Cooldown ${cooldownMs}ms...`);
+            await sleepMs(cooldownMs);
+            continue;
+          }
+          
+          if (debugLines) {
+            debugLines.push(`[pdp_gallery] ${n.product_id} falhou após ${maxAttempts} tentativas: ${(e && e.message) || String(e)}`);
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn(`[pdp_gallery] ${n.product_id}: ${(e && e.message) || e}`);
+          }
+          return false;
         }
-        return false;
       }
+      // Se saiu do loop de retry sem sucesso
+      return false;
     };
 
     let visited = 0;
@@ -1043,7 +1127,14 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
         batch.map((n, bi) => visitOnePdp(workers[bi % workers.length], n))
       );
       visited += outcomes.filter(Boolean).length;
-      await humanPause(page, 250, 700);
+      
+      // Delay anti-ban entre lotes de PDPs: muito maior que normal
+      // porque TikTok fica agressivo com múltiplas PDPs
+      const pdpDelayMs = pdpAntiBanPolicy.nextDelay({ reason: "pdp-batch" });
+      const batchDelayMs = Math.max(pdpDelayMs, 3000); // Mínimo 3s entre lotes
+      console.log(`[pdp-anti-ban] Pausa entre lotes: ${batchDelayMs}ms...`);
+      await sleepMs(batchDelayMs);
+      pdpAntiBanPolicy.recordAction();
     }
     return { visited, max, eligible: withPdp.length };
   } finally {
