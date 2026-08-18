@@ -93,6 +93,12 @@ import {
   setSellerDebugMode,
   sellerDebugSamples
 } from "./scrape/normalizer.mjs";
+import {
+  addHumanizedDelay,
+  createAntiBanPolicy,
+  createRetryPolicy,
+  sleepMs
+} from "./scrape/anti-ban.mjs";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1058,8 +1064,17 @@ function shouldInspectUrl(url) {
   }
 }
 
+const antiBanPolicy = createAntiBanPolicy({
+  baseMinMs: Number(process.env.ANTI_BAN_MIN_MS) || 1800,
+  baseMaxMs: Number(process.env.ANTI_BAN_MAX_MS) || 4500,
+  maxDelayMs: Number(process.env.ANTI_BAN_MAX_DELAY_MS) || 20000,
+  maxActionsPerWindow: Number(process.env.ANTI_BAN_ACTIONS_PER_WINDOW) || 8,
+  windowMs: Number(process.env.ANTI_BAN_WINDOW_MS) || 60000,
+});
+
 async function humanPause(page, min = 200, max = 600) {
-  // Simula uma pausa humana ocasionalmente mais longa (ex: parou para ler algo)
+  // Simula uma pausa humana ocasionalmente mais longa (ex: parou para ler algo).
+  // Em vez de delay fixo, usa o controlador de risco para reduzir sinais de bot.
   const extraChance = Math.random();
   let actualMax = max;
   let actualMin = min;
@@ -1072,8 +1087,16 @@ async function humanPause(page, min = 200, max = 600) {
     actualMax = 1500;
   }
 
-  const ms = actualMin + Math.random() * (actualMax - actualMin);
-  await new Promise((r) => setTimeout(r, ms));
+  const humanDelay = addHumanizedDelay({
+    minMs: actualMin,
+    maxMs: actualMax,
+    jitter: true
+  });
+
+  const guardedDelay = antiBanPolicy.nextDelay({ reason: "human-pause" });
+  const ms = Math.max(humanDelay, guardedDelay * 0.35);
+  antiBanPolicy.recordAction();
+  await sleepMs(ms);
 }
 
 /**
@@ -1092,7 +1115,7 @@ async function waitForStableProductFeed(getProductCount) {
   let lastChangeAt = Date.now();
 
   while (Date.now() - start < maxMs) {
-    await new Promise((r) => setTimeout(r, pollMs));
+    await sleepMs(pollMs);
     const n = getProductCount();
     if (n !== lastCount) {
       lastCount = n;
@@ -2116,6 +2139,22 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const isHeaded = process.env.HEADED === "1";
   const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
 
+  /** Política de retry: detecta bloqueios e escalona cooldown */
+  const retryPolicy = createRetryPolicy({
+    baseDelayMs: 5000,
+    maxDelayMs: 60000,
+    maxRetries: 4
+  });
+
+  /** Política anti-ban: pausa humanizada durante a coleta */
+  const antiBanPolicy = createAntiBanPolicy({
+    baseMinMs: 2000,
+    baseMaxMs: 5000,
+    maxDelayMs: 25000,
+    maxActionsPerWindow: 6,
+    windowMs: 90000
+  });
+
   /** chave = product_id; dedupe: mantém a linha mais "rica" (preço, imagens) */
   const byProductId = new Map();
   setSellerDebugMode(true);
@@ -2612,7 +2651,18 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
       );
     } else {
       let securityChallenge = await detectTiktokSecurityChallenge(page);
-      if (!securityChallenge) {
+      let retryAttempts = 0;
+      const maxSecurityRetries = 2;
+
+      // Retry loop: detecta security check e reaplica com cooldown
+      while (securityChallenge && retryAttempts < maxSecurityRetries) {
+        retryAttempts += 1;
+        const cooldownMs = retryPolicy.nextRetryDelay({ status: "security_check" });
+        console.log(`[anti-ban] Security check detectado. Retry ${retryAttempts}/${maxSecurityRetries}. Aguardando ${cooldownMs}ms...`);
+        
+        await sleepMs(cooldownMs);
+        retryPolicy.recordFailure({ status: "security_check" });
+
         if (!passive) {
           await postGotoShopStabilize(page, isHeaded);
         } else {
@@ -2620,6 +2670,8 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
         }
         securityChallenge = await detectTiktokSecurityChallenge(page);
       }
+
+      // Se ainda houver security check após retries, aplica wait se HEADED
       if (securityChallenge && isHeaded) {
         await waitForSecurityChallengeResolved(page, { maxMs: loginWaitMaxMs });
         securityChallenge = await detectTiktokSecurityChallenge(page);
@@ -2632,7 +2684,10 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
           securityChallenge = await detectTiktokSecurityChallenge(page);
         }
       }
+      
       if (securityChallenge) {
+        // Registra falha na política
+        retryPolicy.recordFailure({ status: "security_check_persistent" });
         status = "tiktok_security_check";
         failureCode = "TIKTOK_SECURITY_CHECK";
         note =
@@ -2640,6 +2695,9 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
         // eslint-disable-next-line no-console
         console.warn(`[scrape] ${note}`);
       } else {
+        // Registra sucesso na política de retry
+        retryPolicy.recordSuccess();
+        antiBanPolicy.recordSuccess();
       const diagEarly =
         process.env.SCRAPE_DIAGNOSTIC === "1" || /^true$/i.test(String(process.env.SCRAPE_DIAGNOSTIC || ""));
       if (diagEarly) {
@@ -2667,9 +2725,17 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
           await humanPause(page, 750, 1500);
         }
         await gentleMouseJiggle(page);
+        antiBanPolicy.recordAction();
+        
         await scrollToLoadGrid(page);
-        await humanPause(page, 1000, 2000);
+        const delay1 = antiBanPolicy.nextDelay({ reason: "scroll" });
+        await sleepMs(delay1);
+        antiBanPolicy.recordAction();
+        
         await clickViewMoreWhileNeeded(page, () => byProductId.size);
+        const delay2 = antiBanPolicy.nextDelay({ reason: "view-more" });
+        await sleepMs(delay2);
+        antiBanPolicy.recordAction();
       } else {
         await humanPause(page, 1000, 1800);
       }
@@ -3103,17 +3169,18 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
         await onCategoryFailed(r.CATEGORY_URL, code, i + 1, runs.length, motivo).catch(() => {});
       }
       if (i < runs.length - 1) {
-        const delay =
+        const baseDelay =
           pauseMs != null ? pauseMs :
           Number.isFinite(defaultPause) && defaultPause >= 0 ? defaultPause :
           10_000 + Math.random() * 5_000;
+        const delay = Math.max(baseDelay, antiBanPolicy.nextDelay({ reason: "category-gap" }));
         // eslint-disable-next-line no-console
         console.log(`[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`);
         // Pausa abortável: verifica parada a cada 500ms para reagir rápido ao botão Parar.
         const step = 500;
         for (let waited = 0; waited < delay; waited += step) {
           if (await askStop()) break;
-          await new Promise((res) => setTimeout(res, Math.min(step, delay - waited)));
+          await sleepMs(Math.min(step, delay - waited));
         }
       }
     }
