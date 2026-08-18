@@ -1062,14 +1062,14 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
             categoriaUrl,
             routerRoot
           );
-          n.images_pdp = merged.length > 0 ? merged : null;
-
-          // Mídias das avaliações — conteúdo de clientes, guardado à parte.
           const review = await collectReviewMediaFromPage(workerPage);
-          n.fotos_review = review.fotos.length > 0 ? review.fotos : null;
-          n.videos_review = review.videos.length > 0 ? review.videos : null;
+          const target = byProductId.get(String(n.product_id)) ?? n;
+          target.images_pdp = merged.length > 0 ? merged : null;
+          target.fotos_review = review.fotos.length > 0 ? review.fotos : null;
+          target.videos_review = review.videos.length > 0 ? review.videos : null;
+          applyPdpDomPrices(target, pdpDom);
+          byProductId.set(String(target.product_id ?? n.product_id), target);
 
-          applyPdpDomPrices(n, pdpDom);
           if (debugLines && merged.length) {
             const rN = fromRouter.length;
             const dN = rawDom.length;
