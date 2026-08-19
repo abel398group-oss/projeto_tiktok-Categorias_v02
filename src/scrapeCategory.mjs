@@ -1,7 +1,7 @@
 /**
  * Fase 1: coleta estável de UMA categoria — dados via page.on("response") + setRequestInterception(continue).
- * `PDP_GALLERY=1`: após a grelha, abre N PDPs (PDP_GALLERY_MAX) e recolhe `fotos_pdp` (DOM) e, no mesmo
- * passo, **preço de vitrine + "de" riscado** (hero 36px + cêntimos; `original_price` só se houver riscado).
+ * `PDP_GALLERY=1`: opcional, desligado por padrão. Após a grelha, abre N PDPs (PDP_GALLERY_MAX, default 3) 
+ * e recolhe `fotos_pdp` (DOM) e preço hero. **Só ligar quando for enriquecer para vídeo** — PDP é onde o TikTok bloqueia.
  * Prioridade: respostas application/json cujo URL contém oec_bssdk ou list.
  * Número de itens no grid: variável (~20–25+); o merge deduplica por id de produto.
  * Rastreio p/ descoberta de origem: `output/extra/caca_dados.jsonl` + `caca_xhr_fetch_urls.txt` (HUNT_LOG / --hunt / --debug, exc. HUNT_LOG=0).
@@ -940,25 +940,26 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
   const withPdp = [...byProductId.values()].filter(
     (n) => n?.product_url && String(n.product_url).includes("/pdp/")
   );
+  // PDP é onde o TikTok bloqueia — concorrência 1 por padrão, configurável
   const conc = Math.min(
-    2,
-    Math.max(1, Number.parseInt(String(process.env.PDP_GALLERY_CONCURRENCY || "2"), 10) || 1)
+    1,  // DEFAULT 1: PDPs sequenciais para evitar ban
+    Math.max(1, Number.parseInt(String(process.env.PDP_GALLERY_CONCURRENCY || "1"), 10) || 1)
   );
 
   // Policy de PDP: muito mais agressivo que scraping de categoria (o TikTok fica agressivo em PDPs)
   const pdpRetryPolicy = createRetryPolicy({
-    baseDelayMs: 8000,      // Começa com 8s
-    maxDelayMs: 90000,      // Até 90s entre tentativas
-    maxRetries: 3,          // Máximo 3 tentativas
-    multiplier: 2.2         // Escalona mais rápido que normal
+    baseDelayMs: 10000,      // Começa com 10s (era 8s)
+    maxDelayMs: 120000,      // Até 2min entre tentativas (era 90s)
+    maxRetries: 3,           // Máximo 3 tentativas
+    multiplier: 2.5          // Escalona mais rápido (era 2.2)
   });
 
   const pdpAntiBanPolicy = createAntiBanPolicy({
-    baseMinMs: 4000,        // Mínimo 4s entre ações
-    baseMaxMs: 8000,        // Máximo 8s
-    maxDelayMs: 45000,      // Teto muito maior
-    maxActionsPerWindow: 2, // Bem restritivo (2 ações por 120s)
-    windowMs: 120000        // 120s de janela
+    baseMinMs: 6000,         // Mínimo 6s entre ações (era 4s)
+    baseMaxMs: 12000,        // Máximo 12s (era 8s)
+    maxDelayMs: 60000,       // Teto 1min (era 45s)
+    maxActionsPerWindow: 1,  // ULTRA restritivo: 1 ação por janela (era 2)
+    windowMs: 120000         // 120s de janela
   });
 
   /** @type {import("puppeteer").Page | null} */
@@ -2886,7 +2887,8 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
       }
 
       if (pdpGalleryEnv && byProductId.size > 0) {
-        const pdpMax = Math.min(500, Math.max(0, Number(process.env.PDP_GALLERY_MAX) || 25));
+        // Default baixo (3) - só aumenta explicitamente quando for fazer vídeo
+        const pdpMax = Math.min(50, Math.max(0, Number(process.env.PDP_GALLERY_MAX) || 3));
         // eslint-disable-next-line no-console
         console.log(
           `[pdp_gallery] A abrir PDPs (máx ${pdpMax} produtos) para fotos + preço hero (DOM) — desligar: omitir PDP_GALLERY`
