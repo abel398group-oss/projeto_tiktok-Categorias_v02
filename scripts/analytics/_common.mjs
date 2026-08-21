@@ -9,10 +9,22 @@ export function requireDatabaseUrl() {
 }
 
 /**
- * Ordenação do "último" import: `created_at` do ScrapeRun (mais recente primeiro).
+ * Só a linha mais recente não chega: um import interrompido a meio (máquina
+ * dormiu, enriquecimento cortado) cria um ScrapeRun de verdade mas com ZERO
+ * ProductSnapshot — e "mais recente por created_at" escolhe esse fantasma na
+ * frente de um run com 20 mil produtos. Aconteceu de verdade em 21/08/2026
+ * (dois runs vazios criados às 00:23, cortando o ranking inteiro). "Último
+ * run" tem de significar "último run com dado", não "última linha da tabela".
+ */
+const TEM_SNAPSHOT = { productSnapshots: { some: {} } };
+
+/**
+ * Ordenação do "último" import: `created_at` do ScrapeRun (mais recente primeiro),
+ * só entre os que têm pelo menos um ProductSnapshot.
  */
 export async function getLatestAndPreviousRun(prisma) {
   const runs = await prisma.scrapeRun.findMany({
+    where: TEM_SNAPSHOT,
     orderBy: { createdAt: "desc" },
     take: 2,
     select: { id: true, collectedAt: true }
@@ -48,6 +60,7 @@ export const HORAS_MINIMAS_PARA_CRESCIMENTO = 12;
 export async function getLatestAndBaselineRun(prisma, opts = {}) {
   const minHoras = Number.isFinite(opts.minHoras) ? Number(opts.minHoras) : HORAS_MINIMAS_PARA_CRESCIMENTO;
   const latest = await prisma.scrapeRun.findFirst({
+    where: TEM_SNAPSHOT,
     orderBy: { createdAt: "desc" },
     select: { id: true, collectedAt: true }
   });
@@ -55,7 +68,7 @@ export async function getLatestAndBaselineRun(prisma, opts = {}) {
 
   const limite = new Date(new Date(latest.collectedAt).getTime() - minHoras * 3600 * 1000);
   const baseline = await prisma.scrapeRun.findFirst({
-    where: { collectedAt: { lte: limite } },
+    where: { ...TEM_SNAPSHOT, collectedAt: { lte: limite } },
     orderBy: { collectedAt: "desc" },
     select: { id: true, collectedAt: true }
   });
