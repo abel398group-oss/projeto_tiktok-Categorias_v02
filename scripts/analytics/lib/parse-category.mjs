@@ -2,6 +2,7 @@
  * Parsing de categorias gravadas em produto (`Product.categoryUrl`) — breadcrumbs e URLs TikTok Shop.
  * Partilhado por mapa, score, top-products, opportunities e UI.
  */
+import { CATEGORY_GROUP_BY_SLUG_ID } from "./category-groups.mjs";
 
 const TIKTOK_SHOP_MASTER = "TikTok Shop";
 
@@ -99,7 +100,13 @@ function parseCategoryFromTikTokUrl(raw) {
     };
   }
   if (labels.length === 1) {
-    return { masterCategory: TIKTOK_SHOP_MASTER, subcategory: `${labels[0]}${idSuffix}` };
+    // CATALOG só guarda a folha (1 segmento) — sem breadcrumb na URL não dá
+    // para derivar o grupo-pai geometricamente. CATEGORY_GROUP_BY_SLUG_ID é o
+    // mesmo agrupamento que o CATALOG já usa (ver category-groups.mjs); só cai
+    // no genérico "TikTok Shop" quando a folha não está catalogada.
+    const groupKey = numericId ? `${slugSegs[0]}/${numericId}` : null;
+    const master = (groupKey && CATEGORY_GROUP_BY_SLUG_ID[groupKey]) || TIKTOK_SHOP_MASTER;
+    return { masterCategory: master, subcategory: `${labels[0]}${idSuffix}` };
   }
   return {
     masterCategory: labels.slice(0, -1).join(" · "),
