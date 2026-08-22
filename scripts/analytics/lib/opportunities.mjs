@@ -179,7 +179,8 @@ async function computeMedianSalesByMasterCategory(prisma, latestRunId) {
   const rows = await prisma.productSnapshot.findMany({
     where: {
       scrapeRunId: latestRunId,
-      salesCount: { not: null }
+      salesCount: { not: null },
+      product: { hiddenAt: null }
     },
     select: {
       salesCount: true,
@@ -373,12 +374,13 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
           ? {
               scrapeRunId: latest.id,
               price: { not: null },
-              product: { productId: { not: "" } },
+              product: { productId: { not: "" }, hiddenAt: null },
               OR: [{ salesCount: null }, { salesCount: 0 }]
             }
           : {
               scrapeRunId: latest.id,
               price: { not: null },
+              product: { hiddenAt: null },
               ratingAverage: { gte: 4.5 },
               ratingTotal: { gte: 5 },
               salesCount: whereSales
@@ -430,7 +432,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
     }
 
     const allRun = await prisma.productSnapshot.findMany({
-      where: { scrapeRunId: latest.id },
+      where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
       include: {
         product: { include: { seller: true } }
       }
@@ -483,7 +485,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
   }
 
   const products = await prisma.product.findMany({
-    where: { categoryUrl: { not: null } },
+    where: { categoryUrl: { not: null }, hiddenAt: null },
     select: { id: true, categoryUrl: true }
   });
   const inCategoryIds = products

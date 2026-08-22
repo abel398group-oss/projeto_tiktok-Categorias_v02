@@ -162,7 +162,7 @@ async function getCategoryMapReportGlobal(prisma) {
   }
 
   const snaps = await prisma.productSnapshot.findMany({
-    where: { scrapeRunId: latest.id },
+    where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
     include: {
       product: { include: { seller: true } }
     }

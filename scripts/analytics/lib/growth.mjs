@@ -53,7 +53,7 @@ export async function getGrowthReport(prisma, opts = {}) {
     }
     categoryUrlFilter = filterKey;
     const products = await prisma.product.findMany({
-      where: { categoryUrl: { not: null } },
+      where: { categoryUrl: { not: null }, hiddenAt: null },
       select: { id: true, categoryUrl: true }
     });
     categoryFilterIds = products
@@ -90,6 +90,7 @@ export async function getGrowthReport(prisma, opts = {}) {
   const latestSnaps = await prisma.productSnapshot.findMany({
     where: {
       scrapeRunId: latest.id,
+      product: { hiddenAt: null },
       ...snapWhereBase
     },
     include: {

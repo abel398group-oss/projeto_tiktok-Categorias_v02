@@ -83,7 +83,8 @@ export async function getTopProductsReport(prisma, opts = {}) {
   if (!rawCat) {
     const whereGlobal = {
       scrapeRunId: latest.id,
-      salesCount: { not: null }
+      salesCount: { not: null },
+      product: { hiddenAt: null }
     };
 
     const rankingTotal = await prisma.productSnapshot.count({ where: whereGlobal });
@@ -140,7 +141,7 @@ export async function getTopProductsReport(prisma, opts = {}) {
   }
 
   const products = await prisma.product.findMany({
-    where: { categoryUrl: { not: null } },
+    where: { categoryUrl: { not: null }, hiddenAt: null },
     select: { id: true, categoryUrl: true }
   });
   const inCategoryIds = products
