@@ -72,7 +72,7 @@ async function buildLatestRunScoreRows(prisma) {
   }
 
   const snaps = await prisma.productSnapshot.findMany({
-    where: { scrapeRunId: latest.id },
+    where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
     include: {
       product: { include: { seller: true } }
     }
@@ -170,7 +170,7 @@ export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, fi
   }
 
   const products = await prisma.product.findMany({
-    where: { categoryUrl: { not: null } },
+    where: { categoryUrl: { not: null }, hiddenAt: null },
     select: { id: true, categoryUrl: true }
   });
   const inCategoryIds = products

@@ -37,9 +37,10 @@ export async function buscarTudo(prisma, qBruta) {
 
   const [produtos, lojas] = await Promise.all([
     prisma.product.findMany({
-      where: pareceId
-        ? { productId: q }
-        : { name: { contains: q, mode: "insensitive" } },
+      where: {
+        hiddenAt: null,
+        ...(pareceId ? { productId: q } : { name: { contains: q, mode: "insensitive" } })
+      },
       take: LIMITE_PRODUTOS,
       orderBy: { lastSeenAt: "desc" },
       include: {

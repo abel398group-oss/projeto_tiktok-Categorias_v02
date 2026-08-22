@@ -85,10 +85,16 @@ model Product {
   /// Motivo legível da última falha (vazio quando `enrichStatus` = ok).
   enrichNote      String?   @map("enrich_note")
 
+  /// Soft-hide: quando preenchido, o produto some do ranking/listagens mas
+  /// o histórico (ProductSnapshot) continua intacto no banco — nunca DELETE.
+  /// null = visível (padrão). Reversível: voltar a null reexibe o produto.
+  hiddenAt DateTime? @map("hidden_at")
+
   snapshots      ProductSnapshot[]
   rawPayloadRefs RawPayload[]
 
   @@index([productId])
+  @@index([hiddenAt])
   @@index([sellerRefId])
   @@index([categoryUrl])
   @@index([name])

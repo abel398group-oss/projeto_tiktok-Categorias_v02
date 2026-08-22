@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "./api.js";
+import { apiFetch, apiPost } from "./api.js";
 import PdpEnrichButton from "./PdpEnrichButton.jsx";
 import { Tag } from "./ui.jsx";
 import { getParametrosSinais, PARAMETROS_MUDARAM_EVENT } from "./parametrosSinais.js";
@@ -146,6 +146,64 @@ export default function RankingPage() {
   const [erro, setErro] = useState("");
   const [ordem, setOrdem] = useState("delta");
 
+  // Ocultar é soft-hide no servidor (histórico preservado); aqui só tira da
+  // vista sem esperar recarregar o relatório inteiro — a lista já veio, não
+  // há motivo para um pedido novo só para sumir com uma linha.
+  const [ocultosLocal, setOcultosLocal] = useState(() => new Set());
+  const [ocultando, setOcultando] = useState(() => new Set());
+  const [selecionados, setSelecionados] = useState(() => new Set());
+  const [avisoOcultar, setAvisoOcultar] = useState("");
+
+  async function ocultarProduto(pid) {
+    if (!pid || ocultando.has(pid)) return;
+    setOcultando((s) => new Set(s).add(pid));
+    setAvisoOcultar("");
+    try {
+      await apiPost(`/analytics/product-hide/${encodeURIComponent(pid)}`, {});
+      setOcultosLocal((s) => new Set(s).add(pid));
+      setSelecionados((s) => {
+        if (!s.has(pid)) return s;
+        const novo = new Set(s);
+        novo.delete(pid);
+        return novo;
+      });
+    } catch (e) {
+      setAvisoOcultar(e?.message ? String(e.message) : "Falha ao ocultar produto.");
+    } finally {
+      setOcultando((s) => {
+        const novo = new Set(s);
+        novo.delete(pid);
+        return novo;
+      });
+    }
+  }
+
+  async function ocultarSelecionados() {
+    const ids = [...selecionados];
+    if (ids.length === 0) return;
+    setAvisoOcultar("");
+    try {
+      await apiPost("/analytics/product-hide-batch", { productIds: ids });
+      setOcultosLocal((s) => {
+        const novo = new Set(s);
+        ids.forEach((id) => novo.add(id));
+        return novo;
+      });
+      setSelecionados(new Set());
+    } catch (e) {
+      setAvisoOcultar(e?.message ? String(e.message) : "Falha ao ocultar selecionados.");
+    }
+  }
+
+  function alternarSelecao(pid) {
+    setSelecionados((s) => {
+      const novo = new Set(s);
+      if (novo.has(pid)) novo.delete(pid);
+      else novo.add(pid);
+      return novo;
+    });
+  }
+
   useEffect(() => {
     let ativo = true;
     setCarregando(true);
@@ -169,9 +227,10 @@ export default function RankingPage() {
 
   const linhas = useMemo(() => {
     const top = Array.isArray(relatorio?.top) ? relatorio.top : [];
+    const visiveis = top.filter((r) => !ocultosLocal.has(String(r?.productId ?? "").trim()));
     const campo = ordenacaoAtiva.campo;
-    return [...top].sort((a, b) => num(b?.[campo]) - num(a?.[campo]));
-  }, [relatorio, ordenacaoAtiva]);
+    return [...visiveis].sort((a, b) => num(b?.[campo]) - num(a?.[campo]));
+  }, [relatorio, ordenacaoAtiva, ocultosLocal]);
 
   const temComparacao = Boolean(relatorio?.previousRun);
 
@@ -303,6 +362,60 @@ export default function RankingPage() {
 
         <p style={{ fontSize: "0.74rem", opacity: 0.75, marginBottom: "0.6rem" }}>{ordenacaoAtiva.ajuda}</p>
 
+        {avisoOcultar ? (
+          <p role="alert" style={{ marginTop: "0.5rem", color: "var(--tk-danger, #f85149)" }}>
+            {avisoOcultar}
+          </p>
+        ) : null}
+
+        {selecionados.size > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              margin: "0.6rem 0",
+              padding: "0.4rem 0.7rem",
+              borderRadius: "6px",
+              border: "1px solid var(--tk-border)",
+              background: "var(--tk-bg-elev, transparent)"
+            }}
+          >
+            <span style={{ fontSize: "0.8rem" }}>{selecionados.size} selecionado(s)</span>
+            <button
+              type="button"
+              onClick={ocultarSelecionados}
+              className="tk-nav-link"
+              style={{
+                cursor: "pointer",
+                fontSize: "0.78rem",
+                padding: "0.25rem 0.6rem",
+                borderRadius: "6px",
+                border: "1px solid var(--tk-danger, #f85149)",
+                color: "var(--tk-danger, #f85149)",
+                background: "transparent"
+              }}
+            >
+              Ocultar selecionados
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelecionados(new Set())}
+              style={{
+                cursor: "pointer",
+                fontSize: "0.78rem",
+                padding: "0.25rem 0.6rem",
+                border: "none",
+                background: "transparent",
+                opacity: 0.75,
+                textDecoration: "underline"
+              }}
+            >
+              limpar seleção
+            </button>
+          </div>
+        ) : null}
+
         {contagemSinais.length > 0 ? (
           <p style={{ margin: "0 0 0.6rem" }}>
             {contagemSinais.map((s) => (
@@ -328,6 +441,7 @@ export default function RankingPage() {
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--tk-border)", textAlign: "left" }}>
                   {[
+                    { t: "" },
                     { t: "#" },
                     { t: "produto" },
                     { t: "loja" },
@@ -373,6 +487,16 @@ export default function RankingPage() {
                       key={pid || `r-${i}`}
                       style={{ borderBottom: "1px solid var(--tk-border)" }}
                     >
+                      <td style={{ padding: "0.35rem 0.45rem" }}>
+                        {pid ? (
+                          <input
+                            type="checkbox"
+                            checked={selecionados.has(pid)}
+                            onChange={() => alternarSelecao(pid)}
+                            aria-label={`Selecionar ${linha.nome ?? pid}`}
+                          />
+                        ) : null}
+                      </td>
                       <td style={{ padding: "0.35rem 0.45rem", opacity: 0.7 }}>{i + 1}</td>
                       <td style={{ padding: "0.35rem 0.45rem", maxWidth: "22rem" }}>
                         {pid ? (
@@ -445,6 +569,27 @@ export default function RankingPage() {
                       </td>
                       <td style={{ padding: "0.35rem 0.45rem", whiteSpace: "nowrap" }}>
                         {pid ? <PdpEnrichButton productId={pid} inlineHint={false} /> : null}
+                        {pid ? (
+                          <button
+                            type="button"
+                            onClick={() => ocultarProduto(pid)}
+                            disabled={ocultando.has(pid)}
+                            title="Ocultar produto (some do ranking; histórico continua no banco)"
+                            style={{
+                              marginLeft: "0.4rem",
+                              cursor: ocultando.has(pid) ? "wait" : "pointer",
+                              fontSize: "0.76rem",
+                              padding: "0.15rem 0.5rem",
+                              borderRadius: "6px",
+                              border: "1px solid var(--tk-border)",
+                              background: "transparent",
+                              color: "var(--tk-danger, #f85149)",
+                              opacity: ocultando.has(pid) ? 0.6 : 1
+                            }}
+                          >
+                            {ocultando.has(pid) ? "…" : "Ocultar"}
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   );

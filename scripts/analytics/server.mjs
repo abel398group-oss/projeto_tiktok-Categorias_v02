@@ -39,6 +39,7 @@ import { registerImagesUploadRoute } from "./images-upload-route.mjs";
 import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { registerScrapeAllRoute } from "./scrape-all-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
+import { hideProduct, unhideProduct, hideProductsBatch, listHiddenProducts } from "./lib/product-hide.mjs";
 
 requireDatabaseUrl();
 
@@ -203,6 +204,33 @@ fastify.get("/analytics/search", async (req) => {
   const raw = req.query?.q;
   const q = typeof raw === "string" ? raw : Array.isArray(raw) ? String(raw[0] ?? "") : "";
   return buscarTudo(prisma, q);
+});
+
+fastify.get("/analytics/hidden-products", async () => listHiddenProducts(prisma));
+
+fastify.post("/analytics/product-hide/:productId", async (req, reply) => {
+  const result = await hideProduct(prisma, req.params.productId);
+  if (!result.ok) {
+    return reply.code(result.error === "not_found" ? 404 : 400).send(result);
+  }
+  return result;
+});
+
+fastify.post("/analytics/product-unhide/:productId", async (req, reply) => {
+  const result = await unhideProduct(prisma, req.params.productId);
+  if (!result.ok) {
+    return reply.code(result.error === "not_found" ? 404 : 400).send(result);
+  }
+  return result;
+});
+
+fastify.post("/analytics/product-hide-batch", async (req, reply) => {
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const result = await hideProductsBatch(prisma, body.productIds);
+  if (!result.ok) {
+    return reply.code(400).send(result);
+  }
+  return result;
 });
 
 fastify.get("/analytics/product-workspace/:productId", async (req, reply) => {

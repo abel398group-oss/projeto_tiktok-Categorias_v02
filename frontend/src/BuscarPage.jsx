@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { apiFetch } from "./api.js";
+import { apiFetch, apiPost } from "./api.js";
 import { categoryDisplayLabel, categoryToPathSegment } from "./CategoriesPage.jsx";
 
 /**
@@ -40,6 +40,28 @@ export default function BuscarPage() {
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState("");
   const timerRef = useRef(null);
+
+  // Soft-hide: some da lista sem esperar buscar de novo (histórico continua no banco).
+  const [ocultosLocal, setOcultosLocal] = useState(() => new Set());
+  const [ocultando, setOcultando] = useState(() => new Set());
+
+  async function ocultarProduto(evento, pid) {
+    evento.stopPropagation();
+    if (!pid || ocultando.has(pid)) return;
+    setOcultando((s) => new Set(s).add(pid));
+    try {
+      await apiPost(`/analytics/product-hide/${encodeURIComponent(pid)}`, {});
+      setOcultosLocal((s) => new Set(s).add(pid));
+    } catch (e) {
+      setErro(e?.message ? String(e.message) : "Falha ao ocultar produto.");
+    } finally {
+      setOcultando((s) => {
+        const novo = new Set(s);
+        novo.delete(pid);
+        return novo;
+      });
+    }
+  }
 
   // Categorias uma vez só: a lista é pequena e já existe como endpoint.
   useEffect(() => {
@@ -93,7 +115,7 @@ export default function BuscarPage() {
       .slice(0, 8);
   }, [categorias, termo]);
 
-  const produtos = resultado?.produtos ?? [];
+  const produtos = (resultado?.produtos ?? []).filter((p) => !ocultosLocal.has(String(p.productId ?? "").trim()));
   const lojas = resultado?.lojas ?? [];
   const nada =
     !buscando && termo.trim().length >= 2 && produtos.length === 0 && lojas.length === 0 &&
@@ -158,6 +180,26 @@ export default function BuscarPage() {
                       <td style={{ padding: "0.4rem 0.45rem", whiteSpace: "nowrap" }}>{formatarPreco(p.preco)}</td>
                       <td style={{ padding: "0.4rem 0.45rem", whiteSpace: "nowrap" }}>
                         {typeof p.vendas === "number" ? `${p.vendas.toLocaleString("pt-BR")} vendas` : "—"}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.45rem", whiteSpace: "nowrap" }}>
+                        <button
+                          type="button"
+                          onClick={(e) => ocultarProduto(e, p.productId)}
+                          disabled={ocultando.has(p.productId)}
+                          title="Ocultar produto (some da busca/ranking; histórico continua no banco)"
+                          style={{
+                            cursor: ocultando.has(p.productId) ? "wait" : "pointer",
+                            fontSize: "0.76rem",
+                            padding: "0.15rem 0.5rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--tk-border)",
+                            background: "transparent",
+                            color: "var(--tk-danger, #f85149)",
+                            opacity: ocultando.has(p.productId) ? 0.6 : 1
+                          }}
+                        >
+                          {ocultando.has(p.productId) ? "…" : "Ocultar"}
+                        </button>
                       </td>
                     </tr>
                   ))}
