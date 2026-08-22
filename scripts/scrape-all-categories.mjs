@@ -1,12 +1,37 @@
 /**
- * Coleta TODAS as subcategorias do TikTok Shop BR em sequência (1 só navegador).
+ * Coleta TODAS as subcategorias do TikTok Shop BR — 1 PROCESSO CURTO POR CATEGORIA.
+ *
+ * ┌─ POR QUE PROCESSO POR CATEGORIA, NÃO 1 NAVEGADOR PARA AS 212 ────────
+ * │ Era a versão anterior: um Chrome só, aberto do início ao fim da corrida.
+ * │ Na madrugada de 21→22/08/2026 esse Chrome caiu ("navegador desconectado
+ * │ — relançando") repetidas vezes durante a coleta desacompanhada — sessão
+ * │ viva por horas acumula memória/handles até o processo cair. O
+ * │ relançamento automático escondia o sintoma, mas cada queda ainda custava
+ * │ minutos, e nada garantia que a próxima não fosse pior.
+ * │
+ * │ Aqui cada categoria roda em `node src/scrapeCategory.mjs` como processo
+ * │ FILHO, isolado, com o seu próprio Chrome — e morre ao terminar (`npm run
+ * │ coleta:uma`, já existia para uso manual). Processo que morre limpo pode
+ * │ ser repetido para sempre; memória e handles voltam ao SO entre cada
+ * │ categoria, em vez de se acumularem por 212 rodadas seguidas. Este
+ * │ arquivo (`scrape-all-categories.mjs`) é só o ORQUESTRADOR: fila,
+ * │ checkpoint, parada, pausa entre categorias — a captação em si
+ * │ (clique em "Ver mais" + interceptação de payload de API) continua 100%
+ * │ intacta em `src/scrapeCategory.mjs`.
+ * └────────────────────────────────────────────────────────────────────────
  *
  * CHECKPOINT (parar/continuar sem perder nada):
  *   - Após CADA categoria concluída, grava output/scrape-checkpoint.json.
  *   - Ao reiniciar, categorias já concluídas são puladas automaticamente.
  *   - Parada graciosa: se existir output/scrape-all.stop, o loop para ANTES
- *     da próxima categoria, fecha o Chrome limpo e sai. A categoria em curso
- *     no momento da parada apenas será refeita na próxima execução (sem duplicar).
+ *     da próxima categoria (nunca no meio de uma — cada categoria é atômica,
+ *     é o processo filho inteiro ou nada). A categoria em curso no momento
+ *     da parada apenas será refeita na próxima execução (sem duplicar).
+ *
+ * HEALTHCHECK: antes de abrir a fila, corre `scripts/check-database-connection.mjs`
+ * (mesmo script do `npm run db:check`). Banco fora aborta ali, sem gastar
+ * nem um segundo de Chrome — evita descobrir "banco caiu" só no fim, na
+ * hora do --depois-importa.
  *
  * ARQUIVOS DE ESTADO (em output/):
  *   scrape-checkpoint.json    → categorias concluídas (fonte da verdade do progresso)
@@ -30,7 +55,8 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { scrapeCategoriesSequentialSharedBrowser } from "../src/scrapeCategory.mjs";
+import { spawnSync } from "node:child_process";
+import { createAntiBanPolicy } from "../src/scrape/anti-ban.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(__dirname, "..");
@@ -501,6 +527,24 @@ async function main() {
   // Sempre limpa flag de parada de execuções anteriores ao iniciar.
   try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
 
+  // Healthcheck ANTES de abrir Chrome nenhum: banco fora é problema de dono
+  // diferente de "coleta deu errado", e descobrir isso só no --depois-importa
+  // final, depois de horas de coleta, é o pior momento possível para saber.
+  console.log("[doctor] conferindo o banco antes de começar…");
+  const doctor = spawnSync(process.execPath, ["scripts/check-database-connection.mjs"], {
+    cwd: ROOT,
+    stdio: "inherit"
+  });
+  if (doctor.status !== 0) {
+    console.log("\n[doctor] o banco não respondeu. Nada a fazer aqui até ele voltar —");
+    console.log("[doctor] a coleta não começa para não gastar horas de Chrome à toa.\n");
+    await writeProgress({
+      running: false, completedCount: 0, totalCount: CATALOG.length,
+      lastError: "banco indisponível no healthcheck inicial (npm run db:check)"
+    });
+    return 1;
+  }
+
   if (args.includes("--reset")) {
     await resetCheckpoint();
   }
@@ -576,67 +620,115 @@ async function main() {
     remaining: pending.length, currentLabel: null, currentIndex: 0, stopping: false
   });
 
-  // Antes de cada categoria: reporta a atual e verifica parada.
-  async function onCategoryStart(url, label, index, total) {
-    await writeProgress({
-      running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
-      remaining: total - index + 1, currentLabel: label, currentUrl: url, currentIndex: alreadyDone + index, stopping: false
-    });
-  }
+  const MOTIVO_POR_CODIGO = {
+    1: "sem produtos ou sessão fora do shop.tiktok.com",
+    2: "verificação de segurança do TikTok (captcha)",
+    3: "produtos colhidos mas com campos críticos vazios (provável mudança de layout do TikTok)"
+  };
 
-  async function onCategoryComplete(url, _code, index, total) {
-    const key = keyForUrl(url);
-    completed.add(key);
-    // Sucesso limpa o histórico de falhas: a categoria voltou a responder e
-    // não deve carregar tentativas velhas para a próxima vez que falhar.
-    delete failures[key];
+  // Mesma janela/limiar de ação usados dentro de cada categoria (ver
+  // scrapeCategory.mjs) — só que aqui é o INTERVALO ENTRE categorias, e por
+  // isso precisa da própria instância: cada processo filho nasce e morre
+  // dentro de uma categoria, então a memória de "quantas ações recentes" só
+  // pode viver aqui, no orquestrador, que é quem sobrevive à corrida inteira.
+  const antiBanPolicy = createAntiBanPolicy({
+    baseMinMs: Number(process.env.ANTI_BAN_MIN_MS) || 1800,
+    baseMaxMs: Number(process.env.ANTI_BAN_MAX_MS) || 4500,
+    maxDelayMs: Number(process.env.ANTI_BAN_MAX_DELAY_MS) || 20000,
+    maxActionsPerWindow: Number(process.env.ANTI_BAN_ACTIONS_PER_WINDOW) || 8,
+    windowMs: Number(process.env.ANTI_BAN_WINDOW_MS) || 60000,
+  });
 
-    // Rendimento medido: quantos produtos esta categoria deu de facto.
-    const produtos = await contarProdutosColhidos(runs[index - 1]?.OUTPUT_DIR ?? "");
-    if (produtos != null) {
-      rendimento[key] = { produtos, em: new Date().toISOString() };
+  let exitCode = 0;
+
+  for (let i = 0; i < runs.length; i++) {
+    if (stopRequested()) {
+      console.log(`[scrape] parada solicitada — encerrando antes da categoria ${i + 1}/${runs.length}. Progresso preservado.`);
+      break;
     }
 
-    await saveCheckpoint(completed, startedAt, failures, rendimento);
+    const r = runs[i];
+    const label = r.label || r.CATEGORY_URL;
+    const key = keyForUrl(r.CATEGORY_URL);
+    console.log(`\n--- [${i + 1}/${runs.length}] ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
+
     await writeProgress({
       running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
-      remaining: total - index, currentLabel: null, currentIndex: completed.size, stopping: false
+      remaining: runs.length - i, currentLabel: label, currentUrl: r.CATEGORY_URL,
+      currentIndex: alreadyDone + i + 1, stopping: false
     });
-    console.log(
-      `[checkpoint] salvo (${completed.size}/${CATALOG.length} concluídas` +
-      `${produtos != null ? `, ${produtos} produto(s) nesta categoria` : ""})`
-    );
-  }
 
-  async function onCategoryFailed(url, code, index, total, motivo) {
-    const key = keyForUrl(url);
-    const anterior = failures[key];
-    const tentativas = Number(anterior?.tentativas ?? 0) + 1;
-    failures[key] = { tentativas, codigo: code, motivo, em: new Date().toISOString() };
-    // NÃO entra em `completed`: na próxima execução volta à fila sozinha.
-    await saveCheckpoint(completed, startedAt, failures, rendimento);
-    await writeProgress({
-      running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
-      remaining: total - index, currentLabel: null, currentIndex: completed.size, stopping: false,
-      failedCount: Object.keys(failures).length
+    // A categoria inteira roda num processo Node filho, isolado, com o seu
+    // próprio Chrome — nasce, coleta, morre. `spawnSync` de propósito: a
+    // corrida é sequencial por design (perfil do Puppeteer é compartilhado
+    // pelas categorias, dois ao mesmo tempo seria dois browsers na mesma
+    // sessão do TikTok), então não há nada a ganhar rodando em paralelo aqui.
+    const child = spawnSync(process.execPath, ["src/scrapeCategory.mjs"], {
+      cwd: ROOT,
+      env: { ...process.env, CATEGORY_URL: r.CATEGORY_URL, OUTPUT_DIR: r.OUTPUT_DIR },
+      stdio: "inherit"
     });
-    const restantes = MAX_TENTATIVAS_POR_CATEGORIA - tentativas;
-    console.log(
-      restantes > 0
-        ? `[falha] ${key} — ${motivo}. Volta à fila (${restantes} tentativa(s) restante(s)).`
-        : `[falha] ${key} — ${motivo}. ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas sem sucesso: fica de fora até um --reset.`
-    );
-  }
+    if (child.error) {
+      console.error(`[scrape] falha ao lançar processo da categoria: ${child.error.message}`);
+    }
+    // status vem null quando o processo morre por sinal (ex.: kill externo)
+    // em vez de terminar sozinho — trata como falha genérica, não como sucesso.
+    const code = typeof child.status === "number" ? child.status : 1;
+    exitCode = Math.max(exitCode, code);
 
-  const exitCode = await scrapeCategoriesSequentialSharedBrowser(runs, {
-    onCategoryStart,
-    onCategoryComplete,
-    onCategoryFailed,
-    shouldStop: stopRequested
-  }).catch((e) => {
-    console.error(e);
-    return 1;
-  });
+    if (code === 0) {
+      completed.add(key);
+      // Sucesso limpa o histórico de falhas: a categoria voltou a responder e
+      // não deve carregar tentativas velhas para a próxima vez que falhar.
+      delete failures[key];
+
+      const produtos = await contarProdutosColhidos(r.OUTPUT_DIR);
+      if (produtos != null) {
+        rendimento[key] = { produtos, em: new Date().toISOString() };
+      }
+
+      await saveCheckpoint(completed, startedAt, failures, rendimento);
+      await writeProgress({
+        running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+        remaining: runs.length - i - 1, currentLabel: null, currentIndex: completed.size, stopping: false
+      });
+      console.log(
+        `[checkpoint] salvo (${completed.size}/${CATALOG.length} concluídas` +
+        `${produtos != null ? `, ${produtos} produto(s) nesta categoria` : ""})`
+      );
+    } else {
+      const anterior = failures[key];
+      const tentativas = Number(anterior?.tentativas ?? 0) + 1;
+      const motivo = MOTIVO_POR_CODIGO[code] ?? `coleta terminou com código ${code}`;
+      failures[key] = { tentativas, codigo: code, motivo, em: new Date().toISOString() };
+      // NÃO entra em `completed`: na próxima execução volta à fila sozinha.
+      await saveCheckpoint(completed, startedAt, failures, rendimento);
+      await writeProgress({
+        running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
+        remaining: runs.length - i - 1, currentLabel: null, currentIndex: completed.size, stopping: false,
+        failedCount: Object.keys(failures).length
+      });
+      const restantes = MAX_TENTATIVAS_POR_CATEGORIA - tentativas;
+      console.log(
+        restantes > 0
+          ? `[falha] ${key} — ${motivo}. Volta à fila (${restantes} tentativa(s) restante(s)).`
+          : `[falha] ${key} — ${motivo}. ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas sem sucesso: fica de fora até um --reset.`
+      );
+    }
+
+    if (i < runs.length - 1) {
+      const envPause = Number(process.env.PAUSE_BETWEEN_CATEGORIES_MS);
+      const baseDelay = Number.isFinite(envPause) && envPause >= 0 ? envPause : 10_000 + Math.random() * 5_000;
+      const delay = Math.max(baseDelay, antiBanPolicy.nextDelay({ reason: "category-gap" }));
+      console.log(`[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`);
+      // Pausa abortável: verifica parada a cada 500ms para reagir rápido ao botão Parar.
+      const step = 500;
+      for (let waited = 0; waited < delay; waited += step) {
+        if (stopRequested()) break;
+        await new Promise((res) => setTimeout(res, Math.min(step, delay - waited)));
+      }
+    }
+  }
 
   const stopped = stopRequested();
   // "Terminou" = nada mais na fila. Categoria de que se desistiu conta como
@@ -672,7 +764,6 @@ async function main() {
   // 3/212 sem deixar erro nenhum (08/08/2026). Com o pós-processamento aqui, a
   // coleta é dona do próprio ciclo e sobrevive à API inteira.
   if (process.argv.includes("--depois-importa")) {
-    const { spawnSync } = await import("node:child_process");
     console.log("\n[pós] a consolidar categorias…");
     const c1 = spawnSync(process.execPath, ["scripts/consolidate-category-outputs.mjs"], { cwd: ROOT, stdio: "inherit" });
     if (c1.status === 0) {
