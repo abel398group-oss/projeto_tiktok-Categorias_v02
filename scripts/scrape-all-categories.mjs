@@ -891,8 +891,28 @@ async function main() {
     if (i < runs.length - 1) {
       const envPause = Number(process.env.PAUSE_BETWEEN_CATEGORIES_MS);
       const baseDelay = Number.isFinite(envPause) && envPause >= 0 ? envPause : 10_000 + Math.random() * 5_000;
-      const delay = Math.max(baseDelay, antiBanPolicy.nextDelay({ reason: "category-gap" }));
-      console.log(`[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`);
+      let delay = Math.max(baseDelay, antiBanPolicy.nextDelay({ reason: "category-gap" }));
+
+      /*
+       * PAUSA LONGA DE VEZ EM QUANDO.
+       *
+       * 212 categorias com intervalos sempre na mesma faixa de 10–15 s desenham
+       * uma linha reta: o desvio padrão baixo denuncia tanto quanto pausa
+       * nenhuma. Gente que trabalha numa lista pára — atende, lê, sai. A cada
+       * 6 a 9 categorias entra uma pausa de 45–120 s.
+       *
+       * O intervalo é sorteado (não é "a cada 7 exactas") para o próprio padrão
+       * das pausas não virar assinatura. Custa ~2 min por hora de coleta.
+       */
+      const proximaLonga = 6 + Math.floor(Math.random() * 4);
+      const ehPausaLonga = i > 0 && i % proximaLonga === 0;
+      if (ehPausaLonga) delay = 45_000 + Math.random() * 75_000;
+
+      console.log(
+        ehPausaLonga
+          ? `[scrape] pausa longa de ${Math.round(delay / 1000)}s (ritmo humano) antes da próxima categoria...`
+          : `[scrape] aguardando ${Math.round(delay / 1000)}s antes da próxima categoria...`
+      );
       // Pausa abortável: verifica parada a cada 500ms para reagir rápido ao botão Parar.
       const step = 500;
       for (let waited = 0; waited < delay; waited += step) {

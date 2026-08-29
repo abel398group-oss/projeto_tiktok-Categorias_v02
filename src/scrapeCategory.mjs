@@ -2740,7 +2740,27 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
 
   if (!skipGoto) {
     console.log(`[scrape] Abrindo diretamente no TikTok Shop: ${startUrl}`);
-    await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+    /*
+     * REFERER COERENTE COM O QUE A URL DIZ.
+     *
+     * A URL do catálogo já afirma a proveniência: `source=ecommerce_sitemap`,
+     * `first_entrance=ecommerce_category`, `first_entrance_tt_scene=seo` — ou
+     * seja, "cheguei por pesquisa/sitemap". Só que `page.goto()` não envia
+     * `Referer` nenhum, e o pedido chegava a dizer o contrário do que a query
+     * string afirma. Ninguém chega a uma categoria por SEO sem vir de lado
+     * nenhum; e um referrer vazio, repetido 212 vezes, é assinatura.
+     *
+     * O aquecimento já passa pelo Google antes disto, por isso o cabeçalho não
+     * inventa uma origem — descreve a navegação que de facto aconteceu.
+     *
+     * Ajustável por `SCRAPE_REFERER` (vazio desliga).
+     */
+    const referer = process.env.SCRAPE_REFERER ?? "https://www.google.com/";
+    await page.goto(startUrl, {
+      waitUntil: "networkidle2",
+      timeout: 120_000,
+      ...(referer ? { referer } : {})
+    });
     await humanPause(page, 2000, 4000);
     await syncBrazilEnvToLivePage(page);
     finalUrl = page.url();
@@ -3433,6 +3453,19 @@ async function main() {
   if (!assistedMode) {
     console.log("[scrape] Aquecendo navegador no Google...");
     await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+    /*
+     * O aquecimento era `goto` + 2 s parado — um bounce perfeito, que é
+     * exactamente o que ninguém faz. Rolar e mexer o rato custa uns segundos e
+     * transforma "abriu e saiu" em "esteve na página": a página escuta
+     * `mousemove` e `scroll`, e a ausência dos dois é tão informativa quanto a
+     * presença. Falhar aqui não importa — é disfarce, não coleta — por isso
+     * cada passo engole o próprio erro.
+     */
+    for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+      await page.mouse.move(200 + Math.random() * 800, 200 + Math.random() * 400).catch(() => {});
+      await page.evaluate((dy) => window.scrollBy(0, dy), 120 + Math.random() * 260).catch(() => {});
+      await sleepMs(400 + Math.random() * 900);
+    }
   }
   
   if (process.env.LOGIN_ONLY === "1") {
