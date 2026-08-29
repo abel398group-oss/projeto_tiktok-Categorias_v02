@@ -171,14 +171,30 @@ processo curto + `doctor`.
       produtos com `enrichStatus=ok`, **cinco** estavam invisíveis — 62% de um
       trabalho que abre o navegador no TikTok e arrisca captcha. Agora cai para
       o snapshot mais recente que tenha galeria, com a data a viajar junto.
-- [ ] **`send-to-money.mjs` tem a mesma falha** — lê o JSON consolidado da
-      última coleta em vez da API/base, por isso continua a dizer "0 produtos
-      prontos" para produtos já enriquecidos. O caminho do Streamlit (que é o
-      usado na prática) já está corrigido.
-- [ ] **Gerar um vídeo de ponta a ponta e confirmar o ficheiro no Drive.** A
-      correcção do WEBP→JPEG está commitada mas nunca produziu um vídeo
-      completo: a única execução real foi interrompida a meio. Enquanto isso não
-      acontecer, o pipeline de vídeo está por verificar.
+- [x] **`send-to-money.mjs` passa a ler a galeria da base**, via
+      `/analytics/product-workspace`, em vez do JSON da última coleta. Só os
+      melhores candidatos são consultados (um pedido cada), em ordem de vendas.
+      No caminho apanhou-se um segundo defeito: o script não carregava o `.env`,
+      ia à API sem chave, levava 401 e concluía "0 produtos prontos" — resposta
+      indistinguível de "não há produto com galeria".
+- [x] **Pipeline de vídeo verificado de ponta a ponta (29/08/2026).**
+      1080×1920, 12,4 s, narração pt-BR e legenda, entregue em
+      `I:\Meu Drive\tik tok\nutrition-wellness__pro3magnesio-….mp4`. O bug do
+      WEBP está morto: as fotos foram baixadas em `.jpg` e converteram em clipe.
+      A verificação expôs mais um defeito — a ponte gerava o vídeo e parava aí,
+      deixando-o em `storage/tasks/<uuid>/` com nome opaco e fora do Drive;
+      agora copia com nome legível e escreve o `.txt` com o link ao lado.
+
+- [ ] **Roteiro da ponte é fixo e curto — 4 das 6 fotos são desperdiçadas.**
+      O gerador dimensiona o vídeo pela duração do ÁUDIO: com uma frase (~9 s) e
+      clipes de 5 s, entram ~2 fotos. As outras são baixadas, convertidas em
+      clipe (~2 min cada) e descartadas. Ou o roteiro cresce para usar as 6
+      (~30 s), ou baixa-se menos foto. **É decisão editorial** — mais vídeo
+      significa mais texto de venda — por isso fica para o dono decidir.
+- [ ] **Cartão de categoria mostra o total global como se fosse da categoria.**
+      Cada cartão repete "20.658 coletado no total" e "20.543 fora desta
+      categoria / dedupe". É verdade, mas lê-se como se cada categoria tivesse
+      processado 20 mil produtos.
 
 **Decidido NÃO fazer, com motivo:**
 
