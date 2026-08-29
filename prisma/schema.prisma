@@ -130,6 +130,12 @@ model ProductSnapshot {
   scrapeRun   ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
 
   @@index([productRefId, capturedAt])
+  /// "Qual o run mais recente de cada produto" é a pergunta por trás da lista de
+  /// categorias, e ela agrega 757 mil snapshots por `product_ref_id` lendo
+  /// `scrape_run_id`. O índice `(productRefId, capturedAt)` acima não serve:
+  /// não tem a coluna do run, obrigando a ir ao heap de 464 MB. Com este par a
+  /// agregação vira index-only scan.
+  @@index([productRefId, scrapeRunId])
   @@index([scrapeRunId])
   @@index([salesCount])
   @@index([price])
