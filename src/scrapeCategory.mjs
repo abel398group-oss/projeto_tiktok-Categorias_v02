@@ -1782,10 +1782,42 @@ async function detectTiktokSecurityChallenge(page) {
  * @param {{ maxMs: number }} opts
  * @returns {Promise<boolean>} true se deixou de detetar challenge
  */
+/**
+ * Traz a janela do navegador de volta ao ecrã.
+ *
+ * Na coleta automática a janela nasce em `--window-position=-3000,0`, para não
+ * piscar 150 vezes na cara de quem está a usar a máquina. Só que o pedido de
+ * captcha diz "conclua a verificação na janela do browser" — e a janela estava
+ * invisível. O script ficava 15 min à espera de uma acção que ninguém podia
+ * fazer, e a categoria caía como se o TikTok não tivesse respondido.
+ *
+ * Defeito introduzido por mim em 29/08/2026 ao esconder a janela: tratei o modo
+ * assistido e esqueci este caminho. Esconder é conveniência; pedir uma acção
+ * humana numa janela escondida é uma armadilha.
+ */
+async function trazerJanelaParaOEcra(page) {
+  try {
+    const sessao = await page.createCDPSession();
+    const { windowId } = await sessao.send("Browser.getWindowForTarget");
+    await sessao.send("Browser.setWindowBounds", {
+      windowId,
+      bounds: { left: 40, top: 40, width: 1280, height: 900, windowState: "normal" }
+    });
+    await sessao.detach().catch(() => {});
+    await page.bringToFront().catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForSecurityChallengeResolved(page, { maxMs }) {
+  // Sem isto o pedido abaixo é impossível de cumprir quando a janela está fora
+  // do ecrã (coleta automática).
+  const trouxe = await trazerJanelaParaOEcra(page);
   // eslint-disable-next-line no-console
   console.log(
-    `[TikTok] Security Check / puzzle detetado. Conclua a verificação na janela do browser; o script espera até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
+    `[TikTok] Security Check / puzzle detetado. Conclua a verificação na janela do browser${trouxe ? " (trazida para o ecrã)" : ""}; o script espera até ${Math.round(maxMs / 60_000)} min (LOGIN_WAIT_MAX_MS).`
   );
   const t0 = Date.now();
   while (Date.now() - t0 < maxMs) {

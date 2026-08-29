@@ -35,6 +35,75 @@ function keyId(v) {
   return String(v);
 }
 
+/**
+ * Campos de MÍDIA que só o enriquecimento de PDP produz — a coleta de categoria
+ * nunca os traz (a grelha só dá a miniatura).
+ *
+ * Só mídia entra nesta lista, e é de propósito: preço, vendas, nota e stock TÊM
+ * de vir frescos da coleta. Preservar um preço antigo aqui seria anunciar valor
+ * errado — o oposto do que se quer.
+ */
+const CAMPOS_MIDIA_ENRIQUECIDA = ["fotos_pdp", "fotos_review", "videos_review"];
+
+/** @param {unknown} v */
+function temConteudo(v) {
+  return Array.isArray(v) && v.length > 0;
+}
+
+/**
+ * Devolve ao lote consolidado a mídia enriquecida que já existia.
+ *
+ * PORQUE EXISTE (incidente de 29/08/2026): esta consolidação reconstrói o
+ * `output/dados_produtos.json` do ZERO a partir de `output/categorias/*`, e o
+ * `pdp:enrich` grava a galeria SÓ no ficheiro consolidado — nunca volta à pasta
+ * da categoria. Resultado: cada coleta nova apagava todo o enriquecimento já
+ * feito, e cada produto voltava a ter uma única miniatura. Como o gerador de
+ * vídeo monta o vídeo com as fotos do produto, "1 foto" significa a MESMA
+ * imagem do princípio ao fim — foi assim que saiu o vídeo estático que motivou
+ * esta investigação. Medido na altura: 20 658 produtos na base, ZERO com
+ * `fotos_pdp`, apesar de haver enriquecimentos feitos dias antes.
+ *
+ * Preserva por produto e por campo: se a coleta nova trouxer o campo, ela ganha;
+ * só se herda o que se perderia.
+ *
+ * @param {Array<Record<string, unknown>>} itens — lote novo, alterado no lugar
+ * @returns {Promise<{ produtos: number, campos: number }>}
+ */
+async function preservarMidiaEnriquecida(itens) {
+  let anterior;
+  try {
+    anterior = JSON.parse(await fs.readFile(path.join(outDir, "dados_produtos.json"), "utf8"));
+  } catch {
+    // Primeira consolidação (ou ficheiro ilegível): não há nada a preservar, e
+    // isso não é erro — a coleta nova é a única fonte que existe.
+    return { produtos: 0, campos: 0 };
+  }
+
+  const antesPorId = new Map();
+  for (const it of Array.isArray(anterior?.itens) ? anterior.itens : []) {
+    const id = keyId(it?.product_id);
+    if (id) antesPorId.set(id, it);
+  }
+  if (antesPorId.size === 0) return { produtos: 0, campos: 0 };
+
+  let produtos = 0;
+  let campos = 0;
+  for (const item of itens) {
+    const antes = antesPorId.get(keyId(item?.product_id));
+    if (!antes) continue;
+    let tocado = false;
+    for (const campo of CAMPOS_MIDIA_ENRIQUECIDA) {
+      if (!temConteudo(item[campo]) && temConteudo(antes[campo])) {
+        item[campo] = antes[campo];
+        campos += 1;
+        tocado = true;
+      }
+    }
+    if (tocado) produtos += 1;
+  }
+  return { produtos, campos };
+}
+
 function normalizeStatusList(statuses) {
   const uniq = [...new Set(statuses)];
   if (uniq.length === 0) return "ok";
@@ -164,6 +233,10 @@ async function main() {
     itens_apos: itens.length,
     lojas_antes_dedupe: rawTotals.lojas,
     lojas_apos: lojas.length,
+    // Sai sempre, mesmo a zero: foi precisamente por esta operação ser
+    // silenciosa que a perda de galerias passou despercebida durante dias.
+    midia_preservada_produtos: preservados.produtos,
+    midia_preservada_campos: preservados.campos,
   });
 }
 
