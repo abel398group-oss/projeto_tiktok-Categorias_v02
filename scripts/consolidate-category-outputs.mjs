@@ -123,6 +123,8 @@ async function main() {
   const itens = [...productById.values()];
   const lojas = [...lojaBySeller.values()];
 
+  const preservados = await preservarMidiaEnriquecida(itens);
+
   const coletadoEm = new Date().toISOString();
 
   const outProd = {

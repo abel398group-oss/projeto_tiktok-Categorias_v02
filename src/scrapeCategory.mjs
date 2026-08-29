@@ -2743,24 +2743,45 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     /*
      * REFERER COERENTE COM O QUE A URL DIZ.
      *
-     * A URL do catálogo já afirma a proveniência: `source=ecommerce_sitemap`,
-     * `first_entrance=ecommerce_category`, `first_entrance_tt_scene=seo` — ou
-     * seja, "cheguei por pesquisa/sitemap". Só que `page.goto()` não envia
-     * `Referer` nenhum, e o pedido chegava a dizer o contrário do que a query
-     * string afirma. Ninguém chega a uma categoria por SEO sem vir de lado
-     * nenhum; e um referrer vazio, repetido 212 vezes, é assinatura.
+     * A URL do catálogo afirma a proveniência: `source=ecommerce_sitemap`,
+     * `first_entrance_tt_scene=seo` — "cheguei por pesquisa". Mas o pedido ia
+     * sem `Referer` nenhum, dizendo o contrário do que a query string afirma.
+     * Ninguém chega a uma categoria por SEO sem vir de lado nenhum, e um
+     * referrer vazio repetido 212 vezes é assinatura.
      *
-     * O aquecimento já passa pelo Google antes disto, por isso o cabeçalho não
-     * inventa uma origem — descreve a navegação que de facto aconteceu.
+     * ⚠ A opção `referer` do `page.goto()` NÃO funciona (medido em 29/08/2026
+     * com puppeteer-core 24.42, servidor local a inspeccionar o cabeçalho: o
+     * pedido chegou sem `Referer`). Uma primeira versão desta correcção usava-a
+     * e era inerte — o comentário prometia o que o código não fazia.
      *
-     * Ajustável por `SCRAPE_REFERER` (vazio desliga).
+     * O que funciona é NAVEGAR A SÉRIO a partir da página anterior: o browser
+     * põe o `Referer` sozinho, como põe para qualquer pessoa. O aquecimento
+     * deixa-nos no Google, por isso a origem não é inventada — é a navegação
+     * que de facto aconteceu.
+     *
+     * Se não houver página de origem utilizável (ex.: `scrape-both.mjs`, que
+     * abre uma aba nova), cai no `goto` directo — sem referrer, como antes.
      */
-    const referer = process.env.SCRAPE_REFERER ?? "https://www.google.com/";
-    await page.goto(startUrl, {
-      waitUntil: "networkidle2",
-      timeout: 120_000,
-      ...(referer ? { referer } : {})
-    });
+    const origemAtual = page.url();
+    const podeNavegarDeOrigem =
+      process.env.SCRAPE_SEM_REFERER !== "1" && /^https?:\/\//i.test(origemAtual);
+
+    let navegouComReferer = false;
+    if (podeNavegarDeOrigem) {
+      try {
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: "networkidle2", timeout: 120_000 }),
+          page.evaluate((u) => { window.location.href = u; }, startUrl)
+        ]);
+        navegouComReferer = true;
+        console.log(`[scrape] navegado a partir de ${new URL(origemAtual).origin} (com Referer)`);
+      } catch (e) {
+        console.warn(`[scrape] navegação com referer falhou (${e?.message ?? e}) — a usar goto directo.`);
+      }
+    }
+    if (!navegouComReferer) {
+      await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 120_000 });
+    }
     await humanPause(page, 2000, 4000);
     await syncBrazilEnvToLivePage(page);
     finalUrl = page.url();
