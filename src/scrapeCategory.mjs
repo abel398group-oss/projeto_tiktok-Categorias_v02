@@ -1520,10 +1520,11 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
   if (maxClicks === 0) {
     // eslint-disable-next-line no-console
     console.log("[view-more] encerrando (motivo: VIEW_MORE_MAX_CLICKS=0 ou VIEW_MORE=0)");
-    return;
+    return { motivo: "desligado", cliques: 0, maxClicks, exaustiva: false };
   }
 
   let noGrowthStreak = 0;
+  let cliques = 0;
 
   for (let i = 0; i < maxClicks; i++) {
     let found;
@@ -1583,7 +1584,7 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.log(`[view-more] erro de execução (possível reload da página): ${e.message}`);
-      break;
+      return { motivo: "erro_execucao", cliques, maxClicks, exaustiva: false };
     }
 
     if (!found || !found.ok) {
@@ -1593,12 +1594,17 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
           ? `[view-more] encerrando (motivo: clique falhou — ${found.err})`
           : "[view-more] encerrando (motivo: botão não encontrado)"
       );
-      break;
+      // Botão sumir é a ÚNICA prova de que o TikTok não tem mais para dar
+      // nesta categoria. Clique que falha é problema nosso, não fim de lista.
+      return found?.err
+        ? { motivo: "clique_falhou", cliques, maxClicks, exaustiva: false, erro: found.err }
+        : { motivo: "sem_botao", cliques, maxClicks, exaustiva: true };
     }
 
     // eslint-disable-next-line no-console
     console.log("[view-more] botão encontrado");
     const before = getProductCount();
+    cliques += 1;
     // eslint-disable-next-line no-console
     console.log(`[view-more] clique ${i + 1}`);
     await humanPause(page, 1000, 2000);
@@ -1619,12 +1625,20 @@ async function clickViewMoreWhileNeeded(page, getProductCount) {
       if (noGrowthStreak >= 2) {
         // eslint-disable-next-line no-console
         console.log("[view-more] encerrando (motivo: contagem não aumentou após cliques consecutivos)");
-        break;
+        // O botão ainda está lá mas já não traz nada: para efeitos de cobertura
+        // é o mesmo que fim de lista — a categoria deu o que tinha.
+        return { motivo: "sem_crescimento", cliques, maxClicks, exaustiva: true };
       }
     } else {
       noGrowthStreak = 0;
     }
   }
+
+  // Saiu pelo `for`: gastou todos os cliques permitidos e o botão continuava lá.
+  // Isto NÃO é exaustão — é corte NOSSO, e a categoria tem mais para dar.
+  // Distinguir os dois é a única medida honesta de profundidade que existe sem
+  // o TikTok publicar o total da subcategoria.
+  return { motivo: "teto_de_cliques", cliques, maxClicks, exaustiva: false };
 }
 
 /** Perfil persistente (Docker: `/app/.puppeteer-profile/tiktok-shop` quando `ROOT=/app`). Sobrescrever: `CHROME_USER_DATA` ou `PUPPETEER_TIKTOK_PROFILE`. */
@@ -2231,6 +2245,17 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
   const isHeaded = process.env.HEADED === "1";
   const loginWaitMaxMs = Math.max(60_000, Number(process.env.LOGIN_WAIT_MAX_MS) || 15 * 60_000);
 
+  /**
+   * Como a paginação terminou nesta categoria — ver `clickViewMoreWhileNeeded`.
+   *
+   * `null` quando o "ver mais" nem chegou a correr (ex.: a coleta abortou antes).
+   * Fica no ficheiro de saída porque é a única medida honesta de profundidade
+   * que temos: o TikTok não publica quantos produtos a subcategoria tem, então
+   * "a lista acabou" vs "batemos no nosso teto de cliques" é a diferença entre
+   * categoria colhida e categoria cortada.
+   */
+  let paginacaoInfo = null;
+
   /** Política de retry: detecta bloqueios e escalona cooldown */
   const retryPolicy = createRetryPolicy({
     baseDelayMs: 5000,
@@ -2824,7 +2849,7 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
         await sleepMs(delay1);
         antiBanPolicy.recordAction();
         
-        await clickViewMoreWhileNeeded(page, () => byProductId.size);
+        paginacaoInfo = await clickViewMoreWhileNeeded(page, () => byProductId.size);
         const delay2 = antiBanPolicy.nextDelay({ reason: "view-more" });
         await sleepMs(delay2);
         antiBanPolicy.recordAction();
@@ -3078,6 +3103,15 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
       : "XHR/JSON (item_list, etc.) + JSON embebido #__MODERN_ROUTER_DATA__ (loaderData da categoria)",
     completude,
     alerta_completude: alertaCompletude?.mensagem ?? null,
+    /**
+     * Profundidade: a lista acabou, ou fomos nós que parámos?
+     *
+     * `exaustiva: true` só quando o TikTok deixou de oferecer mais (o botão
+     * sumiu, ou clicar já não trazia nada). `teto_de_cliques` significa que a
+     * categoria TEM mais e o corte foi nosso — e uma mediana calculada sobre
+     * uma categoria cortada não descreve a categoria.
+     */
+    paginacao: paginacaoInfo,
     itens: itensDados,
     diagnostic
   };

@@ -95,9 +95,17 @@ processo curto + `doctor`.
 
 **A fazer (por ordem de valor):**
 
-- [ ] **`exhausted` + motivo de parada no `ScrapeRun`**: o scraper sabe se parou
-      por fim da lista ou por teto de cliques, mas só imprime no log. Sem isso
-      não se distingue categoria colhida até ao fim de categoria cortada.
+- [x] **Profundidade: «a lista acabou» vs «nós parámos».** `clickViewMoreWhileNeeded`
+      passa a devolver o motivo do fim, que vai para o bloco `paginacao` do
+      ficheiro da categoria e daí para o `rendimento` do checkpoint. `exaustiva`
+      só é `true` quando o TikTok deixou de oferecer (botão sumiu, ou clicar já
+      não trazia nada); `teto_de_cliques` significa que a categoria **tem mais**
+      e o corte foi nosso. Sem isto, 110 produtos de uma categoria de 110 e 110
+      de uma de 900 entravam na base com a mesma cara — e a mediana da segunda
+      descreve o topo da lista, não a categoria. O terminal passa a dizer
+      «lista esgotada» ou «CORTADA no teto de N clique(s) — tem mais».
+      *Ficou no checkpoint, não no `ScrapeRun`: o run é por import (todas as
+      categorias), e isto é por categoria.*
 - [x] **`npm run db:inventario`**: linhas × disco × quem escreve × quem lê, por
       tabela (adaptado a Prisma: grepar `prisma.<modelo>.`). Primeira execução
       mediu 886 MB de base com **350 MB (40%) em duas tabelas sem leitor**.
@@ -143,13 +151,17 @@ processo curto + `doctor`.
       Trocado por ordenar os **runs** (72 linhas) e agregar `MIN(posição)` por
       produto. Medido: 17,9 → 7,3 s livre; 25 → 16 s sob carga de import.
       Resultado idêntico, verificado por hash das 44.603 linhas.
-- [ ] **Índice `(product_ref_id, scrape_run_id)` em `product_snapshots`** — o que
-      sobra do custo acima é varrer 757 mil snapshots para agregar. Com este
-      índice o agregado vira *index-only scan*. Exige migração, por isso ficou
-      para quando não houver coleta a correr (uma migração cria índice com lock
-      de escrita, e a coleta acaba num import).
-- [ ] **Tripwire de subida**: a API recusa subir fora de `127.0.0.1` sem chave
-      forte. Hoje "roda local" é promessa, não trava.
+- [x] **Índice `(product_ref_id, scrape_run_id)`** — a agregação virou
+      *index-only scan*: consulta 7,3 → 2,4 s, endpoint 13-14 → 6,2-8,0 s.
+      Somando com a reescrita: **17,9 → 2,4 s na camada de banco (7,5×)**.
+      O que sobra do endpoint é processamento em JS das 44.875 linhas, não SQL.
+- [x] **Tripwire de subida** — a API recusa subir fora de `127.0.0.1` sem
+      `ANALYTICS_API_ALLOW_REMOTE=1` **e** chave de 24+ caracteres. Motivo: não
+      há utilizadores nem permissões, só uma chave, e há rotas que escrevem
+      (ocultar produto, disparar coleta, importar). "Roda só local" era promessa
+      — bastava alguém pôr `0.0.0.0` num teste e esquecer. Os três caminhos
+      testados à mão: local sobe, remoto sem autorização recusa, remoto com
+      chave curta recusa, remoto autorizado sobe com aviso.
 
 **Decidido NÃO fazer, com motivo:**
 

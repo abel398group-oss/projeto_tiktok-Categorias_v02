@@ -451,6 +451,34 @@ export async function contarProdutosColhidos(outputDir) {
   }
 }
 
+/**
+ * Como a paginação desta categoria terminou (ver `paginacao` no ficheiro de
+ * saída): a lista acabou, ou fomos nós que parámos no teto de cliques?
+ *
+ * Guardar isto no checkpoint dá a única leitura honesta de profundidade que o
+ * projeto consegue: o TikTok não publica o total por subcategoria, então
+ * "colhida até ao fim" vs "cortada" é o que separa uma categoria medida de uma
+ * categoria amostrada. Sem isto, 110 produtos numa categoria de 110 e 110 numa
+ * categoria de 900 entram na base com a mesma cara.
+ *
+ * @param {string} outputDir
+ * @returns {Promise<{ exaustiva: boolean, motivo: string, cliques: number } | null>}
+ */
+export async function lerPaginacao(outputDir) {
+  try {
+    const bruto = await fs.readFile(path.join(outputDir, "dados_produtos.json"), "utf8");
+    const p = JSON.parse(bruto)?.paginacao;
+    if (!p || typeof p !== "object") return null;
+    return {
+      exaustiva: Boolean(p.exaustiva),
+      motivo: String(p.motivo ?? "desconhecido"),
+      cliques: Number.isFinite(Number(p.cliques)) ? Number(p.cliques) : 0
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Categoria que esgotou as tentativas: sai da fila, mas fica registada como falha. */
 export function desistiuDe(failures, key) {
   const f = failures?.[key];
@@ -778,8 +806,16 @@ async function main() {
       antiBanPolicy.recordSuccess();
 
       const produtos = await contarProdutosColhidos(r.OUTPUT_DIR);
+      const pag = await lerPaginacao(r.OUTPUT_DIR);
       if (produtos != null) {
-        rendimento[key] = { produtos, em: new Date().toISOString() };
+        rendimento[key] = {
+          produtos,
+          // `exaustiva: false` = a categoria tem mais e o corte foi nosso.
+          // Quem ler o rendimento precisa saber se 110 é o tamanho da categoria
+          // ou só o ponto onde parámos.
+          ...(pag ? { exaustiva: pag.exaustiva, motivoFim: pag.motivo, cliques: pag.cliques } : {}),
+          em: new Date().toISOString()
+        };
       }
 
       await saveCheckpoint(completed, startedAt, failures, rendimento);
@@ -787,9 +823,14 @@ async function main() {
         running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
         remaining: runs.length - i - 1, currentLabel: null, currentIndex: completed.size, stopping: false
       });
+      const notaProfundidade = pag
+        ? pag.exaustiva
+          ? " · lista esgotada"
+          : ` · CORTADA no teto de ${pag.cliques} clique(s) — tem mais`
+        : "";
       console.log(
         `[checkpoint] salvo (${completed.size}/${CATALOG.length} concluídas` +
-        `${produtos != null ? `, ${produtos} produto(s) nesta categoria` : ""})`
+        `${produtos != null ? `, ${produtos} produto(s)` : ""}${notaProfundidade})`
       );
     } else {
       const motivo = MOTIVO_POR_CODIGO[code] ?? `coleta terminou com código ${code}`;

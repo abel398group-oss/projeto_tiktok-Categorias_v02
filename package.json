@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "npm run coleta:completa:db && npm run analytics:product-score",
-    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs test/checkpoint-falhas.test.mjs test/crescimento-por-dia.test.mjs test/rendimento-fila.test.mjs test/completude-coleta.test.mjs test/estatisticas-categoria.test.mjs test/captcha-disjuntor.test.mjs",
+    "test": "node --test test/scrape-regression.test.mjs test/opportunities-no-sales.test.mjs test/enrichment-flag.test.mjs test/checkpoint-falhas.test.mjs test/crescimento-por-dia.test.mjs test/rendimento-fila.test.mjs test/completude-coleta.test.mjs test/estatisticas-categoria.test.mjs test/captcha-disjuntor.test.mjs test/paginacao-exaustiva.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate:schemas": "node scripts/validate-output-schema.mjs",
     "validate:schemas:ci": "node scripts/validate-output-schema.mjs --data-dir test/fixtures/schema-ci",

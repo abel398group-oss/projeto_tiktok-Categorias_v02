@@ -55,6 +55,45 @@ if (!apiKey) {
 const port = Number(process.env.ANALYTICS_API_PORT) || 3333;
 const host = process.env.ANALYTICS_API_HOST || "127.0.0.1";
 
+/**
+ * Trava de exposição: esta API não tem utilizadores, só uma chave única, e
+ * expõe a base inteira em GET — incluindo rotas que ESCREVEM (ocultar produto,
+ * disparar coleta, importar). Ligada a `0.0.0.0` com a chave de exemplo, é a
+ * base do negócio aberta na rede.
+ *
+ * "Roda só local" era promessa: bastava alguém pôr `ANALYTICS_API_HOST=0.0.0.0`
+ * num teste e esquecer. O risco não é a decisão, é o ESQUECIMENTO — e um
+ * comentário no topo do ficheiro não impede esquecimento; um processo que se
+ * recusa a subir, sim.
+ *
+ * Sair do localhost continua a ser possível, mas passa a exigir duas coisas de
+ * propósito: uma chave forte e dizer explicitamente que é intencional.
+ */
+const APENAS_LOCAL = new Set(["127.0.0.1", "localhost", "::1"]);
+const CHAVE_MINIMA = 24;
+if (!APENAS_LOCAL.has(host)) {
+  const exposicaoAceite = /^(1|true|sim)$/i.test(String(process.env.ANALYTICS_API_ALLOW_REMOTE ?? "").trim());
+  const chaveFraca = apiKey.length < CHAVE_MINIMA;
+  if (!exposicaoAceite || chaveFraca) {
+    console.error("\n" + "█".repeat(72));
+    console.error(`  RECUSANDO SUBIR: a API ficaria acessível em ${host}:${port}.`);
+    console.error("");
+    if (!exposicaoAceite) {
+      console.error("  Esta API não tem utilizadores nem permissões — uma chave só, e rotas");
+      console.error("  que escrevem na base. Fora do localhost, isso é a base exposta.");
+      console.error("  Se for mesmo intencional: ANALYTICS_API_ALLOW_REMOTE=1");
+    }
+    if (chaveFraca) {
+      console.error(`  ANALYTICS_API_KEY tem ${apiKey.length} caracteres — mínimo ${CHAVE_MINIMA} fora do localhost.`);
+    }
+    console.error("");
+    console.error(`  Para voltar ao normal: ANALYTICS_API_HOST=127.0.0.1 (ou remova a variável).`);
+    console.error("█".repeat(72) + "\n");
+    process.exit(1);
+  }
+  console.warn(`[api] ATENÇÃO: a escutar em ${host} — acessível fora desta máquina (ANALYTICS_API_ALLOW_REMOTE=1).`);
+}
+
 const prisma = new PrismaClient();
 const fastify = Fastify({ logger: false });
 
