@@ -17,6 +17,9 @@ function toReportShape(line) {
   return {
     score: line.score,
     classific: line.classific,
+    confianca: line.confianca,
+    confiancaPct: line.confiancaPct,
+    faltando: line.faltando,
     nome: line.nome,
     categoriaPrincipal: line.categoriaPrincipal ?? "—",
     subcategoria: line.subcategoria ?? "—",
@@ -432,6 +435,55 @@ export function rotuloScore(score) {
   return "fraco";
 }
 
+/**
+ * Teto de pontos de cada eixo — usado para medir quanto do score foi de facto
+ * AVALIÁVEL, e não só quanto ele somou.
+ *
+ * Ver `avaliarConfianca`: sem isto, ausência de dado é indistinguível de dado
+ * mau, porque as duas coisas somam zero.
+ */
+const TETO_POR_EIXO = { vendas: 35, avaliacao: 25, preco: 10, desconto: 5, oportunidade: 15, crescimento: 10 };
+
+/**
+ * Confiança do score: que fração dos 100 pontos possíveis pôde sequer ser
+ * julgada com o dado que temos.
+ *
+ * O problema que isto resolve: `pontosAvaliacao(null, null)` devolve 0 — o
+ * mesmo que devolve para um produto com nota 3,2. Na tabela os dois aparecem
+ * com o mesmo score e ninguém consegue distinguir "é fraco" de "não sabemos".
+ * Produto novo, que ainda não tem avaliação nem série, é penalizado por uma
+ * lacuna do NOSSO cadastro e cai no ranking como se fosse ruim.
+ *
+ * Aqui o número não muda — mudar a fórmula exigiria decidir o que um campo
+ * ausente vale, e essa é decisão de negócio. O que muda é que o score passa a
+ * viajar com a sua própria ressalva, e quem lê decide.
+ */
+function avaliarConfianca({ sc, avg, tot, price, crescimentoMedido }) {
+  const faltando = [];
+  const temVendas = sc != null;
+  const temAvaliacao = avg != null && tot != null;
+  const temPreco = price != null;
+
+  if (!temVendas) faltando.push("vendas");
+  if (!temAvaliacao) faltando.push("avaliação");
+  if (!temPreco) faltando.push("preço");
+  if (!crescimentoMedido) faltando.push("crescimento");
+
+  // Oportunidade depende dos quatro campos ao mesmo tempo: só é avaliável
+  // quando todos existem.
+  const avaliavel =
+    (temVendas ? TETO_POR_EIXO.vendas : 0) +
+    (temAvaliacao ? TETO_POR_EIXO.avaliacao : 0) +
+    (temPreco ? TETO_POR_EIXO.preco : 0) +
+    TETO_POR_EIXO.desconto + // desconto é booleano: ausente = não tem, e isso é medição
+    (temVendas && temAvaliacao && temPreco ? TETO_POR_EIXO.oportunidade : 0) +
+    (crescimentoMedido ? TETO_POR_EIXO.crescimento : 0);
+
+  const fracao = avaliavel / 100;
+  const nivel = fracao >= 0.85 ? "completa" : fracao >= 0.6 ? "parcial" : "fraca";
+  return { confianca: nivel, confiancaPct: Math.round(fracao * 100), faltando };
+}
+
 /** @param {object} opts */
 function motivosLista(opts) {
   const list = [];
@@ -531,9 +583,18 @@ export function computeProductScoreLine(s, ctx) {
       ? true
       : hasAtLeastHttpPdpImages(s, 3);
 
+  const { confianca, confiancaPct, faltando } = avaliarConfianca({
+    sc, avg, tot, price: s.price, crescimentoMedido: !semBaseGrowth
+  });
+
   return {
     score: totalPts,
     classific: rotuloScore(totalPts),
+    /** "completa" | "parcial" | "fraca" — quanto do score pôde ser julgado. */
+    confianca,
+    confiancaPct,
+    /** Que campos faltaram. Dizer QUAL falta vale mais que dizer que faltou. */
+    faltando,
     nome: (s.product.name ?? "—").slice(0, 40),
     categoriaPrincipal,
     subcategoria,

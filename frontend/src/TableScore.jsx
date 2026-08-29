@@ -161,7 +161,36 @@ export default function TableScore({ data }) {
                   title={pidStr ? "Clique na linha para abrir o workspace" : undefined}
                   onClick={(e) => { if (!pidStr || isInteractiveTableCellClick(e)) return; void navigate(`/produto/${encodeURIComponent(pidStr)}`); }}>
                   <td style={tdPosStyle}>{i + 1}</td>
-                  <td><span className="tk-metric">{row.score}</span></td>
+                  <td>
+                    <span className="tk-metric">{row.score}</span>
+                    {/*
+                      Mesma marca do Ranking: score baixo por falta de dado não é
+                      score baixo por dado ruim. Tem de aparecer nas DUAS tabelas
+                      que mostram score, senão a ressalva vale só em metade das
+                      telas e a outra metade continua a enganar.
+                    */}
+                    {row.confianca && row.confianca !== "completa" ? (
+                      <span
+                        title={
+                          `Só ${row.confiancaPct}% do score pôde ser avaliado — falta: ` +
+                          `${(row.faltando ?? []).join(", ")}. ` +
+                          `O que falta não conta contra o produto; é lacuna de medição.`
+                        }
+                        style={{
+                          fontSize: "0.68rem",
+                          marginLeft: "0.35rem",
+                          padding: "0.05rem 0.35rem",
+                          borderRadius: 999,
+                          border: "1px solid var(--tk-border)",
+                          opacity: 0.85,
+                          cursor: "help",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {row.confiancaPct}%
+                      </span>
+                    ) : null}
+                  </td>
                   <td>{row.classific}</td>
                   <td style={{ verticalAlign: "middle" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>

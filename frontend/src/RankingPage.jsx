@@ -616,6 +616,32 @@ export default function RankingPage() {
                             {String(linha.classific)}
                           </span>
                         ) : null}
+                        {/*
+                          Score baixo por falta de dado não é a mesma coisa que
+                          score baixo por dado ruim. Sem esta marca, produto novo
+                          (sem avaliação, sem série) parece produto encalhado.
+                        */}
+                        {linha.confianca && linha.confianca !== "completa" ? (
+                          <span
+                            title={
+                              `Só ${linha.confiancaPct}% do score pôde ser avaliado — falta: ` +
+                              `${(linha.faltando ?? []).join(", ")}. ` +
+                              `O que falta não conta contra o produto; é lacuna de medição.`
+                            }
+                            style={{
+                              fontSize: "0.68rem",
+                              marginLeft: "0.4rem",
+                              padding: "0.05rem 0.35rem",
+                              borderRadius: 999,
+                              border: "1px solid var(--tk-border)",
+                              opacity: 0.85,
+                              cursor: "help",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {linha.confiancaPct}% medido
+                          </span>
+                        ) : null}
                       </td>
                       <td style={{ padding: "0.35rem 0.45rem", whiteSpace: "nowrap" }}>
                         {pid ? <PdpEnrichButton productId={pid} inlineHint={false} /> : null}
