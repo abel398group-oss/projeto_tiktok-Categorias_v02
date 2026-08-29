@@ -69,7 +69,8 @@
     "descobrir:categorias": "node scripts/descobrir-categorias.mjs",
     "coleta:todas": "node scripts/scrape-all-categories.mjs",
     "coleta:todas:reset": "node scripts/scrape-all-categories.mjs --reset",
-    "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list"
+    "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list",
+    "db:inventario": "node --import ./scripts/load-root-env.mjs scripts/db-inventario.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
