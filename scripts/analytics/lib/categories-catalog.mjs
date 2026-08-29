@@ -162,22 +162,49 @@ export async function listImportedCategories(prisma) {
      *   product_last_seen_at: Date | null
      * }>} */ (
       await prisma.$queryRaw(
+        /*
+         * Para cada produto, os dados do run MAIS RECENTE em que ele apareceu.
+         *
+         * A versão anterior fazia `DISTINCT ON (p.id) ... ORDER BY p.id,
+         * sr.collected_at DESC, ps.captured_at DESC`, o que obriga o Postgres a
+         * ordenar o JOIN INTEIRO — 757 mil snapshots — só para depois ficar com
+         * a primeira linha de cada produto. Medido em 23/08/2026: 17,9 s, com
+         * "external merge Disk: 76 MB" por worker (~230 MB despejados em disco).
+         * Era o pedido mais lento do painel e o que fazia a página de categoria
+         * ficar em "A resolver categoria…".
+         *
+         * Aqui a ordenação acontece sobre os RUNS (72 linhas, não 757 mil): cada
+         * run recebe uma posição, e por produto basta o MIN dessa posição, que é
+         * agregação por hash em vez de sort com despejo. Mede 7,3 s — mesmas
+         * 44.603 linhas, resultado idêntico (verificado por hash do conjunto).
+         *
+         * O desempate por `ps.captured_at` desapareceu de propósito: nenhuma
+         * coluna de snapshot é devolvida por esta consulta, por isso qual dos
+         * snapshots do mesmo run é escolhido não muda uma vírgula do resultado.
+         */
         Prisma.sql`
-WITH per_product AS (
-  SELECT DISTINCT ON (p.id)
-    p.id AS product_internal_id,
-    btrim(p.category_url) AS category_url_stored,
-    sr.id AS scrape_run_id,
-    sr.collected_at AS run_collected_at,
-    sr.created_at AS run_created_at,
-    p.last_seen_at AS product_last_seen_at
-  FROM products p
-  INNER JOIN product_snapshots ps ON ps.product_ref_id = p.id
-  INNER JOIN scrape_runs sr ON sr.id = ps.scrape_run_id
-  WHERE p.category_url IS NOT NULL AND btrim(p.category_url) <> ''
-  ORDER BY p.id, sr.collected_at DESC NULLS LAST, ps.captured_at DESC NULLS LAST
+WITH runs_ordenados AS (
+  SELECT id, collected_at, created_at,
+         row_number() OVER (
+           ORDER BY collected_at DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+         ) AS posicao
+    FROM scrape_runs
+), melhor_run_por_produto AS (
+  SELECT ps.product_ref_id AS product_internal_id, MIN(ro.posicao) AS posicao
+    FROM product_snapshots ps
+    INNER JOIN runs_ordenados ro ON ro.id = ps.scrape_run_id
+   GROUP BY ps.product_ref_id
 )
-SELECT * FROM per_product
+SELECT p.id AS product_internal_id,
+       btrim(p.category_url) AS category_url_stored,
+       ro.id AS scrape_run_id,
+       ro.collected_at AS run_collected_at,
+       ro.created_at AS run_created_at,
+       p.last_seen_at AS product_last_seen_at
+  FROM products p
+  INNER JOIN melhor_run_por_produto m ON m.product_internal_id = p.id
+  INNER JOIN runs_ordenados ro ON ro.posicao = m.posicao
+ WHERE p.category_url IS NOT NULL AND btrim(p.category_url) <> ''
 `
       )
     );

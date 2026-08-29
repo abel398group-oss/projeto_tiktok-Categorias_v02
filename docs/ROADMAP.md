@@ -136,6 +136,18 @@ processo curto + `doctor`.
       produtos na faixa 1.000–9.999, com valores exactos e consecutivos (1000,
       1001, 1002…). `delta 0` significa mesmo "não vendeu" — o rótulo «parado»
       é honesto.
+- [x] **`/analytics/categories` 2,5× mais rápido** — era o pedido mais lento do
+      painel (17,9 s com o banco livre) e o que deixava a página de categoria em
+      "A resolver categoria…". O `DISTINCT ON (p.id)` obrigava a ordenar o join
+      inteiro (757 mil snapshots), com *external merge* de 76 MB por worker.
+      Trocado por ordenar os **runs** (72 linhas) e agregar `MIN(posição)` por
+      produto. Medido: 17,9 → 7,3 s livre; 25 → 16 s sob carga de import.
+      Resultado idêntico, verificado por hash das 44.603 linhas.
+- [ ] **Índice `(product_ref_id, scrape_run_id)` em `product_snapshots`** — o que
+      sobra do custo acima é varrer 757 mil snapshots para agregar. Com este
+      índice o agregado vira *index-only scan*. Exige migração, por isso ficou
+      para quando não houver coleta a correr (uma migração cria índice com lock
+      de escrita, e a coleta acaba num import).
 - [ ] **Tripwire de subida**: a API recusa subir fora de `127.0.0.1` sem chave
       forte. Hoje "roda local" é promessa, não trava.
 
