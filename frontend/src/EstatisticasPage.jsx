@@ -88,7 +88,7 @@ export default function EstatisticasPage() {
                       { t: "produtos", a: "Quantos produtos desta categoria estão na base (n)." },
                       { t: "giro medido", a: "Vendas/dia somadas dos produtos com ritmo medido — e quantos produtos sustentam o número." },
                       { t: "preço típico", a: "Faixa p25–p75: metade dos produtos custa dentro dela. Mediana entre parênteses." },
-                      { t: "lojas", a: "Lojas distintas na categoria — muitas lojas = demanda provada, não mercado queimado." },
+                      { t: "lojas", a: "Lojas distintas na categoria — e como as vendas se repartem entre elas. Vinte lojas com uma a fazer 80% é briga com incumbente; vinte repartidas é espaço. O número sozinho não distingue os dois casos." },
                       { t: "quadrantes", a: "Produtos medidos, classificados pelas medianas da própria categoria. Passe o rato em cada etiqueta." }
                     ].map((h) => (
                       <th key={h.t} title={h.a} style={{ padding: "0.4rem 0.45rem", fontWeight: 600, cursor: h.a ? "help" : "default" }}>
@@ -132,7 +132,43 @@ export default function EstatisticasPage() {
                             </>
                           ) : "—"}
                         </td>
-                        <td style={{ padding: "0.35rem 0.45rem" }}>{e.lojas}</td>
+                        <td style={{ padding: "0.35rem 0.45rem", whiteSpace: "nowrap" }}>
+                          {e.lojas}
+                          {/*
+                            O número de lojas não distingue mercado repartido de
+                            mercado com dono. A leitura ao lado é que decide se
+                            vale entrar — e só aparece quando há amostra para a
+                            sustentar.
+                          */}
+                          {(() => {
+                            const cc = e.concorrencia;
+                            if (!cc?.medida) return null;
+                            if (!cc.amostraSuficiente) {
+                              return (
+                                <span
+                                  style={{ opacity: 0.5, fontSize: "0.72rem", marginLeft: "0.35rem", cursor: "help" }}
+                                  title={`Só ${cc.produtosComVenda} produto(s) com venda — abaixo de ${cc.minProdutosParaLer} a concentração descreve a amostra, não a categoria.`}
+                                >
+                                  n/d
+                                </span>
+                              );
+                            }
+                            const kind =
+                              cc.leitura === "dominada" ? "ruim" : cc.leitura === "pulverizada" ? "bom" : "meio";
+                            return (
+                              <Tag
+                                kind={kind}
+                                title={
+                                  `Maior loja: ${cc.topLojaPct}% das vendas (${cc.topLojaNome}). ` +
+                                  `Top 3: ${cc.top3Pct}%. Medido sobre ${cc.produtosComVenda} produto(s) com venda ` +
+                                  `em ${cc.lojasComVenda} loja(s). Cortes: ${cc.cortes.dominada} / ${cc.cortes.concentrada}.`
+                                }
+                              >
+                                {cc.leitura}
+                              </Tag>
+                            );
+                          })()}
+                        </td>
                         <td style={{ padding: "0.35rem 0.45rem", maxWidth: "16rem" }}>
                           {q?.ok
                             ? QUADRANTES.map((def) => {
