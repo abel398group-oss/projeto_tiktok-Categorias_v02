@@ -23,6 +23,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -144,12 +145,26 @@ async function baixarFotos(produto, destino, limite) {
         }
       });
       if (!res.ok) { log(`    foto ignorada (HTTP ${res.status})`); continue; }
-      const buf = Buffer.from(await res.arrayBuffer());
+      let buf = Buffer.from(await res.arrayBuffer());
       // Extensão real pela assinatura do ficheiro: o gerador rejeita material
       // sem extensão reconhecida, e a URL do CDN nem sempre a traz.
       let ext = ".jpg";
+      const ehWebp = buf.slice(8, 12).toString() === "WEBP";
       if (buf[0] === 0x89 && buf[1] === 0x50) ext = ".png";
-      else if (buf.slice(8, 12).toString() === "WEBP") ext = ".webp";
+      else if (ehWebp) ext = ".webp";
+
+      // WEBP quebra o MoneyPrinterTurbo: o MoviePy/ffmpeg dele trata .webp como
+      // vídeo (sonda "duração" em vez de ler como imagem estática) e falha com
+      // "At least one output file must be specified" — visto ao vivo em
+      // 22/08/2026 gerando o vídeo do Pro3Magnésio. TikTok Shop serve fotos de
+      // PDP quase sempre em WEBP, então sem isto a maioria dos produtos falha
+      // silenciosamente na hora de gerar. Converter para JPEG aqui, antes de
+      // entregar ao gerador, em vez de mexer no código de terceiros.
+      if (ehWebp) {
+        buf = await sharp(buf).jpeg({ quality: 90 }).toBuffer();
+        ext = ".jpg";
+      }
+
       const caminho = path.join(destino, `foto-${caminhos.length + 1}${ext}`);
       await fs.writeFile(caminho, buf);
       caminhos.push(caminho);
