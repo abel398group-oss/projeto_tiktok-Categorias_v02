@@ -256,12 +256,37 @@ function snapshotToOpportunityRow(s, motivo) {
     loja: (s.product.seller?.name ?? "—").slice(0, 28),
     preco: s.price,
     vendas: s.salesCount,
+    /**
+     * `false` = o TikTok não mostrou contador de vendas neste card.
+     *
+     * No modo `no_sales`, "vendeu zero" e "não sabemos quanto vendeu" caem os
+     * dois na mesma lista (decisão antiga, travada em teste). Só que são coisas
+     * diferentes na hora de decidir: zero medido é sinal de mercado, ausência
+     * é falta de leitura. Sem este campo a tela mostra as duas como "0" e quem
+     * lê não tem como distinguir.
+     */
+    vendasMedidas: s.salesCount != null,
     avalMed: s.ratingAverage,
     avalTot: s.ratingTotal,
     motivo,
     enriched,
     link: s.product.productUrl ?? ""
   };
+}
+
+/**
+ * Quantos dos itens listados têm vendas realmente medidas.
+ *
+ * Viaja com a resposta para o painel poder dizer "12 destes 30 não têm leitura
+ * de vendas" em vez de mostrar trinta zeros iguais. É o mesmo princípio do `n`
+ * ao lado da mediana: o número sozinho esconde de que amostra ele saiu.
+ *
+ * @param {Array<{ vendasMedidas?: boolean }>} items
+ */
+export function resumoDeMedicao(items) {
+  const lista = Array.isArray(items) ? items : [];
+  const semMedicao = lista.filter((i) => i && i.vendasMedidas === false).length;
+  return { listados: lista.length, comVendaMedida: lista.length - semMedicao, semVendaMedida: semMedicao };
 }
 
 /** Texto público da regra v1 (compat. docs / CLI). */
@@ -421,6 +446,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
       return {
         scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
         items,
+        medicao: resumoDeMedicao(items),
         ruleNote: opportunityModeRuleNote(mode),
         opportunityMode: mode,
         listed: items.length,
@@ -459,6 +485,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
     return {
       scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
       items,
+      medicao: resumoDeMedicao(items),
       ruleNote: opportunityModeRuleNote(mode),
       opportunityMode: mode,
       listed: items.length,
@@ -553,6 +580,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
   return {
     scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
     items,
+    medicao: resumoDeMedicao(items),
     ruleNote: opportunityModeRuleNote(mode),
     opportunityMode: mode,
     listed: items.length,

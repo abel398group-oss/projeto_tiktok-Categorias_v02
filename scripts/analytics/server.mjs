@@ -40,6 +40,7 @@ import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { registerScrapeAllRoute } from "./scrape-all-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 import { hideProduct, unhideProduct, hideProductsBatch, listHiddenProducts } from "./lib/product-hide.mjs";
+import { getCoverageReport } from "./lib/coverage.mjs";
 
 requireDatabaseUrl();
 
@@ -205,6 +206,8 @@ fastify.get("/analytics/search", async (req) => {
   const q = typeof raw === "string" ? raw : Array.isArray(raw) ? String(raw[0] ?? "") : "";
   return buscarTudo(prisma, q);
 });
+
+fastify.get("/analytics/coverage", async () => getCoverageReport(prisma));
 
 fastify.get("/analytics/hidden-products", async () => listHiddenProducts(prisma));
 

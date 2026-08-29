@@ -626,6 +626,31 @@ async function main() {
     3: "produtos colhidos mas com campos críticos vazios (provável mudança de layout do TikTok)"
   };
 
+  /** Código de saída que significa "o TikTok barrou a SESSÃO", não "esta categoria falhou". */
+  const CODIGO_CAPTCHA = 2;
+
+  /**
+   * Quantos captchas seguidos antes de parar a corrida inteira.
+   *
+   * Medido em 22/08/2026: entre 02:44 e 04:23 caíram SETE categorias seguidas
+   * em captcha (skincare → men-s-care), uma a cada ~17 min, e a corrida seguiu
+   * queimando categoria atrás de categoria contra uma sessão já bloqueada — 75
+   * captchas no log daquela noite. Insistir contra um bloqueio não o remove;
+   * só gasta categoria boa e reforça o padrão que o TikTok está a detectar.
+   */
+  const CAPTCHAS_SEGUIDOS_PARA_PARAR = Number(process.env.CAPTCHAS_ATE_PARAR) || 3;
+
+  /** "4h20" / "35min" / "50s" — para o ETA não sair em milissegundos. */
+  const fmtDuracao = (ms) => {
+    if (!Number.isFinite(ms) || ms < 0) return "?";
+    const s = Math.round(ms / 1000);
+    if (s < 90) return `${s}s`;
+    const min = Math.round(s / 60);
+    if (min < 90) return `${min}min`;
+    const h = Math.floor(min / 60);
+    return `${h}h${String(min % 60).padStart(2, "0")}`;
+  };
+
   // Mesma janela/limiar de ação usados dentro de cada categoria (ver
   // scrapeCategory.mjs) — só que aqui é o INTERVALO ENTRE categorias, e por
   // isso precisa da própria instância: cada processo filho nasce e morre
@@ -640,6 +665,10 @@ async function main() {
   });
 
   let exitCode = 0;
+  /** Captchas seguidos. Zera só quando uma categoria conclui — ver o disjuntor abaixo. */
+  let captchasSeguidos = 0;
+  let paradoPorBloqueio = false;
+  const inicioCorrida = Date.now();
 
   for (let i = 0; i < runs.length; i++) {
     if (stopRequested()) {
@@ -650,7 +679,21 @@ async function main() {
     const r = runs[i];
     const label = r.label || r.CATEGORY_URL;
     const key = keyForUrl(r.CATEGORY_URL);
-    console.log(`\n--- [${i + 1}/${runs.length}] ${label} ---\nOUTPUT_DIR=${r.OUTPUT_DIR}\nCATEGORY_URL=${r.CATEGORY_URL}\n`);
+
+    // Cabeçalho pensado para quem está a ver a corrida ao vivo no terminal:
+    // onde estamos na fila, onde estamos no catálogo, e quanto falta. Sem isto
+    // o log dizia "[3/182]" e mais nada — não dava para saber se valia esperar.
+    const feitasNestaCorrida = i;
+    const ritmoMs = feitasNestaCorrida > 0 ? (Date.now() - inicioCorrida) / feitasNestaCorrida : null;
+    const eta = ritmoMs != null ? fmtDuracao(ritmoMs * (runs.length - i)) : "a medir";
+    const ritmoTxt = ritmoMs != null ? ` · ${fmtDuracao(ritmoMs)}/categoria` : "";
+    console.log(`\n${"━".repeat(72)}`);
+    console.log(`[${i + 1}/${runs.length}] ${label}`);
+    console.log(
+      `   catálogo ${completed.size}/${CATALOG.length} · faltam ${runs.length - i}` +
+      ` · ~${eta} restantes${ritmoTxt}`
+    );
+    console.log(`${"━".repeat(72)}`);
 
     await writeProgress({
       running: true, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
@@ -681,6 +724,11 @@ async function main() {
       // Sucesso limpa o histórico de falhas: a categoria voltou a responder e
       // não deve carregar tentativas velhas para a próxima vez que falhar.
       delete failures[key];
+      // Só o sucesso desarma o disjuntor: uma categoria que colheu prova que a
+      // sessão voltou. Falha de outro tipo NÃO zera o contador, porque bloqueio
+      // de sessão também sai como código 1 ("sessão fora do shop.tiktok.com").
+      captchasSeguidos = 0;
+      antiBanPolicy.recordSuccess();
 
       const produtos = await contarProdutosColhidos(r.OUTPUT_DIR);
       if (produtos != null) {
@@ -698,9 +746,25 @@ async function main() {
       );
     } else {
       const anterior = failures[key];
-      const tentativas = Number(anterior?.tentativas ?? 0) + 1;
       const motivo = MOTIVO_POR_CODIGO[code] ?? `coleta terminou com código ${code}`;
-      failures[key] = { tentativas, codigo: code, motivo, em: new Date().toISOString() };
+      const ehBloqueioDeSessao = code === CODIGO_CAPTCHA;
+
+      /**
+       * Captcha NÃO gasta tentativa da categoria.
+       *
+       * O contador de 3 tentativas existe para pôr de lado categoria que está
+       * mesmo partida (layout mudou, URL morta). Captcha não diz nada sobre a
+       * categoria — diz que a SESSÃO está barrada naquele momento. Contá-lo
+       * fazia uma hora de bloqueio banir permanentemente ~12 categorias boas,
+       * e o buraco fica invisível porque a barra de progresso segue subindo.
+       * Na madrugada de 22/08/2026 sete categorias perderam tentativa assim.
+       */
+      const tentativas = ehBloqueioDeSessao
+        ? Number(anterior?.tentativas ?? 0)
+        : Number(anterior?.tentativas ?? 0) + 1;
+      const bloqueios = Number(anterior?.bloqueios ?? 0) + (ehBloqueioDeSessao ? 1 : 0);
+
+      failures[key] = { tentativas, bloqueios, codigo: code, motivo, em: new Date().toISOString() };
       // NÃO entra em `completed`: na próxima execução volta à fila sozinha.
       await saveCheckpoint(completed, startedAt, failures, rendimento);
       await writeProgress({
@@ -708,12 +772,38 @@ async function main() {
         remaining: runs.length - i - 1, currentLabel: null, currentIndex: completed.size, stopping: false,
         failedCount: Object.keys(failures).length
       });
-      const restantes = MAX_TENTATIVAS_POR_CATEGORIA - tentativas;
-      console.log(
-        restantes > 0
-          ? `[falha] ${key} — ${motivo}. Volta à fila (${restantes} tentativa(s) restante(s)).`
-          : `[falha] ${key} — ${motivo}. ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas sem sucesso: fica de fora até um --reset.`
-      );
+
+      if (ehBloqueioDeSessao) {
+        captchasSeguidos += 1;
+        antiBanPolicy.recordFailure({ reason: "captcha" });
+        console.log(
+          `\n  ⚠  CAPTCHA (${captchasSeguidos} seguido${captchasSeguidos > 1 ? "s" : ""}) — o TikTok barrou a SESSÃO, não a categoria.`
+        );
+        console.log(`     "${label}" volta à fila SEM gastar tentativa.`);
+        if (captchasSeguidos < CAPTCHAS_SEGUIDOS_PARA_PARAR) {
+          console.log(`     Mais ${CAPTCHAS_SEGUIDOS_PARA_PARAR - captchasSeguidos} e a corrida para sozinha.\n`);
+        }
+      } else {
+        const restantes = MAX_TENTATIVAS_POR_CATEGORIA - tentativas;
+        console.log(
+          restantes > 0
+            ? `  ✗ ${motivo}. Volta à fila (${restantes} tentativa(s) restante(s)).`
+            : `  ✗ ${motivo}. ${MAX_TENTATIVAS_POR_CATEGORIA} tentativas sem sucesso: fica de fora até um --reset.`
+        );
+      }
+
+      // Disjuntor: contra uma sessão bloqueada, insistir não desbloqueia — só
+      // queima categoria boa e reforça o padrão que o TikTok está a detectar.
+      if (captchasSeguidos >= CAPTCHAS_SEGUIDOS_PARA_PARAR) {
+        console.log(`\n${"█".repeat(72)}`);
+        console.log(`  PARADO: ${captchasSeguidos} captchas seguidos — a sessão está bloqueada.`);
+        console.log(`  Nada foi perdido: ${completed.size}/${CATALOG.length} concluídas, e as categorias`);
+        console.log(`  barradas voltam à fila intactas (captcha não gasta tentativa).`);
+        console.log(`  Espere um tempo antes de recomeçar; insistir agora só piora.`);
+        console.log(`${"█".repeat(72)}\n`);
+        paradoPorBloqueio = true;
+        break;
+      }
     }
 
     if (i < runs.length - 1) {
@@ -740,11 +830,21 @@ async function main() {
     running: false, startedAt, completedCount: completed.size, totalCount: CATALOG.length,
     remaining: CATALOG.length - resolvidas, currentLabel: null, stopping: false,
     stoppedByUser: stopped, done: resolvidas >= CATALOG.length,
-    failedCount: Object.keys(failures).length, gaveUpCount: desistidas.length
+    failedCount: Object.keys(failures).length, gaveUpCount: desistidas.length,
+    // O painel precisa distinguir "acabou" de "fomos barrados": sem isto a UI
+    // mostra uma parada por bloqueio com a mesma cara de uma parada normal, e
+    // quem olha não sabe que basta esperar e recomeçar.
+    stoppedByBlock: paradoPorBloqueio,
+    lastError: paradoPorBloqueio
+      ? `Sessão bloqueada pelo TikTok (${captchasSeguidos} captchas seguidos). As categorias barradas voltam à fila sem perder tentativa — espere um tempo e recomece.`
+      : ""
   });
   try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
 
-  if (stopped) {
+  if (paradoPorBloqueio) {
+    console.log(`\n🛑 Coleta interrompida por bloqueio de sessão. Concluídas: ${completed.size}/${CATALOG.length}.`);
+    console.log(`   Recomece mais tarde: nada se perdeu e nenhuma categoria foi penalizada.`);
+  } else if (stopped) {
     console.log(`\n⏸  Coleta pausada a pedido. Concluídas: ${completed.size}/${CATALOG.length}. Reinicie para continuar de onde parou.`);
   } else {
     console.log(`\n🏁 Coleta finalizada (código ${exitCode}). Concluídas: ${completed.size}/${CATALOG.length}`);

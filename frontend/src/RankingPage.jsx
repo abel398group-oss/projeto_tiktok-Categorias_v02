@@ -146,6 +146,18 @@ export default function RankingPage() {
   const [erro, setErro] = useState("");
   const [ordem, setOrdem] = useState("delta");
 
+  // Cobertura do catálogo. O ranking descreve o que está na base, e a base é
+  // uma fração do TikTok Shop — sem isto na tela, "os 30 melhores" lê-se como
+  // "os 30 melhores do mercado", que é falso enquanto faltarem categorias.
+  const [cobertura, setCobertura] = useState(null);
+  useEffect(() => {
+    let ativo = true;
+    apiFetch("/analytics/coverage")
+      .then((body) => { if (ativo) setCobertura(body); })
+      .catch(() => { /* cobertura é contexto: falhar não pode derrubar o ranking */ });
+    return () => { ativo = false; };
+  }, []);
+
   // Ocultar é soft-hide no servidor (histórico preservado); aqui só tira da
   // vista sem esperar recarregar o relatório inteiro — a lista já veio, não
   // há motivo para um pedido novo só para sumir com uma linha.
@@ -296,6 +308,44 @@ export default function RankingPage() {
               ? ` · comparado com ${formatarData(relatorio?.previousRun?.collectedAt)}`
               : null}
         </p>
+
+        {/*
+          O aviso olha para a cobertura DO RUN que este ranking lê, não para a
+          largura histórica da base: em 23/08/2026 a base tinha 95% das
+          subcategorias e o run mais recente 94% — mas os dois podem divergir
+          muito, e mostrar o número da base ao lado de um ranking tirado de uma
+          fatia seria tranquilizar com o número errado.
+        */}
+        {cobertura?.ultimoRun && !cobertura.ultimoRun.confiavel ? (
+          <div
+            role="note"
+            style={{
+              margin: "0.75rem 0",
+              padding: "0.6rem 0.8rem",
+              borderRadius: 8,
+              border: "1px solid var(--tk-warn-border, #9a6700)",
+              background: "var(--tk-warn-bg, rgba(187,128,9,.12))",
+              fontSize: "0.82rem",
+              lineHeight: 1.5
+            }}
+          >
+            <strong>Leia como amostra, não como mercado.</strong>{" "}
+            A coleta que gerou este ranking cobriu <strong>{cobertura.ultimoRun.pct}%</strong> das
+            subcategorias ({cobertura.ultimoRun.categoriasNoRun} de{" "}
+            {cobertura.ultimoRun.categoriasNoCatalogo}). Ele ordena o que foi colhido — um produto
+            melhor pode estar numa categoria que ficou de fora desta passagem.{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              style={{
+                background: "none", border: "none", padding: 0, font: "inherit",
+                color: "inherit", cursor: "pointer", textDecoration: "underline"
+              }}
+            >
+              Ver progresso da coleta
+            </button>
+          </div>
+        ) : null}
 
         {!carregando && !erro && linhas.length > 0 && temVariacaoUtil ? (
           <p style={{ fontSize: "0.74rem", opacity: 0.75, marginTop: "0.3rem" }}>

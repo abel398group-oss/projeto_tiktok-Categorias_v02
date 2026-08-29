@@ -58,6 +58,84 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
 - [ ] Integração **n8n / WhatsApp** via API (sem acesso SQL directo ao Postgres)
 
+### Auditoria do `product-seeker` (23/08/2026) — o que entrou e o que ficou
+
+Leitura completa do repo irmão (`lib/`, `db/`, front e docs) cruzada com o nosso
+código. Já tínhamos portado dali: Parâmetros, sinais aditivos, higiene
+estatística (`category-stats`), busca federada, `ui.jsx`, orquestrador por
+processo curto + `doctor`.
+
+**Feito nesta rodada (Fase 0 — parar dano em curso):**
+
+- [x] **Disjuntor de captcha** no orquestrador: captcha **não gasta tentativa**
+      da categoria (é bloqueio de sessão, não defeito dela) e N seguidos param a
+      corrida. Medido: 75 captchas numa noite, 7 categorias seguidas queimadas
+      entre 02:44 e 04:23 sem o ritmo mudar — `scripts/scrape-all-categories.mjs`
+- [x] **Saída de terminal legível**: cabeçalho com posição no catálogo, ritmo e
+      ETA; blob de JSON por categoria movido para `SCRAPE_VERBOSE=1`
+- [x] **`no_sales` rotulado**: campo `vendasMedidas` por item + `medicao` no
+      relatório separam "vendeu zero" de "não medimos" (antes iam os dois como
+      `0` na tela). Comportamento do modo mantido — incluir `null` é decisão
+      antiga travada em teste, e faz sentido no TikTok, que só mostra
+      "+N vendidos" acima de um limiar — `lib/opportunities.mjs`
+- [x] **Cobertura visível**: `GET /analytics/coverage` + aviso no Ranking quando
+      a coleta que o gerou cobriu pouco do catálogo — `lib/coverage.mjs`
+
+      *Nota honesta:* a suspeita que motivou isto estava **errada**. O `55/212`
+      do painel é o checkpoint da passagem incremental em curso, não o estado da
+      base: medido em 23/08/2026, o último `ScrapeRun` cobre **199/212 (94%)**
+      com 20 343 snapshots, e a base tem 95% das subcategorias. O aviso ficou
+      porque a métrica passa a ser vigiada, mas hoje **não dispara** — não havia
+      o problema que eu supus. O que sobrou de real: **10 subcategorias nunca
+      entraram na base**, e nenhum produto delas pode aparecer em relatório.
+
+      A métrica olha a cobertura **do run que o relatório lê**, não a largura
+      histórica: os dois podem divergir muito, e mostrar o número da base ao
+      lado de um ranking tirado de uma fatia tranquilizaria com o número errado.
+
+**A fazer (por ordem de valor):**
+
+- [ ] **`exhausted` + motivo de parada no `ScrapeRun`**: o scraper sabe se parou
+      por fim da lista ou por teto de cliques, mas só imprime no log. Sem isso
+      não se distingue categoria colhida até ao fim de categoria cortada.
+- [ ] **Decidir `RawPayload`**: escrito em todo import (~36 MB/corrida) e **lido
+      por ninguém** (confirmado por grep). Ou existe caminho de reprocessamento,
+      ou para de escrever.
+- [ ] **`npm run db:inventario`**: linhas × disco × quem escreve × quem lê, por
+      tabela (adaptado a Prisma: grepar `prisma.<modelo>.`). Responde ao item
+      anterior com número em vez de palpite.
+- [ ] **Score devolve confiança**: `{ score, confianca, faltando: [...] }` em vez
+      de número seco — hoje campo ausente vira ponto perdido em silêncio e
+      produto sem nota fica indistinguível de produto com nota má.
+- [ ] **Sinal monotónico para "em ascensão"**: contador cumulativo (nº de
+      avaliações) em vez de delta puro. Delta de número que pode descer mente
+      exactamente onde interessa.
+- [ ] **Encolhimento para amostra pequena** no crescimento, para o topo não
+      virar produto de 2 vendas (`(delta + K·base)/(n + K)`).
+- [ ] **Tripwire de subida**: a API recusa subir fora de `127.0.0.1` sem chave
+      forte. Hoje "roda local" é promessa, não trava.
+
+**Decidido NÃO fazer, com motivo:**
+
+- **Motor de viabilidade / importação** — prematuro. O caso de uso actual é
+  afiliado (promove produto de terceiro e ganha comissão): a economia tem três
+  variáveis, não quinze. Sem FOB, frete internacional, peso taxável, modal nem
+  fator tributário. Reabrir se passar a vender produto próprio; o
+  `product-seeker` tem a máquina inteira pronta para copiar nesse dia.
+- **`score_final` composto como dado primário** — o autor do `product-seeker`
+  considerou e **rejeitou** por escrito: *"uma nota de 87 não diz se veio de
+  margem alta ou de concorrência baixa, e as duas pedem decisões diferentes."*
+  Substituto: eixos como colunas de primeira classe e `score_final` só como
+  ordenação conveniente, com cortes tirados da mediana do próprio conjunto.
+  **Isto contradiz o item "score modular por eixo" da Visão estratégica — a
+  decisão fica em aberto para o negócio.**
+- **Sazonalidade** — exige ≥24 meses de série (2 ciclos anuais). Temos dias.
+- **Dividir o repo** (front e motor em pacotes separados) — eles pagaram esse
+  preço por multi-tenant e SSO, que não temos; hoje já são três lugares com a
+  mesma fórmula. Um repo com API + painel é o certo para dono único local.
+- **Duplicar fórmula em SQL/views** — prática abandonada lá com autópsia
+  (`migracao-012`): a cópia divergiu em três pontos e ninguém consultava.
+
 **Futuro — qualidade / infra:**
 
 - [ ] **Smoke test** de scraper real (navegador, rede) em CI ou job manual — separado da regressão pura; custo, flakiness e credenciais a definir.

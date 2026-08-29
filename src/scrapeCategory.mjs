@@ -3131,25 +3131,32 @@ async function runCategoryHarvest(browser, page, startUrl, opts = {}) {
     `[categoria] Produtos recolhidos nesta categoria: ${byProductId.size} (únicos por product_id, status=${status})`
   );
 
-  // eslint-disable-next-line no-console
-  console.log(
-    JSON.stringify(
-      {
-        out: outFile,
-        dados_produtos: DADOS_OUT,
-        dados_lojas: DADOS_LOJAS_OUT,
-        debug_seller_sources: DEBUG_SELLER_SOURCES,
-        count: byProductId.size,
-        debug: debug ? debugFile : null,
-        caca_dados: huntLog ? CACA_DADOS_JSONL : null,
-        caca_xhr_fetch: huntLog ? CACA_XHR_FILE : null,
-        modern_router_peek: MODERN_ROUTER_PEEK,
-        exit_code: exitCode
-      },
-      null,
-      2
-    )
-  );
+  // O mapa de caminhos só interessa a quem está a depurar UMA categoria; numa
+  // corrida de 212 ele repete 212 blocos de JSON no meio do log e enterra as
+  // linhas que dizem o que está a acontecer (produtos colhidos, captcha,
+  // checkpoint). Ninguém parseia este stdout — confirmado por grep — por isso
+  // fica atrás de SCRAPE_VERBOSE em vez de sair impresso sempre.
+  if (process.env.SCRAPE_VERBOSE === "1") {
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify(
+        {
+          out: outFile,
+          dados_produtos: DADOS_OUT,
+          dados_lojas: DADOS_LOJAS_OUT,
+          debug_seller_sources: DEBUG_SELLER_SOURCES,
+          count: byProductId.size,
+          debug: debug ? debugFile : null,
+          caca_dados: huntLog ? CACA_DADOS_JSONL : null,
+          caca_xhr_fetch: huntLog ? CACA_XHR_FILE : null,
+          modern_router_peek: MODERN_ROUTER_PEEK,
+          exit_code: exitCode
+        },
+        null,
+        2
+      )
+    );
+  }
 
   return exitCode;
 }
