@@ -365,6 +365,56 @@ export function keyForUrl(url) {
  */
 export const MAX_TENTATIVAS_POR_CATEGORIA = 3;
 
+/** Código de saída que significa "o TikTok barrou a SESSÃO", não "esta categoria falhou". */
+export const CODIGO_CAPTCHA = 2;
+
+/**
+ * Decide o que uma falha de categoria significa para a fila e para a corrida.
+ *
+ * Função PURA de propósito: é a regra que decide se uma categoria boa é
+ * descartada para sempre e se a corrida inteira para. Errar aqui é caro e
+ * silencioso — a barra de progresso continua a subir enquanto o catálogo
+ * encolhe. Sendo pura, dá para testar sem browser, sem banco e sem TikTok.
+ *
+ * @param {{
+ *   code: number,
+ *   anterior?: { tentativas?: number, bloqueios?: number } | null,
+ *   captchasSeguidos: number,
+ *   maxTentativas?: number,
+ *   captchasAteParar?: number
+ * }} p
+ */
+export function decidirFalha({
+  code,
+  anterior,
+  captchasSeguidos,
+  maxTentativas = MAX_TENTATIVAS_POR_CATEGORIA,
+  captchasAteParar = 3
+}) {
+  const ehBloqueioDeSessao = code === CODIGO_CAPTCHA;
+  const tentativasAntes = Number(anterior?.tentativas ?? 0);
+
+  // Captcha não gasta tentativa: o contador de 3 existe para pôr de lado
+  // categoria mesmo partida (layout mudou, URL morta). Captcha não diz nada
+  // sobre a categoria — diz que a sessão está barrada naquele momento.
+  const tentativas = ehBloqueioDeSessao ? tentativasAntes : tentativasAntes + 1;
+  const bloqueios = Number(anterior?.bloqueios ?? 0) + (ehBloqueioDeSessao ? 1 : 0);
+
+  // Só captcha conta para o disjuntor. Falha de outro tipo não zera o contador
+  // porque bloqueio de sessão também sai como código 1 ("sessão fora do
+  // shop.tiktok.com") — zerar aí apagaria o rasto do bloqueio a meio.
+  const seguidos = ehBloqueioDeSessao ? captchasSeguidos + 1 : captchasSeguidos;
+
+  return {
+    ehBloqueioDeSessao,
+    tentativas,
+    bloqueios,
+    captchasSeguidos: seguidos,
+    desistiu: tentativas >= maxTentativas,
+    deveParar: seguidos >= captchasAteParar
+  };
+}
+
 export async function loadCheckpoint() {
   try {
     const raw = await fs.readFile(CHECKPOINT_FILE, "utf8");
@@ -626,9 +676,6 @@ async function main() {
     3: "produtos colhidos mas com campos críticos vazios (provável mudança de layout do TikTok)"
   };
 
-  /** Código de saída que significa "o TikTok barrou a SESSÃO", não "esta categoria falhou". */
-  const CODIGO_CAPTCHA = 2;
-
   /**
    * Quantos captchas seguidos antes de parar a corrida inteira.
    *
@@ -745,24 +792,19 @@ async function main() {
         `${produtos != null ? `, ${produtos} produto(s) nesta categoria` : ""})`
       );
     } else {
-      const anterior = failures[key];
       const motivo = MOTIVO_POR_CODIGO[code] ?? `coleta terminou com código ${code}`;
-      const ehBloqueioDeSessao = code === CODIGO_CAPTCHA;
 
-      /**
-       * Captcha NÃO gasta tentativa da categoria.
-       *
-       * O contador de 3 tentativas existe para pôr de lado categoria que está
-       * mesmo partida (layout mudou, URL morta). Captcha não diz nada sobre a
-       * categoria — diz que a SESSÃO está barrada naquele momento. Contá-lo
-       * fazia uma hora de bloqueio banir permanentemente ~12 categorias boas,
-       * e o buraco fica invisível porque a barra de progresso segue subindo.
-       * Na madrugada de 22/08/2026 sete categorias perderam tentativa assim.
-       */
-      const tentativas = ehBloqueioDeSessao
-        ? Number(anterior?.tentativas ?? 0)
-        : Number(anterior?.tentativas ?? 0) + 1;
-      const bloqueios = Number(anterior?.bloqueios ?? 0) + (ehBloqueioDeSessao ? 1 : 0);
+      // A regra mora em `decidirFalha` (função pura, testada) — aqui só se
+      // aplica o que ela decidiu. Ver o comentário dela para o porquê de
+      // captcha não gastar tentativa.
+      const d = decidirFalha({
+        code,
+        anterior: failures[key],
+        captchasSeguidos,
+        captchasAteParar: CAPTCHAS_SEGUIDOS_PARA_PARAR
+      });
+      const { ehBloqueioDeSessao, tentativas, bloqueios } = d;
+      captchasSeguidos = d.captchasSeguidos;
 
       failures[key] = { tentativas, bloqueios, codigo: code, motivo, em: new Date().toISOString() };
       // NÃO entra em `completed`: na próxima execução volta à fila sozinha.
@@ -774,7 +816,6 @@ async function main() {
       });
 
       if (ehBloqueioDeSessao) {
-        captchasSeguidos += 1;
         antiBanPolicy.recordFailure({ reason: "captcha" });
         console.log(
           `\n  ⚠  CAPTCHA (${captchasSeguidos} seguido${captchasSeguidos > 1 ? "s" : ""}) — o TikTok barrou a SESSÃO, não a categoria.`
@@ -794,7 +835,7 @@ async function main() {
 
       // Disjuntor: contra uma sessão bloqueada, insistir não desbloqueia — só
       // queima categoria boa e reforça o padrão que o TikTok está a detectar.
-      if (captchasSeguidos >= CAPTCHAS_SEGUIDOS_PARA_PARAR) {
+      if (d.deveParar) {
         console.log(`\n${"█".repeat(72)}`);
         console.log(`  PARADO: ${captchasSeguidos} captchas seguidos — a sessão está bloqueada.`);
         console.log(`  Nada foi perdido: ${completed.size}/${CATALOG.length} concluídas, e as categorias`);
