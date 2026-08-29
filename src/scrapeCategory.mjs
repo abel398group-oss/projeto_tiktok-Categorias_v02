@@ -1869,6 +1869,25 @@ async function launchTikTokBrowser() {
       "--disable-dev-shm-usage",
       "--lang=pt-BR",
       "--window-size=1600,900",
+      /*
+       * Janela fora do ecrã quando a coleta é automática.
+       *
+       * Desde que cada categoria passou a correr no seu próprio processo, o
+       * navegador abre e fecha uma vez POR CATEGORIA — 150+ janelas a piscar
+       * numa corrida, roubando o foco de quem está a usar a máquina. Antes era
+       * uma janela só, do princípio ao fim, e o problema não existia.
+       *
+       * A resposta óbvia seria `HEADED=0`, mas headless é mais detectável e
+       * costuma levar a redirecionamento para login — exactamente o que
+       * `HEADED=1` existe para evitar. Aqui a janela continua real (mesmo
+       * perfil de detecção), só nasce fora do ecrã visível.
+       *
+       * `SCRAPE_JANELA_VISIVEL=1` traz a janela de volta: no modo assistido é
+       * preciso ver o ecrã para resolver login ou captcha à mão.
+       */
+      ...(isHeaded && process.env.SCRAPE_JANELA_VISIVEL !== "1" && process.env.ASSISTED_MODE !== "1"
+        ? ["--window-position=-3000,0"]
+        : []),
       "--disable-blink-features=AutomationControlled",
       "--use-fake-ui-for-media-stream",
       "--disable-infobars"
