@@ -545,6 +545,17 @@ export function toDadosProdutoClean(n, categoriaUrl) {
     vendas_texto: n.vendas_texto ?? n.sales_display ?? null,
     fotos: fotos && fotos.length ? fotos : null,
     fotos_pdp: pdp,
+    // Mídia publicada por clientes nas avaliações. `collectReviewMediaFromPage`
+    // já a recolhia e escrevia em `n.fotos_review`, mas esta normalização não a
+    // copiava — era colhida e deitada fora aqui, no limite entre o nó cru e o
+    // objeto exportado. Medido em 29/08/2026: 20 579 produtos na base, ZERO com
+    // `fotos_review`, apesar de o coletor existir e correr.
+    //
+    // Fica em campo separado das fotos de catálogo, de propósito: é conteúdo de
+    // terceiros e publicá-lo é decisão de quem publica, não automatismo (ver o
+    // cabeçalho de `collectReviewMediaInBrowser`).
+    fotos_review: Array.isArray(n.fotos_review) && n.fotos_review.length ? n.fotos_review : null,
+    videos_review: Array.isArray(n.videos_review) && n.videos_review.length ? n.videos_review : null,
     seller_id: n.seller_id ?? null,
     global_seller_id: n.global_seller_id ?? null,
     nome_loja: n.nome_loja ?? null,

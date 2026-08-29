@@ -685,8 +685,19 @@ function collectReviewMediaInBrowser() {
     if (!t || !t.startsWith("http") || seen.has(t)) {
       return;
     }
-    // Avatares nao servem: mostram a cara do autor, nao o produto.
-    if (/\/(avt|sign\/)/i.test(t) || /aweme-avt|user_?avator|user_avatar|user_nick/i.test(t)) {
+    // Avatares nao servem: mostram a cara do autor, nao o produto. Alem de
+    // inuteis para vender, poriam o rosto de um cliente real num anuncio.
+    //
+    // `-avt-` entrou depois de medicao (29/08/2026): dos 15 ficheiros colhidos
+    // num produto com 86 mil avaliacoes, 3 eram avatares servidos como
+    // `.../tos-maliva-avt-0068/...`. O padrao antigo so apanhava `/avt` (barra
+    // antes) e `sign/` (barra depois), e nesta URL o segmento vem entre hifens
+    // e o host e `p16-common-sign.` — nenhum dos dois casava.
+    if (
+      /\/(avt|sign\/)/i.test(t) ||
+      /[-/]avt[-/]/i.test(t) ||
+      /aweme-avt|user_?avator|user_avatar|user_nick/i.test(t)
+    ) {
       return;
     }
     seen.add(t);

@@ -143,6 +143,19 @@ function mergePdpIntoItem(orig, clean, enrichedOk) {
     next.fotos_pdp = pdpPhotos;
   }
 
+  // Mídia das avaliações — o único material com uma pessoa real a usar este
+  // produto, que é o que a TikTok premia e a foto de catálogo nunca tem. Era o
+  // segundo sítio onde se perdia: mesmo depois de a normalização passar a
+  // exportá-la, este merge não a copiava para `itens[]`.
+  // Só sobrescreve quando veio conteúdo: PDP sem secção de avaliações carregada
+  // não pode apagar o que uma passagem anterior já tinha achado.
+  for (const campo of ["fotos_review", "videos_review"]) {
+    const v = Array.isArray(clean[campo]) ? clean[campo] : null;
+    if (v && v.length > 0) {
+      next[campo] = v;
+    }
+  }
+
   const grid = Array.isArray(clean.fotos) ? clean.fotos : null;
   if (grid != null && grid.length > 0) {
     next.fotos = grid;
