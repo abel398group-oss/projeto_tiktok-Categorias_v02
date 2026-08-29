@@ -163,6 +163,23 @@ processo curto + `doctor`.
       testados à mão: local sobe, remoto sem autorização recusa, remoto com
       chave curta recusa, remoto autorizado sobe com aviso.
 
+**Encontrado ao verificar o gerador de vídeo (29/08/2026):**
+
+- [x] **Galeria enriquecida deixava de aparecer na coleta seguinte.** O
+      workspace lia só o snapshot mais recente; como a coleta de categoria não
+      traz galeria, cada coleta nova escondia o enriquecimento anterior. Dos 8
+      produtos com `enrichStatus=ok`, **cinco** estavam invisíveis — 62% de um
+      trabalho que abre o navegador no TikTok e arrisca captcha. Agora cai para
+      o snapshot mais recente que tenha galeria, com a data a viajar junto.
+- [ ] **`send-to-money.mjs` tem a mesma falha** — lê o JSON consolidado da
+      última coleta em vez da API/base, por isso continua a dizer "0 produtos
+      prontos" para produtos já enriquecidos. O caminho do Streamlit (que é o
+      usado na prática) já está corrigido.
+- [ ] **Gerar um vídeo de ponta a ponta e confirmar o ficheiro no Drive.** A
+      correcção do WEBP→JPEG está commitada mas nunca produziu um vídeo
+      completo: a única execução real foi interrompida a meio. Enquanto isso não
+      acontecer, o pipeline de vídeo está por verificar.
+
 **Decidido NÃO fazer, com motivo:**
 
 - **Motor de viabilidade / importação** — prematuro. O caso de uso actual é
