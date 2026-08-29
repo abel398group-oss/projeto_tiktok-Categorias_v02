@@ -73,7 +73,88 @@ export function calcularEstatisticas(linhas) {
       n: ritmos.length
     },
     nota: { mediana: arred(mediana(notas)), n: notas.length },
-    lojas: lojas.size
+    lojas: lojas.size,
+    concorrencia: perfilDeConcorrencia(lista)
+  };
+}
+
+/**
+ * Forma da concorrência na categoria: pulverizada ou dominada por uma loja?
+ *
+ * Contar lojas distintas não responde à pergunta que importa para quem promove
+ * como afiliado. Vinte lojas com uma delas a fazer 80% das vendas é briga com
+ * incumbente; vinte lojas repartidas é espaço. O número de lojas é o mesmo nos
+ * dois casos — por isso `lojas: 20` sozinho não decide nada.
+ *
+ * Ideia vinda do `perfilDaVitrine` do product-seeker: um agregado por categoria
+ * que classifica o FORMATO da concorrência e devolve um rótulo legível. Lá era
+ * sobre tipos de anúncio do Mercado Livre; aqui é sobre quem detém as vendas.
+ *
+ * Os cortes (50% / 25%) são convenção declarada, não medição — por isso viajam
+ * no resultado (`cortes`) em vez de ficarem escondidos no código. E `n` viaja
+ * junto: concentração medida sobre 4 produtos é anedota, não estrutura.
+ */
+export function perfilDeConcorrencia(linhas) {
+  const lista = Array.isArray(linhas) ? linhas : [];
+  /** @type {Map<string, number>} */
+  const porLoja = new Map();
+  let total = 0;
+
+  for (const l of lista) {
+    const loja = String(l?.loja ?? "").trim();
+    if (!loja || loja === "—") continue;
+    const v = Number(String(l?.vendas ?? "").replace(/[^\d]/g, ""));
+    if (!Number.isFinite(v) || v <= 0) continue;
+    porLoja.set(loja, (porLoja.get(loja) ?? 0) + v);
+    total += v;
+  }
+
+  // Sem vendas atribuídas a loja não há concentração a medir — e dizer isso é
+  // melhor do que devolver 0%, que se leria como "perfeitamente pulverizada".
+  if (total <= 0 || porLoja.size === 0) {
+    return { medida: false, motivo: "sem vendas atribuídas a loja", lojasComVenda: 0 };
+  }
+
+  const ordenadas = [...porLoja.entries()].sort((a, b) => b[1] - a[1]);
+  const pct = (n) => Math.round((n / total) * 1000) / 10;
+  const topLoja = pct(ordenadas[0][1]);
+  const top3 = pct(ordenadas.slice(0, 3).reduce((s, [, v]) => s + v, 0));
+  const produtosComVenda = lista.filter(
+    (l) => Number(String(l?.vendas ?? "").replace(/[^\d]/g, "")) > 0
+  ).length;
+
+  /**
+   * Abaixo disto a concentração não descreve a categoria, descreve a amostra.
+   *
+   * A primeira execução provou-o: as categorias que apareceram como "mais
+   * dominadas" tinham TODAS um único produto com venda — 100% numa loja porque
+   * só havia uma loja. Ordenar por concentração assim devolveria uma lista das
+   * categorias mais VAZIAS, não das mais disputadas, e a leitura seria o
+   * oposto da verdade.
+   */
+  const MIN_PRODUTOS_PARA_LER = 8;
+  const amostraSuficiente = produtosComVenda >= MIN_PRODUTOS_PARA_LER;
+
+  const leitura = !amostraSuficiente
+    ? "amostra pequena"
+    : topLoja >= 50
+      ? "dominada"
+      : top3 >= 25
+        ? "concentrada"
+        : "pulverizada";
+
+  return {
+    medida: true,
+    lojasComVenda: ordenadas.length,
+    // `n` da medição: quantos produtos entraram na conta de concentração.
+    produtosComVenda,
+    amostraSuficiente,
+    minProdutosParaLer: MIN_PRODUTOS_PARA_LER,
+    topLojaPct: topLoja,
+    topLojaNome: ordenadas[0][0],
+    top3Pct: top3,
+    leitura,
+    cortes: { dominada: "top1 ≥ 50%", concentrada: "top3 ≥ 25%", minimo: `${MIN_PRODUTOS_PARA_LER} produtos com venda` }
   };
 }
 
