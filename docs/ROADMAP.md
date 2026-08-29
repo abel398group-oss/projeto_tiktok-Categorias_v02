@@ -116,11 +116,26 @@ processo curto + `doctor`.
 - [x] **Score devolve confiança**: `confianca` / `confiancaPct` / `faltando[]`.
       O número do score não mudou — decidir quanto vale um campo ausente é
       decisão de negócio. Medido: 20.107 completa, 233 parcial, 3 fraca.
-- [ ] **Sinal monotónico para "em ascensão"**: contador cumulativo (nº de
-      avaliações) em vez de delta puro. Delta de número que pode descer mente
-      exactamente onde interessa.
-- [ ] **Encolhimento para amostra pequena** no crescimento, para o topo não
-      virar produto de 2 vendas (`(delta + K·base)/(n + K)`).
+- [x] ~~**Sinal monotónico para "em ascensão"**~~ — **medido, não se aplica.**
+      A recomendação assumia que o contador pode descer (no ML o estoque desce
+      porque o vendedor repõe). Medido na janela de 43,1 h que o relatório usa:
+      **`salesCount` desceu 0 vezes em 18.005 pares.** O nosso sinal já é
+      cumulativo. (`ratingTotal` desceu 1 vez em 18.005 — avaliação removida;
+      irrelevante nesta escala.)
+- [x] ~~**Encolhimento para amostra pequena**~~ — **medido, faria mal.**
+      Dos 116 produtos com o rótulo «em ascensão» (≥10 vendas/dia), só **6 têm
+      menos de 100 vendas totais** — e esses 6 são ascensão legítima, não ruído:
+      ex. «Pins Religioso», 22 vendas totais com delta 18, ou seja saiu de 4 em
+      43 h. Encolher apagaria sinal correcto. Além disso o `TableGrowth` já
+      mostra `vendas ant.` e `vendas atual` ao lado do `%` (o `n` já viaja
+      junto) e **não tem ordenação por coluna**, por isso base pequena não
+      consegue flutuar para o topo pela percentagem.
+- [x] **Verificado: `salesCount` não vem em faixas.** A suspeita era que o
+      TikTok arredondasse ("+1.000 vendidos") e que `delta 0` escondesse venda
+      real em produto grande. Medido: 1.344 valores distintos entre 1.659
+      produtos na faixa 1.000–9.999, com valores exactos e consecutivos (1000,
+      1001, 1002…). `delta 0` significa mesmo "não vendeu" — o rótulo «parado»
+      é honesto.
 - [ ] **Tripwire de subida**: a API recusa subir fora de `127.0.0.1` sem chave
       forte. Hoje "roda local" é promessa, não trava.
 
