@@ -117,6 +117,91 @@ function parseVendas(v) {
   return Number.isNaN(n) ? 0 : n;
 }
 
+/**
+ * Pasta de entrega, lida do `config.toml` do MoneyPrinterTurbo.
+ *
+ * Fonte única de propósito: o caminho já está configurado lá (é o que a página
+ * Produtos usa) e duplicá-lo aqui garantia que um dia divergissem.
+ */
+async function pastaDeEntrega() {
+  try {
+    const toml = await fs.readFile(path.join(MONEY_HOME, "config.toml"), "utf8");
+    const m = toml.match(/^\s*pasta_saida_videos\s*=\s*"(.+?)"\s*$/m);
+    return m ? m[1].replace(/\\\\/g, "\\") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Nome de ficheiro seguro no Windows: sem acento e sem `\ / : * ? " < > |`. */
+function nomeSeguro(texto, limite) {
+  return (
+    String(texto ?? "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, limite) || "produto"
+  );
+}
+
+/** `.../c/nutrition-wellness/700646?...` → `nutrition-wellness` */
+function slugDaCategoria(categoryUrl) {
+  const m = String(categoryUrl ?? "").match(/\/c\/([^/?]+)/i);
+  return m ? m[1] : "sem-categoria";
+}
+
+/**
+ * Copia o vídeo para a pasta sincronizada e escreve o `.txt` ao lado.
+ *
+ * Sem isto o vídeo ficava em `storage/tasks/<uuid>/final-1.mp4` — nome opaco,
+ * fora do Drive, na prática invisível para quem vai publicar. A página Produtos
+ * já entregava assim; a ponte em lote não, e por isso o que ela gerava não
+ * chegava a lado nenhum. Verificado em 29/08/2026: o primeiro vídeo gerado pela
+ * ponte ficou órfão em storage/tasks.
+ *
+ * O `.txt` leva o LINK do produto e os números reais. Não gera texto de venda
+ * com IA de propósito: quem faz isso é a página Produtos, e inventar aqui uma
+ * segunda versão do argumento comercial criaria duas fontes a divergir.
+ *
+ * Falhar a entrega não derruba a corrida — o vídeo existe e o caminho fica
+ * registado; o que se perde é a cópia, e isso diz-se em vez de rebentar.
+ *
+ * @returns {Promise<string | null>} caminho final, ou `null` se não deu
+ */
+async function entregarVideo(videoAbsoluto, produto) {
+  const destino = await pastaDeEntrega();
+  if (!destino) {
+    log("  ⚠️ pasta_saida_videos não configurada — vídeo fica só em storage/tasks/");
+    return null;
+  }
+  try {
+    await fs.mkdir(destino, { recursive: true });
+    const base = `${slugDaCategoria(produto.categoria_url)}__${nomeSeguro(produto.nome, 60)}`;
+    const alvoVideo = path.join(destino, `${base}.mp4`);
+    await fs.copyFile(videoAbsoluto, alvoVideo);
+    await fs.writeFile(
+      path.join(destino, `${base}.txt`),
+      [
+        produto.nome ?? "",
+        "",
+        `Preço: R$ ${Number(produto.preco).toFixed(2)}`,
+        `Vendas: ${parseVendas(produto.vendas).toLocaleString("pt-BR")}`,
+        "",
+        `Link: ${produto.link_produto ?? ""}`,
+        "",
+        `Gerado em ${new Date().toLocaleString("pt-BR")} · product_id ${produto.product_id}`
+      ].join("\n"),
+      "utf8"
+    );
+    return alvoVideo;
+  } catch (e) {
+    log(`  ⚠️ falhou a cópia para ${destino}: ${e.message}`);
+    return null;
+  }
+}
+
 /** Chave e endereço da API de analytics (a mesma que o painel usa). */
 const ANALYTICS_API = process.env.ANALYTICS_API_URL || "http://127.0.0.1:3333";
 const ANALYTICS_KEY = process.env.ANALYTICS_API_KEY || "";
@@ -365,6 +450,11 @@ async function main() {
       const videoPath = result?.videos?.[0] || result?.video_path || result?.video;
       log(`  ✅ Vídeo pronto: ${videoPath}`);
 
+      // O gerador devolve o caminho relativo ao `storage/` dele.
+      const videoAbsoluto = path.join(MONEY_HOME, "storage", String(videoPath).replace(/^[/\\]+/, ""));
+      const entregue = await entregarVideo(videoAbsoluto, p);
+      if (entregue) log(`  📁 Entregue: ${entregue}`);
+
       // Casar pelo product_id, que é a chave real destes dados. A versão
       // anterior comparava `item.id`, campo que não existe aqui: `undefined ===
       // undefined` dá verdadeiro e o findIndex devolvia SEMPRE o índice 0,
@@ -373,6 +463,7 @@ async function main() {
       if (idx >= 0) {
         itens[idx].video_gerado = true;
         itens[idx].video_path = videoPath;
+        itens[idx].video_entregue_em = entregue ?? null;
         itens[idx].video_task_id = taskId;
         itens[idx].video_gerado_em = new Date().toISOString();
         delete itens[idx].video_erro;
