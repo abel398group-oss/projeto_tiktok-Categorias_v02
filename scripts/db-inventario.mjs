@@ -33,8 +33,13 @@ const PAPEL = {
   products: "identidade do produto (productId do TikTok). Acumula entre coletas.",
   product_snapshots: "preço/vendas/nota do produto NAQUELA coleta. É a série temporal.",
   sellers: "identidade da loja.",
-  seller_snapshots: "estado da loja naquela coleta.",
-  raw_payloads: "envelope bruto do import. Existe para permitir reprocessar sem recoletar."
+  seller_snapshots:
+    "estado da loja naquela coleta. SEM LEITOR HOJE, e mantida de propósito (23/08/2026): " +
+    "é série histórica — barata de guardar, impossível de refazer depois. Consumidor previsto no ROADMAP.",
+  raw_payloads:
+    "envelope bruto do import, para reprocessar sem recoletar. Podada automaticamente: " +
+    "só os N mais recentes ficam (RAW_PAYLOADS_MANTER, padrão 5). Decidido em 23/08/2026, " +
+    "quando tinha 60 linhas e 235 MB — 27% da base — sem ninguém ler."
 };
 
 /** modelo Prisma → tabela no Postgres */

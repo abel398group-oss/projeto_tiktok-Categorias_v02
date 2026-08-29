@@ -98,15 +98,24 @@ processo curto + `doctor`.
 - [ ] **`exhausted` + motivo de parada no `ScrapeRun`**: o scraper sabe se parou
       por fim da lista ou por teto de cliques, mas só imprime no log. Sem isso
       não se distingue categoria colhida até ao fim de categoria cortada.
-- [ ] **Decidir `RawPayload`**: escrito em todo import (~36 MB/corrida) e **lido
-      por ninguém** (confirmado por grep). Ou existe caminho de reprocessamento,
-      ou para de escrever.
-- [ ] **`npm run db:inventario`**: linhas × disco × quem escreve × quem lê, por
-      tabela (adaptado a Prisma: grepar `prisma.<modelo>.`). Responde ao item
-      anterior com número em vez de palpite.
-- [ ] **Score devolve confiança**: `{ score, confianca, faltando: [...] }` em vez
-      de número seco — hoje campo ausente vira ponto perdido em silêncio e
-      produto sem nota fica indistinguível de produto com nota má.
+- [x] **`npm run db:inventario`**: linhas × disco × quem escreve × quem lê, por
+      tabela (adaptado a Prisma: grepar `prisma.<modelo>.`). Primeira execução
+      mediu 886 MB de base com **350 MB (40%) em duas tabelas sem leitor**.
+- [x] **`RawPayload` decidido — podar, manter os 5 mais recentes.** O propósito
+      (reprocessar sem recoletar) só precisa do passado recente. `RAW_PAYLOADS_MANTER`
+      controla; poda corre no fim de cada import e falha em silêncio sem derrubar
+      o import (o dado que importa já foi gravado). Executado: 60 → 5 linhas,
+      235,3 → 34,8 MB, base 886 → 694 MB.
+      *Nota:* `DELETE` no Postgres não devolve espaço ao SO — foi preciso
+      `VACUUM FULL` (0,7 s aqui). A poda automática impede o crescimento; o
+      ficheiro só encolhe com VACUUM FULL manual.
+- [x] **`SellerSnapshot` decidido — manter.** Sem leitor hoje, mas é série
+      histórica: barata de guardar, impossível de refazer depois, e o ROADMAP já
+      prevê consumidor para métricas de loja. A decisão está escrita no `PAPEL`
+      do inventário para não se rediscutir do zero na próxima execução.
+- [x] **Score devolve confiança**: `confianca` / `confiancaPct` / `faltando[]`.
+      O número do score não mudou — decidir quanto vale um campo ausente é
+      decisão de negócio. Medido: 20.107 completa, 233 parcial, 3 fraca.
 - [ ] **Sinal monotónico para "em ascensão"**: contador cumulativo (nº de
       avaliações) em vez de delta puro. Delta de número que pode descer mente
       exactamente onde interessa.

@@ -145,6 +145,53 @@ function parseDate(iso) {
 }
 
 /**
+ * Quantos envelopes brutos guardar. `0` desliga a poda.
+ *
+ * O envelope existe para permitir reprocessar sem recoletar do TikTok — e para
+ * isso o que interessa é o passado RECENTE, não o histórico inteiro.
+ */
+export const MANTER_ENVELOPES = Number.isFinite(Number(process.env.RAW_PAYLOADS_MANTER))
+  ? Number(process.env.RAW_PAYLOADS_MANTER)
+  : 5;
+
+/**
+ * Apaga os envelopes mais antigos, mantendo os `MANTER_ENVELOPES` recentes.
+ *
+ * Motivo (medido em 23/08/2026 por `npm run db:inventario`): `raw_payloads`
+ * tinha 60 linhas e **235 MB** — 27% da base inteira — e nenhum código lia
+ * dela. Cada import junta ~4 MB. Guardar o histórico completo pagava o preço
+ * de um caminho de reprocessamento que nunca foi escrito.
+ *
+ * Apagar aqui é seguro: `RawPayload` é o filho em todas as suas relações
+ * (aponta para ScrapeRun/Product/Seller e ninguém aponta para ela), por isso
+ * remover linha antiga não deixa referência órfã em lado nenhum.
+ *
+ * Erro na poda NÃO derruba o import: o dado que interessa já foi gravado, e
+ * falhar a limpeza é problema de espaço, não de integridade.
+ *
+ * @param {import("@prisma/client").PrismaClient} prisma
+ * @returns {Promise<number>} quantos foram removidos
+ */
+export async function podarEnvelopesAntigos(prisma) {
+  if (!Number.isFinite(MANTER_ENVELOPES) || MANTER_ENVELOPES <= 0) return 0;
+  try {
+    const manter = await prisma.rawPayload.findMany({
+      orderBy: { capturedAt: "desc" },
+      take: MANTER_ENVELOPES,
+      select: { id: true }
+    });
+    if (manter.length < MANTER_ENVELOPES) return 0;
+    const { count } = await prisma.rawPayload.deleteMany({
+      where: { id: { notIn: manter.map((r) => r.id) } }
+    });
+    return count;
+  } catch (e) {
+    console.warn(`[raw] poda de envelopes falhou (o import está OK): ${e?.message ?? e}`);
+    return 0;
+  }
+}
+
+/**
  * @param {import("@prisma/client").PrismaClient} prisma
  * @param {object} opts
  * @param {string} opts.produtosText — conteúdo exacto de `dados_produtos.json` (UTF-8)
@@ -422,6 +469,11 @@ export async function importOutputFromStrings(prisma, opts) {
       sellerRefId: null
     }
   });
+
+  const podados = await podarEnvelopesAntigos(prisma);
+  if (podados > 0) {
+    console.log(`[raw] ${podados} envelope(s) antigo(s) removido(s) — mantidos os ${MANTER_ENVELOPES} mais recentes.`);
+  }
 
   return {
     skipped: false,
