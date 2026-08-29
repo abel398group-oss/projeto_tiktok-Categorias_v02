@@ -121,6 +121,13 @@ model ProductSnapshot {
   votesByStar              Json?   @map("votes_by_star")
   images                   Json?
   pdpImages                Json?   @map("pdp_images")
+  /// Fotos publicadas por CLIENTES nas avaliações — pessoa real a usar o
+  /// produto, que é o que a TikTok premia e a foto de catálogo nunca tem.
+  ///
+  /// Coluna própria, nunca misturada com `pdpImages`: é conteúdo de terceiros e
+  /// publicá-lo é decisão de quem publica, não automatismo. Separado, a
+  /// interface pode oferecê-lo como escolha; misturado, entraria sozinho.
+  reviewImages             Json?   @map("review_images")
   dataQuality              Json?   @map("data_quality")
 
   productRefId String  @map("product_ref_id")

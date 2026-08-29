@@ -133,6 +133,24 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     }
   }
   const imageUrls = extractOrderedImageUrls(snapImagens).slice(0, MAX_PREVIEW_IMAGES);
+
+  /**
+   * Fotos de clientes nas avaliações — o único material da base com uma pessoa
+   * real a usar este produto.
+   *
+   * Lidas de `snapImagens` (e não de `snap`) pelo mesmo motivo que a galeria:
+   * vêm do enriquecimento, e a coleta de categoria seguinte cria um snapshot
+   * novo sem elas. Vão à parte de `imageUrls` de propósito — quem consome
+   * decide se as usa, porque é conteúdo de terceiros.
+   */
+  const fotosReview = (() => {
+    const b = snapImagens?.reviewImages;
+    const lista = Array.isArray(b) ? b : typeof b === "string" ? [b] : [];
+    return lista
+      .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.url : null))
+      .filter((u) => typeof u === "string" && u.trim().startsWith("http"))
+      .slice(0, MAX_PREVIEW_IMAGES);
+  })();
   const hasPdpImages = (() => {
     const b = snapImagens?.pdpImages;
     if (typeof b === "string") {
@@ -204,6 +222,8 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     link: line.link,
     categoryUrl: product.categoryUrl ?? null,
     imageUrls,
+    /** Fotos de clientes nas avaliações — separadas da galeria, ver acima. */
+    fotosReview,
     /** `true` = a galeria não é desta coleta; veio do snapshot abaixo. */
     imagensDeOutroRun,
     /** Quando a galeria foi realmente capturada — a data viaja com a foto. */

@@ -379,6 +379,11 @@ export async function importOutputFromStrings(prisma, opts) {
         votesByStar: toJson(item.votos_por_estrela),
         images: toJson(snapshotImages),
         pdpImages: toJson(item.fotos_pdp),
+        // Fotos de clientes nas avaliações — o único material da base com uma
+        // pessoa real a usar o produto. Coluna à parte de `pdpImages` para a
+        // interface as poder oferecer como escolha, em vez de entrarem sozinhas
+        // no vídeo: é conteúdo de terceiros.
+        reviewImages: toJson(item.fotos_review),
         dataQuality,
         productRefId: row.id,
         scrapeRunId
