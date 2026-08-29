@@ -20,6 +20,10 @@
  * `python main.py` na pasta dele. O Streamlit (8501) é outra coisa e não serve.
  */
 
+// Carrega o .env da raiz: este script fala com a API de analytics e precisa da
+// ANALYTICS_API_KEY. Sem isto ia sem chave, levava 401 e concluía "0 produtos
+// prontos" — indistinguível de "não há produto com galeria".
+import "./load-root-env.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -113,7 +117,43 @@ function parseVendas(v) {
   return Number.isNaN(n) ? 0 : n;
 }
 
-/** Fotos do produto, preferindo as da página de produto (maiores). */
+/** Chave e endereço da API de analytics (a mesma que o painel usa). */
+const ANALYTICS_API = process.env.ANALYTICS_API_URL || "http://127.0.0.1:3333";
+const ANALYTICS_KEY = process.env.ANALYTICS_API_KEY || "";
+
+/**
+ * Fotos do produto vindas da BASE, não do ficheiro da última coleta.
+ *
+ * O endpoint devolve a galeria mais recente que EXISTE para o produto, mesmo
+ * que tenha sido capturada numa coleta anterior — é o mesmo caminho que o
+ * painel e o Streamlit usam. Sem isto, produto enriquecido ficava invisível
+ * assim que uma coleta de categoria nova reescrevia o consolidado.
+ *
+ * Devolve `[]` (e não lança) quando a API está fora ou o produto não existe:
+ * a ponte deve saltar o produto, não morrer.
+ *
+ * @param {string} productId
+ * @returns {Promise<string[]>}
+ */
+async function fotosDaBase(productId) {
+  const pid = String(productId ?? "").trim();
+  if (!pid) return [];
+  try {
+    const res = await fetch(`${ANALYTICS_API}/analytics/product-workspace/${encodeURIComponent(pid)}`, {
+      headers: ANALYTICS_KEY ? { "x-api-key": ANALYTICS_KEY } : {}
+    });
+    if (!res.ok) return [];
+    const j = await res.json();
+    return (Array.isArray(j?.imageUrls) ? j.imageUrls : [])
+      .filter((u) => typeof u === "string" && u.startsWith("http"))
+      // A galeria mistura ficheiros de vídeo do CDN; aqui só entram imagens.
+      .filter((u) => !/\.(mp4|mov|mkv|avi)(\?|$)/i.test(u));
+  } catch {
+    return [];
+  }
+}
+
+/** Fotos do produto no ficheiro consolidado (fallback; ver `fotosDaBase`). */
 function fotosDoProduto(p) {
   const lista = Array.isArray(p?.fotos_pdp) && p.fotos_pdp.length ? p.fotos_pdp : p?.fotos;
   return (Array.isArray(lista) ? lista : []).filter(
@@ -130,7 +170,11 @@ function fotosDoProduto(p) {
  * @returns {Promise<string[]>} caminhos locais absolutos
  */
 async function baixarFotos(produto, destino, limite) {
-  const urls = fotosDoProduto(produto);
+  // `fotosResolvidas` vem da base (ver `fotosDaBase`); o ficheiro consolidado
+  // só serve de rede de segurança para quem chame isto sem passar pela selecção.
+  const urls = Array.isArray(produto?.fotosResolvidas) && produto.fotosResolvidas.length
+    ? produto.fotosResolvidas
+    : fotosDoProduto(produto);
   if (urls.length === 0) return [];
   await fs.mkdir(destino, { recursive: true });
 
@@ -201,14 +245,41 @@ async function main() {
     return vendas >= minVendas && temPreco && temLink && !p.video_gerado;
   });
 
-  const semGaleria = candidatos.filter((p) => fotosDoProduto(p).length < MIN_FOTOS);
-  const qualificados = candidatos
-    .filter((p) => fotosDoProduto(p).length >= MIN_FOTOS)
-    .sort((a, b) => parseVendas(b.vendas) - parseVendas(a.vendas))
-    .slice(0, maxVideos);
-
   log(`Candidatos (vendas ≥ ${minVendas}, com preço e link): ${candidatos.length}`);
-  log(`Prontos para vídeo (≥ ${MIN_FOTOS} fotos): ${qualificados.length}`);
+
+  /*
+   * A galeria vem da BASE, não deste ficheiro.
+   *
+   * `output/dados_produtos.json` é o consolidado da última coleta de categoria,
+   * e essa coleta só guarda a miniatura — a galeria só existe depois do
+   * `pdp:enrich`. Como cada coleta reescreve este ficheiro, um produto
+   * enriquecido na semana passada aparecia aqui com UMA foto e era descartado,
+   * apesar de a galeria estar guardada na base. Medido em 29/08/2026: cinco dos
+   * oito produtos enriquecidos estavam invisíveis assim.
+   *
+   * Só os melhores candidatos são consultados (uma chamada HTTP cada), em ordem
+   * de vendas, até juntar os vídeos pedidos — perguntar pelos 6.000 seria
+   * absurdo para escolher 1.
+   */
+  const porVendas = [...candidatos].sort((a, b) => parseVendas(b.vendas) - parseVendas(a.vendas));
+  const tetoConsultas = Math.max(maxVideos * 10, 40);
+  const qualificados = [];
+  const semGaleria = [];
+
+  for (const p of porVendas.slice(0, tetoConsultas)) {
+    if (qualificados.length >= maxVideos) break;
+    const fotos = await fotosDaBase(String(p.product_id ?? ""));
+    if (fotos.length >= MIN_FOTOS) {
+      // `fotosResolvidas` é o que a geração vai usar — o ficheiro fica só com
+      // os metadados (vendas, preço, link), que são desta coleta e estão certos.
+      qualificados.push({ ...p, fotosResolvidas: fotos });
+    } else {
+      semGaleria.push(p);
+    }
+  }
+
+  log(`Prontos para vídeo (≥ ${MIN_FOTOS} fotos na base): ${qualificados.length}` +
+      ` — consultados ${Math.min(tetoConsultas, porVendas.length)} dos melhores`);
 
   if (semGaleria.length > 0) {
     log(`\n⚠️  ${semGaleria.length} produto(s) ficaram de fora por terem menos de ${MIN_FOTOS} fotos.`);
@@ -244,7 +315,7 @@ async function main() {
     log(`\n[${i + 1}/${qualificados.length}] ${nome.slice(0, 60)} — ${vendas} vendas — R$ ${preco}`);
 
     if (dryRun) {
-      log(`  [DRY-RUN] usaria ${Math.min(fotosDoProduto(p).length, maxFotos)} foto(s) do próprio produto`);
+      log(`  [DRY-RUN] usaria ${Math.min((p.fotosResolvidas ?? []).length, maxFotos)} foto(s) do próprio produto (galeria da base)`);
       continue;
     }
 
