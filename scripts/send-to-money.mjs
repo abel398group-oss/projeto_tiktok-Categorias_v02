@@ -24,6 +24,7 @@
 // ANALYTICS_API_KEY. Sem isto ia sem chave, levava 401 e concluía "0 produtos
 // prontos" — indistinguível de "não há produto com galeria".
 import "./load-root-env.mjs";
+import { montarRoteiro } from "./lib/roteiro-video.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +48,16 @@ const MATERIAL_ROOT = path.join(MONEY_HOME, "storage", "local_videos", "produtos
 
 const MONEY_API = process.env.MONEY_API || "http://127.0.0.1:8080/api/v1";
 const POLL_INTERVAL_MS = 5000;
-const MAX_POLL_ATTEMPTS = 360; // 30 min
+/*
+ * 30 min nao chegavam. Medido em 30/08/2026: um video de 19 s a partir de 4
+ * fotos ainda estava a renderizar aos 29 minutos, a ponte desistiu e escreveu
+ * "0 video(s)" — e o ficheiro ficou pronto pouco depois. Desistir cedo nao
+ * cancela nada do lado do gerador; so faz a ponte mentir sobre o resultado.
+ *
+ * O numero certo depende do gerador ser lento (MoviePy monta cada fotograma
+ * em Python). Enquanto for esse o motor, 90 min e a margem honesta.
+ */
+const MAX_POLL_ATTEMPTS = 1080; // 90 min
 
 /** Aceita `--flag valor` e `--flag=valor` — a documentação prometia as duas. */
 function arg(nome, omissao) {
@@ -62,8 +72,18 @@ function arg(nome, omissao) {
 const dryRun = process.argv.includes("--dry-run");
 const maxVideos = Number(arg("max", 10));
 const minVendas = Number(arg("min-vendas", 100));
-/** Quantas fotos por vídeo. Cada foto vira ~5 s de clipe. */
-const maxFotos = Number(arg("fotos", 6));
+/**
+ * Quantas fotos por vídeo. Cada foto vira um clipe de `video_clip_duration`
+ * (5 s), mas quem manda na duração final do vídeo é o ÁUDIO: o gerador usa
+ * tantos clipes quantos couberem na narração e ignora o resto.
+ *
+ * Falta material e o gerador repete as mesmas fotos (`itertools.cycle`);
+ * sobra material e paga-se ~3 min de conversão por foto que nunca aparece.
+ *
+ * Medido em 30/08/2026: o roteiro de `montarRoteiro` dá 18,43 s de áudio, que
+ * a 5 s por clipe consome 4 fotos. Se mexer no roteiro, mexa aqui também.
+ */
+const maxFotos = Number(arg("fotos", 4));
 /**
  * Fotos mínimas para valer a pena gerar.
  *
@@ -104,7 +124,11 @@ async function pollTask(taskId) {
     }
     if (i % 12 === 0) log(`  ⏳ ${taskId} · estado ${state} (${i * 5}s)`);
   }
-  throw new Error("Timeout aguardando vídeo");
+  const minutos = Math.round((MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 60000);
+  throw new Error(
+    `o gerador ainda nao terminou depois de ${minutos} min. O render CONTINUA a correr ` +
+    `do lado dele — o ficheiro pode aparecer sozinho em storage/tasks/${taskId}/final-1.mp4.`
+  );
 }
 
 function parseVendas(v) {
@@ -238,6 +262,34 @@ async function fotosDaBase(productId) {
   }
 }
 
+/**
+ * Produtos com galeria na base, de qualquer coleta — o universo de candidatos.
+ *
+ * Falha alto de propósito: sem esta lista não há vídeo nenhum a fazer, e
+ * seguir em silêncio para o ficheiro da última coleta era exactamente o
+ * comportamento que escondia sete vídeos prontos.
+ */
+async function listarEnriquecidos() {
+  const url = `${ANALYTICS_API}/analytics/enriched-products?minFotos=${MIN_FOTOS}&limit=500`;
+  let res;
+  try {
+    res = await fetch(url, { headers: ANALYTICS_KEY ? { "x-api-key": ANALYTICS_KEY } : {} });
+  } catch (e) {
+    throw new Error(
+      `API de análise inacessível em ${ANALYTICS_API} (${e?.message ?? e}). ` +
+      "Suba-a com `npm run analytics` — é ela que sabe quais produtos têm galeria."
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      `API de análise respondeu ${res.status} em /analytics/enriched-products` +
+      (res.status === 401 ? " — falta ANALYTICS_API_KEY no .env." : ".")
+    );
+  }
+  const j = await res.json();
+  return Array.isArray(j?.itens) ? j.itens : [];
+}
+
 /** Fotos do produto no ficheiro consolidado (fallback; ver `fotosDaBase`). */
 function fotosDoProduto(p) {
   const lista = Array.isArray(p?.fotos_pdp) && p.fotos_pdp.length ? p.fotos_pdp : p?.fotos;
@@ -322,57 +374,97 @@ async function main() {
   const itens = Array.isArray(payload.itens) ? payload.itens : [];
   log(`Produtos carregados: ${itens.length}`);
 
-  /** Passa em tudo menos, talvez, no número de fotos. */
-  const candidatos = itens.filter((p) => {
-    const vendas = parseVendas(p.vendas);
-    const temPreco = p.preco != null && parseFloat(p.preco) > 0;
-    const temLink = typeof p.link_produto === "string" && p.link_produto.includes("tiktok.com");
-    return vendas >= minVendas && temPreco && temLink && !p.video_gerado;
-  });
-
-  log(`Candidatos (vendas ≥ ${minVendas}, com preço e link): ${candidatos.length}`);
-
   /*
-   * A galeria vem da BASE, não deste ficheiro.
+   * OS CANDIDATOS VÊM DA BASE, NÃO DESTE FICHEIRO.
    *
-   * `output/dados_produtos.json` é o consolidado da última coleta de categoria,
-   * e essa coleta só guarda a miniatura — a galeria só existe depois do
-   * `pdp:enrich`. Como cada coleta reescreve este ficheiro, um produto
-   * enriquecido na semana passada aparecia aqui com UMA foto e era descartado,
-   * apesar de a galeria estar guardada na base. Medido em 29/08/2026: cinco dos
-   * oito produtos enriquecidos estavam invisíveis assim.
+   * `output/dados_produtos.json` é o consolidado da ÚLTIMA coleta, e cada
+   * coleta reescreve-o. O enriquecimento (a visita à PDP que traz a galeria) é
+   * caro e acontece uma vez, numa coleta qualquer — por isso um produto
+   * enriquecido na semana passada desaparece deste ficheiro assim que corre
+   * uma coleta que não o inclua, mesmo com as 10 fotos guardadas na base.
    *
-   * Só os melhores candidatos são consultados (uma chamada HTTP cada), em ordem
-   * de vendas, até juntar os vídeos pedidos — perguntar pelos 6.000 seria
-   * absurdo para escolher 1.
+   * Medido em 30/08/2026: 8 produtos enriquecidos na base, 7 com galeria boa,
+   * e ZERO deles neste ficheiro — a ponte dizia "0 produtos prontos" com
+   * material para sete vídeos guardado.
+   *
+   * Como só produto com galeria dá vídeo, a lista de enriquecidos JÁ É o
+   * universo de candidatos: não há nada a filtrar de 6.000 para 40.
    */
+  const enriquecidos = await listarEnriquecidos();
+  const candidatos = enriquecidos
+    .filter((e) => {
+      const vendas = parseVendas(e.vendas);
+      const temPreco = e.preco != null && parseFloat(e.preco) > 0;
+      const temLink = typeof e.link === "string" && e.link.includes("tiktok.com");
+      return vendas >= minVendas && temPreco && temLink;
+    })
+    .map((e) => ({
+      product_id: e.productId,
+      nome: e.nome,
+      preco: e.preco,
+      vendas: e.vendas,
+      avaliacao_media: e.avaliacao_media,
+      avaliacoes_total: e.avaliacoes_total,
+      link_produto: e.link,
+      categoria_url: e.categoryUrl,
+      fotosNaBase: e.fotos
+    }))
+    // `video_gerado` continua a viver no ficheiro: é o histórico do que já saiu.
+    .filter((e) => {
+      const i = acharIndice(itens, e.product_id, e.link_produto);
+      return i < 0 || !itens[i].video_gerado;
+    });
+
+  log(`Com galeria na base (qualquer coleta): ${enriquecidos.length}` +
+      ` · candidatos (vendas ≥ ${minVendas}, ainda sem vídeo): ${candidatos.length}`);
+
   const porVendas = [...candidatos].sort((a, b) => parseVendas(b.vendas) - parseVendas(a.vendas));
-  const tetoConsultas = Math.max(maxVideos * 10, 40);
   const qualificados = [];
   const semGaleria = [];
 
-  for (const p of porVendas.slice(0, tetoConsultas)) {
+  for (const p of porVendas) {
     if (qualificados.length >= maxVideos) break;
     const fotos = await fotosDaBase(String(p.product_id ?? ""));
     if (fotos.length >= MIN_FOTOS) {
-      // `fotosResolvidas` é o que a geração vai usar — o ficheiro fica só com
-      // os metadados (vendas, preço, link), que são desta coleta e estão certos.
       qualificados.push({ ...p, fotosResolvidas: fotos });
     } else {
+      // O endpoint já contou as fotos; cair aqui quer dizer que a galeria
+      // encolheu entre as duas leituras. Raro, mas não é motivo para parar.
       semGaleria.push(p);
     }
   }
 
-  log(`Prontos para vídeo (≥ ${MIN_FOTOS} fotos na base): ${qualificados.length}` +
-      ` — consultados ${Math.min(tetoConsultas, porVendas.length)} dos melhores`);
+  log(`Prontos para vídeo (≥ ${MIN_FOTOS} fotos): ${qualificados.length}`);
+
+  /*
+   * A dica de "o que enriquecer a seguir" sai do ficheiro da última coleta —
+   * é lá que estão os campeões de venda de HOJE, que é o que interessa
+   * enriquecer. Aqui o ficheiro é a fonte certa; para candidatos, não era.
+   */
+  if (qualificados.length < maxVideos) {
+    const jaTemos = new Set(enriquecidos.map((e) => String(e.productId)));
+    const aEnriquecer = itens
+      .filter((p) => {
+        const temLink = typeof p.link_produto === "string" && p.link_produto.includes("tiktok.com");
+        return parseVendas(p.vendas) >= minVendas && temLink && !jaTemos.has(String(p.product_id));
+      })
+      .sort((a, b) => parseVendas(b.vendas) - parseVendas(a.vendas))
+      .slice(0, 3);
+
+    if (aEnriquecer.length > 0) {
+      log(`
+⚠️  Faltam ${maxVideos - qualificados.length} produto(s) para o pedido.`);
+      log("   A coleta de categoria só guarda a miniatura; a galeria vem do enriquecimento.");
+      log("   Mais vendidos da última coleta ainda sem galeria:");
+      for (const p of aEnriquecer) {
+        log(`     npm run pdp:enrich -- --ids=${p.product_id}   # ${String(p.nome).slice(0, 45)}`);
+      }
+    }
+  }
 
   if (semGaleria.length > 0) {
-    log(`\n⚠️  ${semGaleria.length} produto(s) ficaram de fora por terem menos de ${MIN_FOTOS} fotos.`);
-    log("   A coleta de categoria só guarda a miniatura; a galeria vem do enriquecimento.");
-    log("   Para os 3 melhores:");
-    for (const p of semGaleria.sort((a, b) => parseVendas(b.vendas) - parseVendas(a.vendas)).slice(0, 3)) {
-      log(`     npm run pdp:enrich -- --ids=${p.product_id}   # ${String(p.nome).slice(0, 45)}`);
-    }
+    log(`
+(${semGaleria.length} produto(s) com galeria menor do que o esperado foram saltados.)`);
   }
 
   if (!qualificados.length) {
@@ -416,9 +508,7 @@ async function main() {
         method: "POST",
         body: JSON.stringify({
           video_subject: nome,
-          video_script:
-            `${nome}. ${vendas.toLocaleString("pt-BR")} pessoas já compraram. ` +
-            "Veja o link na loja do perfil.",
+          video_script: montarRoteiro(p, vendas),
           // As fotos DO PRODUTO são o material. Nunca "search": o vídeo leva o
           // link deste produto e tem de mostrar este produto.
           video_source: "local",

@@ -40,6 +40,7 @@ import { registerScrapeRunRoute } from "./scrape-run-route.mjs";
 import { registerScrapeAllRoute } from "./scrape-all-route.mjs";
 import { listImportedCategories } from "./lib/categories-catalog.mjs";
 import { hideProduct, unhideProduct, hideProductsBatch, listHiddenProducts } from "./lib/product-hide.mjs";
+import { listEnrichedProducts } from "./lib/enriched-products.mjs";
 import { getCoverageReport } from "./lib/coverage.mjs";
 
 requireDatabaseUrl();
@@ -249,6 +250,21 @@ fastify.get("/analytics/search", async (req) => {
 fastify.get("/analytics/coverage", async () => getCoverageReport(prisma));
 
 fastify.get("/analytics/hidden-products", async () => listHiddenProducts(prisma));
+
+// Candidatos a vídeo: produtos com galeria no banco, de QUALQUER coleta.
+// Ver o cabeçalho de lib/enriched-products.mjs para o porquê de não bastar
+// `/analytics/top-products`.
+fastify.get("/analytics/enriched-products", async (req) => {
+  const num = (v) => {
+    const bruto = Array.isArray(v) ? v[0] : v;
+    const n = Number(bruto);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return listEnrichedProducts(prisma, {
+    minFotos: num(req.query?.minFotos),
+    limit: num(req.query?.limit)
+  });
+});
 
 fastify.post("/analytics/product-hide/:productId", async (req, reply) => {
   const result = await hideProduct(prisma, req.params.productId);

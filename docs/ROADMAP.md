@@ -58,6 +58,116 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
 - [ ] Integração **n8n / WhatsApp** via API (sem acesso SQL directo ao Postgres)
 
+### Vídeo sem o produto — trava aplicada (30/08/2026)
+
+Saiu um vídeo de 11,6 s feito **só** com as duas filmagens do Pexels — um
+homem a ler um tablet — com locução a falar de um anel de prata cravejado. O
+produto anunciado não aparecia em nenhum fotograma, e o link levava a ele.
+
+A regra já estava escrita, em comentário, no próprio `1_Produtos.py`: vídeo de
+TikTok Shop com produto vinculado TEM de mostrar o produto anunciado, senão o
+espectador pensa que o item do link é outro. Faltava alguém a aplicá-la — as
+três validações existentes deixaram passar:
+
+| validação | veredicto | porquê falhou |
+|---|---|---|
+| "tem material?" | passou | dois ficheiros na lista |
+| "tem movimento?" | passou, e **elogiou** | os clipes do Pexels são `.mp4`, logo "sai da categoria slideshow" |
+| linha de créditos | **acertou** | escreveu "Vídeos: Pexels" sozinho — sabia que não havia catálogo, mas só descrevia |
+
+Causa a montante: o produto escolhido (anel, `1733666427145323987`) nunca foi
+enriquecido — tem 1 imagem, a miniatura. A triagem descartou-a e sobraram só
+as aberturas.
+
+Corrigido em `product_video.material_mostra_o_produto`, aplicado nos dois
+sítios: o gerador recusa, e a UI desliga o botão antes de gastar os minutos.
+Fotos de clientes das avaliações contam como produto; só a abertura não conta.
+Testado em `test/services/test_product_video_guard.py` (9 testes) com os
+caminhos exactos da task que falhou.
+
+### Custo do render — MoviePy vs ffmpeg (30/08/2026)
+
+Medido na mesma máquina, mesmo material (4 fotos → vídeo vertical 1080×1920
+com zoom lento + narração):
+
+| motor | tempo | resultado |
+|---|---|---|
+| MoneyPrinterTurbo (MoviePy) | **32 min** | 18,43 s |
+| ffmpeg directo (`zoompan` + `concat`) | **29 s** | 19,3 s |
+
+~66×. A causa é o MoviePy montar cada fotograma em Python; nenhum ajuste de
+encoder resolve isso. O que dava para corrigir sem tocar na arquitectura foi
+feito: `write_videofile` passou a receber `preset` e `threads` (usava o preset
+"medium" do x264 num só fio).
+
+Efeito colateral já sentido: a ponte desistia aos 30 min e escrevia
+"0 vídeo(s)" — o render acabou 3 minutos depois. Timeout subiu para 90 min e a
+mensagem passou a dizer que o render continua do lado do gerador.
+
+**Sobre trocar de repositório:** procurado, e nenhum dos candidatos encaixa
+melhor. Todos os geradores de vídeo curto (incluindo o MoneyPrinterTurbo)
+assumem o oposto deste caso — que não há material e é preciso gerar ou buscar
+imagem, roteiro e voz. Aqui as fotos já existem, os factos já estão medidos e
+o roteiro é escrito a partir deles. O que sobra do MoneyPrinterTurbo que vale
+mesmo a pena é o TTS (`edge-tts`), que é um pacote autónomo. A recomendação é
+um renderizador ffmpeg próprio, não outro repositório — decisão do PO.
+
+### Ponte de vídeo (30/08/2026) — roteiro e candidatos
+
+**O roteiro da narração** (`scripts/lib/roteiro-video.mjs`, testado):
+
+O gerador dimensiona o vídeo pela duração do ÁUDIO (`video.py`,
+`_get_required_video_duration` = áudio + margem) e repete o material com
+`itertools.cycle` quando ele não chega. Ou seja, os dois erros possíveis são
+simétricos: roteiro curto de mais desperdiça fotos convertidas (~3 min cada),
+roteiro longo de mais faz as mesmas fotos repetirem no vídeo.
+
+Medido em 30/08/2026 com o roteiro novo: **áudio de 18,43 s**, que a 5 s por
+clipe consome exactamente 4 fotos. Por isso `--fotos` desceu de 6 para 4. Os
+dois números andam a par — se o roteiro mudar de tamanho, este tem de mudar
+junto — e há um teste que falha se o roteiro voltar a encolher.
+
+O que o roteiro **não** diz, por decisão:
+
+- **Preço.** O vídeo é gerado hoje e publicado depois; preço muda. Dizer
+  "36 reais" quando já são 45 é anúncio enganoso — mesma família do problema
+  que a regra "o vídeo mostra o produto do link" existe para evitar. O TikTok
+  Shop mostra o preço actual no cartão; repetir na narração é risco sem ganho.
+- **Qualquer afirmação sobre o produto.** Não sabemos se é bom nem para quem
+  serve. Sai só o que está medido: nome, vendas, nota com o número de
+  avaliações que a sustenta.
+
+Vendas são arredondadas **para baixo** e ditas como "mais de": o contador só
+sobe, por isso a frase continua verdade daqui a um mês. A nota só entra com
+>= 5 avaliações — 5,0 apoiado em duas pessoas não é nota, é anedota.
+
+**Os candidatos passaram a vir da base** (`/analytics/enriched-products`):
+
+`output/dados_produtos.json` é o consolidado da última coleta e é reescrito a
+cada corrida. O enriquecimento (a visita à PDP que traz a galeria) é caro e
+acontece uma vez — logo, um produto enriquecido na semana passada desaparece
+do ficheiro assim que corre uma coleta que não o inclua, com as fotos todas
+guardadas na base.
+
+Medido em 30/08/2026: **8 produtos enriquecidos, 7 com galeria boa, 0 no
+ficheiro.** A ponte dizia "0 produtos prontos" com material para sete vídeos.
+Como só produto com galeria dá vídeo, a lista de enriquecidos já É o universo
+de candidatos — não há nada a filtrar de 6.000 para 40. O ficheiro continua
+a servir para duas coisas em que é a fonte certa: o histórico de
+`video_gerado` e a dica de "o que enriquecer a seguir" (os campeões de venda
+de hoje).
+
+Isto é a mesma lição da galeria na UI, no mesmo mês: **o banco lembra, o
+ficheiro esquece — quando discordam, ganha o banco.**
+
+**Achado à parte:** `npm test` corria uma lista fixa de 10 ficheiros; havia 16
+na pasta. Cinco suites (21 testes) estavam a ser ignoradas em silêncio — todas
+passavam, foram só esquecidas ao serem criadas. Passou a `node --test
+"test/*.test.mjs"`, que descobre a pasta inteira.
+
+Suíte: 118 → 152. A conta: 118 a correr antes, +21 das suites órfãs religadas,
++13 escritos hoje (roteiro e candidatos).
+
 ### Auditoria do `product-seeker` (23/08/2026) — o que entrou e o que ficou
 
 Leitura completa do repo irmão (`lib/`, `db/`, front e docs) cruzada com o nosso
