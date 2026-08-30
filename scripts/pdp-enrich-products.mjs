@@ -17,6 +17,10 @@ import {
   toDadosProdutoClean
 } from "../src/scrapeCategory.mjs";
 import { extractOrderedImageUrls } from "./lib/extract-image-urls.mjs";
+import { productIdDeUrl, itemMinimoDeUrl } from "../src/scrape/pdp-url.mjs";
+
+/** Link original de cada id que veio de URL, para o fallback saber a PDP. */
+const linkPorId = new Map();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -99,26 +103,56 @@ function jsonItemToNormalized(item, pdpUrl) {
   };
 }
 
+/**
+ * Aceita id nu OU link de produto — ver `src/scrape/pdp-url.mjs`.
+ *
+ * Descobrir produto a navegar é caso de uso real: vês algo bom na app, copias
+ * o link, queres a galeria. Obrigar a extrair o id à mão de uma URL de 120
+ * caracteres era atrito sem motivo.
+ */
+function normalizarEntradas(valores) {
+  const ids = [];
+  for (const bruto of valores) {
+    const t = String(bruto).trim();
+    if (t === "") continue;
+    const id = productIdDeUrl(t);
+    if (id) {
+      ids.push(id);
+      if (id !== t) linkPorId.set(id, t);
+    } else {
+      // Entra na mesma: quem falha a seguir diz porquê, com o valor à vista.
+      ids.push(t);
+    }
+  }
+  return ids;
+}
+
 function parseIds(argv) {
   const out = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith("--ids=")) {
       out.push(...a.slice(6).split(","));
-      return out.map((s) => s.trim()).filter(Boolean);
+      return normalizarEntradas(out);
     }
     if (a === "--ids" && argv[i + 1]) {
       const v = argv[i + 1];
       out.push(...String(v).split(","));
-      return out.map((s) => s.trim()).filter(Boolean);
+      return normalizarEntradas(out);
+    }
+    // `--url=` é o mesmo caminho, com nome que diz ao que vem.
+    if (a.startsWith("--url=")) {
+      out.push(...a.slice(6).split(","));
+      return normalizarEntradas(out);
+    }
+    if (a === "--url" && argv[i + 1]) {
+      out.push(...String(argv[i + 1]).split(","));
+      return normalizarEntradas(out);
     }
   }
   const env = process.env.PDP_PRODUCT_IDS?.trim();
   if (env) {
-    return env
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return normalizarEntradas(env.split(","));
   }
   return [];
 }
@@ -441,7 +475,12 @@ async function main() {
   if (!idsArg.length) {
     // eslint-disable-next-line no-console
     console.error(
-      "Indique product_id: npm run pdp:enrich -- --ids=123,456 ou env PDP_PRODUCT_IDS=123,456"
+      [
+        "Indique o produto:",
+        "  npm run pdp:enrich -- --ids=123,456          (id já na base)",
+        "  npm run pdp:enrich -- --url=<link da PDP>    (produto novo, achado a navegar)",
+        "  ou env PDP_PRODUCT_IDS=123,456"
+      ].join("\n")
     );
     process.exit(1);
   }
@@ -483,10 +522,15 @@ async function main() {
         const reqId = String(reqIdRaw).trim();
         let indices = idIndex.get(reqId) ?? [];
         if (!indices.length) {
-          const fallbackItem = await buildFallbackItemFromDb(reqId);
+          const fallbackItem =
+            (await buildFallbackItemFromDb(reqId)) ??
+            // Produto novo, descoberto por link: não está no output nem na
+            // base, e é exactamente para isso que o link serve. O item vai
+            // vazio de propósito — nome, preço e galeria vêm da PDP.
+            (linkPorId.has(reqId) ? itemMinimoDeUrl(reqId, linkPorId.get(reqId)) : null);
           if (!fallbackItem) {
             // eslint-disable-next-line no-console
-            console.error(`[pdp:enrich] product_id=${reqId} não encontrado em itens[] nem na BD — ignorado`);
+            console.error(`[pdp:enrich] product_id=${reqId} não encontrado em itens[] nem na BD — ignorado. Se é um produto novo, passe o link: npm run pdp:enrich -- --url=<link da PDP>`);
             registar(reqId, "erro", "produto não existe no output nem na base");
             continue;
           }
@@ -494,7 +538,11 @@ async function main() {
           indices = [itens.length - 1];
           idIndex.set(reqId, indices);
           // eslint-disable-next-line no-console
-          console.log(`[pdp:enrich] product_id=${reqId} carregado da BD para fallback do output`);
+          console.log(
+            linkPorId.has(reqId)
+              ? `[pdp:enrich] product_id=${reqId} veio de link — tudo será lido da PDP`
+              : `[pdp:enrich] product_id=${reqId} carregado da BD para fallback do output`
+          );
         }
 
         const baseIdx = indices[0];
