@@ -68,3 +68,62 @@ export function itemMinimoDeUrl(productId, url = "") {
     origem: "link-directo"
   };
 }
+
+/** Domínios de encurtador do TikTok que sabemos existirem. */
+const ENCURTADOR = /^(vt|vm)\.tiktok\.com$/i;
+
+/** @param {string} url */
+export function eLinkEncurtado(url) {
+  try {
+    return ENCURTADOR.test(new URL(String(url).trim()).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve um link encurtado seguindo o redireccionamento.
+ *
+ * É o que o botão de partilha do Android produz — `vt.tiktok.com/ZS9.../` —
+ * por isso é o formato que mais aparece na prática, não um caso de canto.
+ *
+ * O primeiro salto já traz a PDP com o id; o segundo manda para o /login
+ * quando não há sessão. Por isso lemos os `location` pela ordem e ficamos com
+ * o PRIMEIRO que dê id — seguir até ao fim levaria à página de login, que não
+ * tem id nenhum.
+ *
+ * @param {string} url
+ * @param {{ fetchImpl?: typeof fetch, maxSaltos?: number }} [opcoes]
+ * @returns {Promise<string | null>}
+ */
+export async function resolverEncurtado(url, opcoes = {}) {
+  const f = opcoes.fetchImpl ?? fetch;
+  const maxSaltos = opcoes.maxSaltos ?? 5;
+  let actual = String(url).trim();
+
+  for (let i = 0; i < maxSaltos; i++) {
+    let res;
+    try {
+      res = await f(actual, {
+        method: "HEAD",
+        redirect: "manual",
+        headers: { "user-agent": UA }
+      });
+    } catch {
+      return null;
+    }
+    const proximo = res.headers?.get?.("location");
+    if (!proximo) return null;
+
+    const id = productIdDeUrl(proximo);
+    if (id) return id;
+
+    actual = new URL(proximo, actual).toString();
+  }
+  return null;
+}
+
+/** Sem user-agent de browser o encurtador responde de forma diferente. */
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";

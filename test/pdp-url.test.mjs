@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { productIdDeUrl, itemMinimoDeUrl } from "../src/scrape/pdp-url.mjs";
+import { productIdDeUrl, itemMinimoDeUrl, eLinkEncurtado, resolverEncurtado } from "../src/scrape/pdp-url.mjs";
 
 /**
  * Descobrir produto a navegar é caso de uso real — vê-se algo bom na app,
@@ -55,4 +55,39 @@ test("sem link, monta a URL canónica a partir do id", () => {
     itemMinimoDeUrl("1730000000000000000").link_produto,
     "https://shop.tiktok.com/br/pdp/1730000000000000000"
   );
+});
+
+test("reconhece os encurtadores do TikTok", () => {
+  assert.equal(eLinkEncurtado("https://vt.tiktok.com/ZS9BQ5oRJmqCQ-I61XG/"), true);
+  assert.equal(eLinkEncurtado("https://vm.tiktok.com/ZS9ABC/"), true);
+  assert.equal(eLinkEncurtado("https://shop.tiktok.com/br/pdp/1730000000000000000"), false);
+  assert.equal(eLinkEncurtado("lixo"), false);
+});
+
+test("resolve o encurtado pelo primeiro salto que traz id", async () => {
+  // O segundo salto real vai para /login, que não tem id. Parar no primeiro
+  // que dá id é de propósito — seguir até ao fim perdia o produto.
+  const saltos = [
+    "https://shop.tiktok.com/br/pdp/1734383733939013197?share=1",
+    "https://www.tiktok.com/login?redirect_url=x"
+  ];
+  let i = 0;
+  const fetchFalso = async () => ({ headers: { get: () => saltos[i++] ?? null } });
+  assert.equal(
+    await resolverEncurtado("https://vt.tiktok.com/ZS9/", { fetchImpl: fetchFalso }),
+    "1734383733939013197"
+  );
+});
+
+test("desiste em vez de adivinhar quando nenhum salto tem id", async () => {
+  const fetchFalso = async () => ({ headers: { get: () => "https://www.tiktok.com/login" } });
+  assert.equal(
+    await resolverEncurtado("https://vt.tiktok.com/ZS9/", { fetchImpl: fetchFalso, maxSaltos: 3 }),
+    null
+  );
+});
+
+test("rede em baixo devolve null, não rebenta", async () => {
+  const fetchFalso = async () => { throw new Error("ENOTFOUND"); };
+  assert.equal(await resolverEncurtado("https://vt.tiktok.com/ZS9/", { fetchImpl: fetchFalso }), null);
 });

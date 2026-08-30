@@ -17,7 +17,7 @@ import {
   toDadosProdutoClean
 } from "../src/scrapeCategory.mjs";
 import { extractOrderedImageUrls } from "./lib/extract-image-urls.mjs";
-import { productIdDeUrl, itemMinimoDeUrl } from "../src/scrape/pdp-url.mjs";
+import { productIdDeUrl, itemMinimoDeUrl, eLinkEncurtado, resolverEncurtado } from "../src/scrape/pdp-url.mjs";
 
 /** Link original de cada id que veio de URL, para o fallback saber a PDP. */
 const linkPorId = new Map();
@@ -470,8 +470,42 @@ async function buildFallbackItemFromDb(productId) {
   };
 }
 
+/**
+ * Troca links encurtados pelo product_id, seguindo o redireccionamento.
+ *
+ * O botão de partilha do Android produz `vt.tiktok.com/ZS9.../`, por isso é o
+ * formato que mais chega — resolver aqui poupa ao utilizador abrir o link no
+ * browser só para copiar a URL longa.
+ *
+ * @param {string[]} entradas
+ */
+async function resolverEncurtados(entradas) {
+  const out = [];
+  for (const e of entradas) {
+    if (!eLinkEncurtado(e)) {
+      out.push(e);
+      continue;
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[pdp:enrich] a resolver link encurtado ${e}`);
+    const id = await resolverEncurtado(e);
+    if (!id) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[pdp:enrich] nao consegui resolver ${e} — abra o link no browser e use a URL da barra de endereco`
+      );
+      continue;
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[pdp:enrich]   -> product_id=${id}`);
+    linkPorId.set(id, `https://shop.tiktok.com/br/pdp/${id}`);
+    out.push(id);
+  }
+  return out;
+}
+
 async function main() {
-  const idsArg = parseIds(process.argv.slice(2));
+  const idsArg = await resolverEncurtados(parseIds(process.argv.slice(2)));
   if (!idsArg.length) {
     // eslint-disable-next-line no-console
     console.error(
