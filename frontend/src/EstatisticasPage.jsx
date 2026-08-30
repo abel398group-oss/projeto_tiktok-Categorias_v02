@@ -103,7 +103,36 @@ export default function EstatisticasPage() {
                     const q = c.quadrantes;
                     return (
                       <tr key={c.categoria} style={{ borderBottom: "1px solid var(--tk-border)" }}>
-                        <td style={{ padding: "0.35rem 0.45rem", maxWidth: "18rem" }}>{c.categoria.replace(/^TikTok Shop · /, "")}</td>
+                        <td style={{ padding: "0.35rem 0.45rem", maxWidth: "18rem" }}>
+                          {c.categoria.replace(/^TikTok Shop · /, "")}
+                          {/*
+                            Leitura de onde trabalhar: giro × concorrência. É
+                            RELATIVA ao conjunto de hoje — o corte é a mediana
+                            das categorias medidas, não um volume absoluto — por
+                            isso o número e o corte viajam na dica. "Porta
+                            aberta" com 6/dia e com 1.600/dia são a mesma
+                            etiqueta e coisas muito diferentes.
+                          */}
+                          {c.oportunidade?.classificada ? (
+                            <div style={{ marginTop: "0.2rem" }}>
+                              <Tag
+                                kind={
+                                  c.oportunidade.leitura === "porta aberta"
+                                    ? "bom"
+                                    : c.oportunidade.leitura === "evitar"
+                                      ? "ruim"
+                                      : "meio"
+                                }
+                                title={
+                                  `${c.oportunidade.giroDia}/dia (corte: mediana de ${c.oportunidade.corteGiro}/dia entre as categorias medidas) · ` +
+                                  `concorrência ${c.oportunidade.concorrencia}. Leitura relativa ao conjunto de hoje, não volume absoluto.`
+                                }
+                              >
+                                {c.oportunidade.leitura} · {c.oportunidade.giroDia}/dia
+                              </Tag>
+                            </div>
+                          ) : null}
+                        </td>
                         <td style={{ padding: "0.35rem 0.45rem" }}>{e.n}</td>
                         <td style={{ padding: "0.35rem 0.45rem", whiteSpace: "nowrap" }}>
                           {e.vendasPorDia.totalMedido > 0 ? (

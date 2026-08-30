@@ -233,6 +233,8 @@ export async function getCategoryStatsReport(prisma, obterLinhas) {
     }))
     .sort((a, b2) => (b2.estatisticas.vendasPorDia.totalMedido ?? 0) - (a.estatisticas.vendasPorDia.totalMedido ?? 0));
 
+  classificarOportunidadeDeCategoria(categorias);
+
   return {
     scrapeRun: { id: latest.id, collectedAt: latest.collectedAt.toISOString() },
     baselineRun: baseline ? { id: baseline.id, collectedAt: baseline.collectedAt.toISOString() } : null,
@@ -240,6 +242,78 @@ export async function getCategoryStatsReport(prisma, obterLinhas) {
     totalProdutos: linhas.length,
     categorias
   };
+}
+
+/**
+ * Onde vale a pena trabalhar: giro da categoria × quão disputada ela é.
+ *
+ * O painel ordenava produtos e nunca CATEGORIAS. Só que a primeira decisão de
+ * quem promove não é "qual produto", é "qual prateleira" — e as duas coisas que
+ * a determinam já estavam medidas em separado sem nunca se cruzarem: o giro
+ * (vendas/dia somadas) e a concentração (quem detém as vendas).
+ *
+ * Dois eixos em vez de uma nota, de propósito. Uma pontuação única de 74 não
+ * diria se veio de giro alto ou de concorrência fraca, e as duas pedem
+ * decisões diferentes: giro alto com dono é guerra; giro médio pulverizado é
+ * porta aberta. É a mesma razão pela qual `classificarQuadrantes` existe ao
+ * nível do produto.
+ *
+ * O corte do giro é a MEDIANA das categorias medidas, não uma constante: um
+ * "acima de 500/dia" escrito hoje envelhece, a mediana acompanha os dados. Só
+ * entram categorias com giro medido e concentração com amostra suficiente —
+ * as outras ficam `null`, que é diferente de "má".
+ *
+ * @param {Array<{ estatisticas: any, oportunidade?: any }>} categorias — mutado no lugar
+ */
+export function classificarOportunidadeDeCategoria(categorias) {
+  const elegiveis = categorias.filter((c) => {
+    const e = c.estatisticas;
+    return (
+      e?.vendasPorDia?.n > 0 &&
+      Number.isFinite(Number(e?.vendasPorDia?.totalMedido)) &&
+      e?.concorrencia?.medida &&
+      e.concorrencia.amostraSuficiente
+    );
+  });
+
+  // Sem conjunto não há mediana, e sem mediana não há corte honesto.
+  if (elegiveis.length < 4) {
+    for (const c of categorias) {
+      c.oportunidade = { classificada: false, motivo: "conjunto pequeno demais para tirar a mediana do giro" };
+    }
+    return categorias;
+  }
+
+  const corteGiro = mediana(elegiveis.map((c) => Number(c.estatisticas.vendasPorDia.totalMedido)));
+
+  for (const c of categorias) {
+    const e = c.estatisticas;
+    if (!elegiveis.includes(c)) {
+      c.oportunidade = {
+        classificada: false,
+        motivo: !e?.concorrencia?.medida || !e.concorrencia.amostraSuficiente
+          ? "concorrência sem amostra suficiente"
+          : "sem giro medido nesta janela"
+      };
+      continue;
+    }
+    const giro = Number(e.vendasPorDia.totalMedido);
+    const giraMuito = giro >= corteGiro;
+    const temDono = e.concorrencia.leitura === "dominada";
+
+    c.oportunidade = {
+      classificada: true,
+      giroDia: Math.round(giro),
+      corteGiro: Math.round(corteGiro),
+      giraMuito,
+      concorrencia: e.concorrencia.leitura,
+      // Nomes que dizem o que fazer, não notas que exigem interpretação.
+      leitura: giraMuito
+        ? temDono ? "gira, mas tem dono" : "porta aberta"
+        : temDono ? "evitar" : "pouco movimento"
+    };
+  }
+  return categorias;
 }
 
 // Reexporta para quem consome o relatório poder normalizar chaves da mesma forma.
