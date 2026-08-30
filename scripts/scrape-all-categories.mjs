@@ -57,6 +57,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createAntiBanPolicy } from "../src/scrape/anti-ban.mjs";
+import { normalizeCategoryKey } from "./analytics/lib/categories-catalog.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(__dirname, "..");
@@ -464,6 +465,70 @@ export async function contarProdutosColhidos(outputDir) {
  * @param {string} outputDir
  * @returns {Promise<{ exaustiva: boolean, motivo: string, cliques: number } | null>}
  */
+/** Quanto cada leitura de oportunidade vale na ordenação da fila. */
+const PESO_OPORTUNIDADE = {
+  "porta aberta": 3,
+  "gira, mas tem dono": 2,
+  "pouco movimento": 1,
+  evitar: 0
+};
+
+/**
+ * Lê a classificação de oportunidade do painel (`/analytics/category-stats`).
+ *
+ * Devolve um Map de chave-de-categoria normalizada → peso. Vazio quando a API
+ * está fora, demora demais ou responde noutro formato: a fila degrada para a
+ * ordem por rendimento em vez de falhar. Ordenar melhor é um bónus; a coleta
+ * não pode depender do painel estar de pé.
+ *
+ * O pedido é pesado (~40 s nesta base) mas corre UMA vez, no arranque de uma
+ * corrida de horas.
+ *
+ * @returns {Promise<Map<string, number>>}
+ */
+export async function lerOportunidadePorCategoria() {
+  const vazio = new Map();
+  const base = process.env.ANALYTICS_API_URL || "http://127.0.0.1:3333";
+  const chave = process.env.ANALYTICS_API_KEY || "";
+  const limite = Number(process.env.OPORTUNIDADE_TIMEOUT_MS) || 90_000;
+
+  const abortar = new AbortController();
+  const t = setTimeout(() => abortar.abort(), limite);
+  try {
+    console.log("[fila] a pedir a classificação de oportunidade ao painel…");
+    const res = await fetch(`${base}/analytics/category-stats`, {
+      headers: chave ? { "x-api-key": chave } : {},
+      signal: abortar.signal
+    });
+    if (!res.ok) {
+      console.log(`[fila] painel respondeu ${res.status} — a ordenar por rendimento.`);
+      return vazio;
+    }
+    const corpo = await res.json();
+    const mapa = new Map();
+    for (const c of Array.isArray(corpo?.categorias) ? corpo.categorias : []) {
+      const leitura = c?.oportunidade?.classificada ? c.oportunidade.leitura : null;
+      const peso = leitura != null ? PESO_OPORTUNIDADE[leitura] : undefined;
+      if (peso == null) continue;
+      // O relatório agrupa por rótulo legível ("Saúde · Nutrition Wellness ·
+      // 700646"); a fila trabalha com URLs. O id numérico no fim do rótulo é o
+      // que liga os dois sem depender de tradução de nomes.
+      const id = String(c.categoria).match(/(\d{4,})\s*$/)?.[1];
+      if (!id) continue;
+      const cat = CATALOG.find((x) => x.id === id);
+      if (cat) mapa.set(normalizeCategoryKey(keyForCat(cat)), peso);
+    }
+    console.log(`[fila] oportunidade conhecida para ${mapa.size} categoria(s).`);
+    return mapa;
+  } catch (e) {
+    const motivo = e?.name === "AbortError" ? `demorou mais de ${Math.round(limite / 1000)}s` : (e?.message ?? e);
+    console.log(`[fila] não consegui a oportunidade (${motivo}) — a ordenar por rendimento.`);
+    return vazio;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function lerPaginacao(outputDir) {
   try {
     const bruto = await fs.readFile(path.join(outputDir, "dados_produtos.json"), "utf8");
@@ -675,19 +740,50 @@ async function main() {
     const r = rendimento[keyForCat(cat)];
     return Number.isFinite(r?.produtos) ? Number(r.produtos) : null;
   };
+
+  /**
+   * Oportunidade por categoria (giro × concorrência), vinda do painel.
+   *
+   * Rendimento diz onde há MUITO produto; oportunidade diz onde há produto que
+   * vale promover. Uma categoria com 115 produtos parados e dona única rendia
+   * tanto quanto uma pulverizada a girar — e vinha antes na fila só por ter
+   * mais linhas. Esta corrida foi interrompida cinco vezes hoje; quando isso
+   * acontece, o que já foi colhido devia ser a parte que interessa.
+   *
+   * Vem da API porque o cálculo é o mesmo que a tela mostra — reimplementá-lo
+   * aqui criaria uma segunda definição de "oportunidade" a divergir da
+   * primeira. Se a API estiver fora, a fila mantém a ordem por rendimento: é
+   * um afinamento, não um requisito.
+   */
+  const ordemDeOportunidade = await lerOportunidadePorCategoria();
+  const pesoDe = (cat) => ordemDeOportunidade.get(normalizeCategoryKey(keyForCat(cat))) ?? null;
+
   pending.sort((a, b) => {
     const ra = rendimentoDe(a);
     const rb = rendimentoDe(b);
+    // Nunca medida continua primeiro: descobrir vem antes de refrescar.
     if (ra == null && rb == null) return 0;
-    if (ra == null) return -1; // nunca medida vem primeiro
+    if (ra == null) return -1;
     if (rb == null) return 1;
-    return rb - ra; // depois, mais produtiva primeiro
+
+    const pa = pesoDe(a);
+    const pb = pesoDe(b);
+    if (pa != null && pb != null && pa !== pb) return pb - pa;
+    if (pa != null && pb == null) return -1;
+    if (pa == null && pb != null) return 1;
+    return rb - ra; // empate (ou sem oportunidade): mais produtiva primeiro
   });
 
   const alreadyDone = catalog.length - pending.length;
   const nuncaMedidas = pending.filter((c) => rendimentoDe(c) == null).length;
+  const comOportunidade = pending.filter((c) => pesoDe(c) != null).length;
   console.log(`\n📋 Categorias: ${catalog.length} total | ${alreadyDone} já concluídas | ${pending.length} restantes`);
-  console.log(`🎯 Fila: ${nuncaMedidas} nunca medida(s) primeiro, depois ${pending.length - nuncaMedidas} por rendimento`);
+  console.log(
+    `🎯 Fila: ${nuncaMedidas} nunca medida(s) primeiro` +
+    (comOportunidade > 0
+      ? `, depois ${comOportunidade} por oportunidade (giro × concorrência) e o resto por rendimento`
+      : `, depois por rendimento (oportunidade indisponível — painel fora?)`)
+  );
   console.log(`📁 Checkpoint: ${CHECKPOINT_FILE}`);
   console.log(`⏱  Pausa entre categorias: ${process.env.PAUSE_BETWEEN_CATEGORIES_MS ?? "10–15s (padrão)"}\n`);
 
