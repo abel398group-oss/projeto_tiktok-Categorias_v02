@@ -465,11 +465,16 @@ export default function CategoriesPage() {
                       <div className="tk-category-card__summary" aria-label="Resumo da última coleta">
                         <p className="tk-category-card__summary-title">Última coleta</p>
                         <ul className="tk-category-card__summary-list">
-                          {row.lastRunJsonTotal != null ? (
-                            <li>
-                              <strong>{formatIntLocale(row.lastRunJsonTotal)}</strong> colectados no total
-                            </li>
-                          ) : null}
+                          {/*
+                            O número DESTA categoria vem primeiro.
+                            Antes a lista abria com "20.658 colectados no total" —
+                            o total do import inteiro, todas as categorias — logo
+                            debaixo do título "Última coleta" de UM cartão. Lia-se
+                            como se esta categoria tivesse trazido 20 mil produtos,
+                            quando trouxe 115. A linha seguinte ("20.543 fora desta
+                            categoria") só existia para reconciliar esse total, e
+                            reforçava a confusão em vez de a desfazer.
+                          */}
                           <li>
                             <strong>{formatIntLocale(row.lastImportProductCount)}</strong> importados nesta
                             categoria
@@ -488,9 +493,22 @@ export default function CategoriesPage() {
                               <strong>{formatIntLocale(row.lastRunUpdatedProductsApprox)}</strong> actualizados
                             </li>
                           ) : null}
-                          {outsideApprox != null && outsideApprox > 0 ? (
-                            <li>
-                              <strong>{formatIntLocale(outsideApprox)}</strong> fora desta categoria / dedupe
+                          {/*
+                            O total do import continua disponível — é útil para
+                            saber de que corrida vieram estes 115 — mas dito como
+                            o que é: número da IMPORTAÇÃO, não da categoria.
+                          */}
+                          {row.lastRunJsonTotal != null ? (
+                            <li
+                              className="tk-category-card__summary-note"
+                              title={
+                                outsideApprox != null && outsideApprox > 0
+                                  ? `Os restantes ${formatIntLocale(outsideApprox)} produtos dessa importação pertencem a outras categorias ou saíram no dedupe.`
+                                  : undefined
+                              }
+                            >
+                              veio de uma importação de {formatIntLocale(row.lastRunJsonTotal)} produtos
+                              (todas as categorias)
                             </li>
                           ) : null}
                           <li>
