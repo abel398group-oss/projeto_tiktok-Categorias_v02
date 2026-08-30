@@ -58,6 +58,62 @@ Detalhe de arquitetura: `docs/ARCHITECTURE.md`. Decisões formais: `docs/adr/`.
 - [ ] Motor de **viabilidade** (custos fornecedor vs preço mercado)
 - [ ] Integração **n8n / WhatsApp** via API (sem acesso SQL directo ao Postgres)
 
+### Por que os vídeos saem maus — e não é o motor (30/08/2026)
+
+O que o vídeo anima são os **banners de catálogo do vendedor**: quadrados,
+fundo branco, texto já embutido, feitos para a página do produto. A legenda do
+vídeo cai por cima do texto que já está na imagem. Nenhum renderizador
+conserta isto — ffmpeg, Remotion ou MoviePy dariam todos um slideshow de
+banners.
+
+**As fotos de clientes eram o material certo e estavam inutilizáveis.**
+`collectReviewMediaInBrowser` já dizia no cabeçalho: *"é o único material com
+uma pessoa real a usar o produto certo — que é o que o TikTok premia e o que
+fotos de catálogo não têm"*. Mas as URLs vêm do `<img src>` da página, que
+serve miniatura. Medido: as 15 fotos do Pro3Magnésio guardadas a 300×300 e
+algumas a 100×100, contra 2000×2000 do catálogo — a 300×300 não enchem um
+fotograma 1080×1920 sem borrar.
+
+O tamanho está embutido no molde do CDN (`~tplv-...-crop-webp:300:300.webp`).
+Trocando por `1080:1080` o mesmo CDN devolve 1080×1080 — a foto grande sempre
+lá esteve. Corrigido em `src/scrape/cdn-resolucao.mjs`, aplicado na captura
+(normalizer) **e na leitura** (product-workspace), para as já guardadas
+ficarem utilizáveis sem re-coletar. Verificado: a API passou a servir as 15 a
+1080. Nunca reduz, e URL sem o molde passa intacta (inventar parâmetro em CDN
+desconhecido dá 404, e um 404 aqui custa a foto toda).
+
+### Hardware — o limite real (30/08/2026)
+
+| | |
+|---|---|
+| CPU | Intel i5-8250U (ultrabook de 2017, 15 W, 8 fios) |
+| GPU | Intel UHD 620 integrada, 1 GB partilhado |
+| RAM | 16 GB |
+
+Isto reenquadra tudo:
+
+- Os 32 min de render não são só culpa do MoviePy — é MoviePy num portátil de
+  2017.
+- **Geração de vídeo por IA local está fora de questão**, não é lenta: o
+  HunyuanVideo 1.5 pede 13,6 GB de VRAM no mínimo, com offload. Não há GPU.
+  Só por API paga.
+- Testado `h264_qsv` (Quick Sync da Intel): **mais lento** que o libx264
+  veryfast (37,9 s vs 28,9 s). O gargalo é o filtro `zoompan` no CPU, não o
+  encoder. Fica o libx264.
+
+### Repositórios avaliados e recusados (30/08/2026)
+
+| repo | porquê não |
+|---|---|
+| `gyoridavid/short-video-maker` | só Pexels, **não aceita imagens locais**; TTS só inglês (kokoro-js). Os dois requisitos não-negociáveis são os dois que não faz. |
+| `pkp666/product-ai-listing-studio` | 4 estrelas, 2 commits; exige APIs pagas (Yunwu, GRSAI, Coze); sem português. |
+| Kimi (Moonshot) | K2.5/K2.6/K2.7 **lêem** vídeo, não geram. O modelo de vídeo entrou em teste interno em Nov/2024 e nunca saiu. |
+| Wan 2.2 / HunyuanVideo 1.5 | bons e abertos, mas precisam de GPU que não existe aqui. |
+
+O padrão: todos assumem o oposto deste caso — que não há material e é preciso
+gerar ou buscar imagem, roteiro e voz. Aqui as fotos já existem e os factos já
+estão medidos. **A conclusão não é trocar de repositório.**
+
 ### Vídeo sem o produto — trava aplicada (30/08/2026)
 
 Saiu um vídeo de 11,6 s feito **só** com as duas filmagens do Pexels — um

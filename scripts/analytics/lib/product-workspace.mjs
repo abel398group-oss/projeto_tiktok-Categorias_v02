@@ -8,6 +8,7 @@
 import { extractOrderedImageUrls, hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { computeProductScoreLine } from "./product-score.mjs";
+import { emAltaResolucao } from "../../../src/scrape/cdn-resolucao.mjs";
 
 const MAX_PREVIEW_IMAGES = 24;
 
@@ -149,6 +150,10 @@ export async function getProductWorkspaceDetail(prisma, tiktokProductId) {
     return lista
       .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.url : null))
       .filter((u) => typeof u === "string" && u.trim().startsWith("http"))
+      // Feito na LEITURA, e não só na captura, para as fotos já guardadas em
+      // miniatura ficarem utilizáveis sem re-coletar o produto. Ver
+      // `src/scrape/cdn-resolucao.mjs`.
+      .map((u) => emAltaResolucao(u))
       .slice(0, MAX_PREVIEW_IMAGES);
   })();
   const hasPdpImages = (() => {

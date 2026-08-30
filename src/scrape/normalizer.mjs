@@ -4,6 +4,7 @@
  *
  * Exporta as funções usadas em testes (scrape-regression.test.mjs).
  */
+import { listaEmAltaResolucao } from "./cdn-resolucao.mjs";
 import {
   extractImages,
   extractHttpImageUrlsDeep,
@@ -554,7 +555,14 @@ export function toDadosProdutoClean(n, categoriaUrl) {
     // Fica em campo separado das fotos de catálogo, de propósito: é conteúdo de
     // terceiros e publicá-lo é decisão de quem publica, não automatismo (ver o
     // cabeçalho de `collectReviewMediaInBrowser`).
-    fotos_review: Array.isArray(n.fotos_review) && n.fotos_review.length ? n.fotos_review : null,
+    // As URLs vêm do `<img src>`, que na página é miniatura (300x300, às vezes
+    // 100x100). `emAltaResolucao` troca o tamanho no molde do CDN por 1080 —
+    // ver `cdn-resolucao.mjs`. Sem isto a foto de cliente não enche um
+    // fotograma vertical sem borrar, e o melhor material fica inutilizável.
+    fotos_review:
+      Array.isArray(n.fotos_review) && n.fotos_review.length
+        ? listaEmAltaResolucao(n.fotos_review)
+        : null,
     videos_review: Array.isArray(n.videos_review) && n.videos_review.length ? n.videos_review : null,
     seller_id: n.seller_id ?? null,
     global_seller_id: n.global_seller_id ?? null,
