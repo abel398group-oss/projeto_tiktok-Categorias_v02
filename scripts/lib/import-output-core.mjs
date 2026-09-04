@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { hasAtLeastHttpPdpImages } from "./extract-image-urls.mjs";
 import { nucleoDoTitulo, especieDoTitulo, rotuloCurto } from "../../src/scrape/nucleo.mjs";
+import { recalcularDelta7d } from "./calcular-delta7d.mjs";
 
 /**
  * Concatenação determinística para import idempotente (SHA-256).
@@ -490,6 +491,20 @@ export async function importOutputFromStrings(prisma, opts) {
       sellerRefId: null
     }
   });
+
+  /*
+   * O delta7d recalcula-se AQUI, no fim do import: é o momento em que os
+   * snapshots novos acabaram de entrar e o "agora" está definido. Correr num
+   * script à parte deixaria a coluna a envelhecer sem ninguém reparar — o
+   * valor continuaria a existir, só que velho, que é pior do que ausente.
+   */
+  try {
+    const d = await recalcularDelta7d(prisma);
+    console.log(`[delta7d] ${d.comDelta} produto(s) com delta; ${d.semJanela} sem leitura de 7 dias.`);
+  } catch (e) {
+    // Falhar aqui não pode derrubar o import: o dado que importa já foi gravado.
+    console.warn(`[delta7d] não recalculado: ${e?.message ?? e}`);
+  }
 
   const podados = await podarEnvelopesAntigos(prisma);
   if (podados > 0) {

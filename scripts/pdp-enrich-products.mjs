@@ -18,6 +18,7 @@ import {
 } from "../src/scrapeCategory.mjs";
 import { extractOrderedImageUrls } from "./lib/extract-image-urls.mjs";
 import { productIdDeUrl, itemMinimoDeUrl, eLinkEncurtado, resolverEncurtado } from "../src/scrape/pdp-url.mjs";
+import { travar, CHAVE_COLETA } from "./lib/trava-instancia.mjs";
 
 /** Link original de cada id que veio de URL, para o fallback saber a PDP. */
 const linkPorId = new Map();
@@ -505,6 +506,22 @@ async function resolverEncurtados(entradas) {
 }
 
 async function main() {
+  /*
+   * A MESMA CHAVE DA COLETA, de propósito.
+   *
+   * Enriquecer abre um navegador contra o TikTok, tal como a coleta. Dois
+   * navegadores pelo mesmo IP ao mesmo tempo é como se apanha captcha — e o
+   * disjuntor de um não vê o outro. Chaves separadas deixariam os dois
+   * correr juntos, que é exactamente o que se quer evitar.
+   */
+  const trava = await travar(CHAVE_COLETA);
+  if (!trava.ok) {
+    console.error("[trava] " + trava.motivo + ".");
+    console.error("[trava] Enriquecer e coletar ao mesmo tempo pelo mesmo IP acaba em captcha.");
+    console.error("[trava] Espere a outra acabar (ou crie o ficheiro PARAR).");
+    return 3;
+  }
+
   const idsArg = await resolverEncurtados(parseIds(process.argv.slice(2)));
   if (!idsArg.length) {
     // eslint-disable-next-line no-console
@@ -732,8 +749,15 @@ async function main() {
       console.log(`  • ${pid}: ${r.status} — ${r.nota}`);
     }
   }
-  // Nada enriquecido quando havia trabalho a fazer é falha, não sucesso.
-  return okCount === 0 && idsArg.length > 0 ? 4 : 0;
+  /*
+   * Nada enriquecido quando havia trabalho a fazer é falha, não sucesso.
+   *
+   * Era `4`, mas o 4 passou a significar "banco fora" no contrato de saída do
+   * repo (ver o cabeçalho de scripts/scrape-all-categories.mjs). Um lançador
+   * que leia o 4 aqui esperaria pelo Postgres em vez de olhar para o captcha
+   * que realmente aconteceu. `1` = falha comum, que é o que isto é.
+   */
+  return okCount === 0 && idsArg.length > 0 ? 1 : 0;
 }
 
 main()

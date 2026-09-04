@@ -362,16 +362,16 @@ processo curto + `doctor`.
       deixando-o em `storage/tasks/<uuid>/` com nome opaco e fora do Drive;
       agora copia com nome legível e escreve o `.txt` com o link ao lado.
 
-- [ ] **Roteiro da ponte é fixo e curto — 4 das 6 fotos são desperdiçadas.**
-      O gerador dimensiona o vídeo pela duração do ÁUDIO: com uma frase (~9 s) e
-      clipes de 5 s, entram ~2 fotos. As outras são baixadas, convertidas em
-      clipe (~2 min cada) e descartadas. Ou o roteiro cresce para usar as 6
-      (~30 s), ou baixa-se menos foto. **É decisão editorial** — mais vídeo
-      significa mais texto de venda — por isso fica para o dono decidir.
-- [ ] **Cartão de categoria mostra o total global como se fosse da categoria.**
-      Cada cartão repete "20.658 coletado no total" e "20.543 fora desta
-      categoria / dedupe". É verdade, mas lê-se como se cada categoria tivesse
-      processado 20 mil produtos.
+- [x] ~~**Roteiro da ponte é fixo e curto**~~ — resolvido em 30/08, e depois
+      **obsoleto**. O roteiro cresceu para 18,43 s medidos e `--fotos` desceu
+      para 4, alinhando os dois números. Pouco depois a ponte inteira saiu do
+      fluxo: a política do TikTok Shop proíbe o formato que o MoneyPrinterTurbo
+      gerava, e quem gera passou a ser o Symphony.
+- [x] ~~**Cartão de categoria mostra o total global**~~ — já estava corrigido
+      quando isto foi reconferido em 04/09. O número da categoria vem primeiro
+      e o total do import ficou como nota, dito como o que é: "veio de uma
+      importação de N produtos (todas as categorias)". O item ficou aberto no
+      ROADMAP depois de o código ter mudado.
 
 **Decidido NÃO fazer, com motivo:**
 
