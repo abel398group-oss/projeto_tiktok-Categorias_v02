@@ -198,3 +198,38 @@ model RawPayload {
   @@index([capturedAt])
   @@map("raw_payloads")
 }
+
+/// A direção do dono sobre uma categoria do CATALOG — onde coletar e onde não.
+///
+/// ┌─ POR QUE UMA TABELA SÓ PARA ISTO ────────────────────────────────────
+/// │ Não há `model Category`: o catálogo das 212 subcategorias vive em
+/// │ `scripts/scrape-all-categories.mjs` (CATALOG) e é a fonte da verdade.
+/// │ Criar uma tabela de categorias para pendurar três colunas duplicaria
+/// │ o catálogo e criaria a pergunta "qual dos dois está certo?".
+/// │
+/// │ Esta tabela guarda SÓ a direção, e é esparsa de propósito: só existe
+/// │ linha para categoria dirigida. Sem linha = descoberta padrão.
+/// └──────────────────────────────────────────────────────────────────────
+model CategoriaDirecao {
+  /// `slug-id` do CATALOG (ex.: "women-s-underwear-842888"). Chave natural.
+  chave String @id
+
+  /// NULL/sem linha = descoberta padrão. 1 = interesse, fura a fila.
+  /// -1 = fora de escopo: não gasta coleta nem crédito de geração.
+  ///
+  /// Escrita SÓ por `npm run direcao`, nunca por processo automático. Se um
+  /// script começar a escrever aqui, o volante virou piloto e a coluna
+  /// perdeu o sentido.
+  prioridade Int
+
+  /// Por que esta categoria é interesse ou está fora. Uma frase, obrigatória.
+  /// Daqui a seis meses ninguém lembra o motivo, e prioridade sem motivo
+  /// vira medo de mexer.
+  nota String
+
+  definidaEm DateTime @default(now()) @map("definida_em")
+  atualizadaEm DateTime @updatedAt @map("atualizada_em")
+
+  @@index([prioridade])
+  @@map("categoria_direcao")
+}

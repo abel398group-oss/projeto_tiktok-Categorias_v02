@@ -519,6 +519,65 @@ const PESO_OPORTUNIDADE = {
  *
  * @returns {Promise<Map<string, number>>}
  */
+/**
+ * A direção do dono, por categoria: `chave -> prioridade`.
+ *
+ * Degrada para vazio se a base não responder — a direção é um afinamento da
+ * ordem, não um requisito para coletar. Falhar aqui e parar a coleta seria
+ * trocar um problema pequeno por um grande.
+ */
+/**
+ * O comparador da fila, extraído para poder ser testado.
+ *
+ * A ordem, do mais forte ao mais fraco:
+ *   1. direção do dono — interesse fura tudo, inclusive "nunca medida",
+ *      porque é conhecimento que os dados não têm;
+ *   2. nunca medida — descobrir vem antes de refrescar;
+ *   3. oportunidade medida — porta aberta antes de "tem dono";
+ *   4. rendimento — em empate, a mais produtiva primeiro.
+ *
+ * Fica exportado por causa da lição do `decidirFalha`: regra de ordenação
+ * enterrada dentro do `main` só se testa correndo a coleta inteira, e aí
+ * ninguém testa.
+ *
+ * @param {{ direcaoDe: Function, rendimentoDe: Function, pesoDe: Function }} leitores
+ */
+export function compararNaFila({ direcaoDe, rendimentoDe, pesoDe }) {
+  return (a, b) => {
+    const da = direcaoDe(a);
+    const db = direcaoDe(b);
+    if (da !== db) return db - da;
+
+    const ra = rendimentoDe(a);
+    const rb = rendimentoDe(b);
+    if (ra == null && rb == null) return 0;
+    if (ra == null) return -1;
+    if (rb == null) return 1;
+
+    const pa = pesoDe(a);
+    const pb = pesoDe(b);
+    if (pa != null && pb != null && pa !== pb) return pb - pa;
+    if (pa != null && pb == null) return -1;
+    if (pa == null && pb != null) return 1;
+    return rb - ra;
+  };
+}
+
+async function lerDirecao() {
+  try {
+    const { PrismaClient } = await import("@prisma/client");
+    const prisma = new PrismaClient();
+    try {
+      const linhas = await prisma.categoriaDirecao.findMany({ select: { chave: true, prioridade: true } });
+      return new Map(linhas.map((l) => [l.chave, l.prioridade]));
+    } finally {
+      await prisma.$disconnect().catch(() => {});
+    }
+  } catch {
+    return new Map();
+  }
+}
+
 export async function lerOportunidadePorCategoria() {
   const vazio = new Map();
   const base = process.env.ANALYTICS_API_URL || "http://127.0.0.1:3333";
@@ -773,7 +832,7 @@ async function main() {
 
   // Volta à fila tudo o que não foi colhido com sucesso — inclusive o que
   // falhou nas execuções anteriores — menos aquilo de que já se desistiu.
-  const pending = catalog.filter((cat) => {
+  let pending = catalog.filter((cat) => {
     const key = keyForCat(cat);
     if (completed.has(key)) return false;
     return !desistiuDe(failures, key);
@@ -820,24 +879,29 @@ async function main() {
    * primeira. Se a API estiver fora, a fila mantém a ordem por rendimento: é
    * um afinamento, não um requisito.
    */
+  /*
+   * A DIREÇÃO DO DONO VEM ANTES DOS DADOS.
+   *
+   * A oportunidade medida é boa para descoberta; a direção é conhecimento
+   * que os dados não têm. `-1` sai da fila por completo — não gasta coleta
+   * nem, mais tarde, crédito de geração. `1` fura a fila.
+   *
+   * Escrita só por `npm run direcao` (ver scripts/direcao.mjs).
+   */
+  const direcao = await lerDirecao();
+  const direcaoDe = (cat) => direcao.get(`${cat.slug}-${cat.id}`) ?? 0;
+
+  const foraDeEscopo = pending.filter((c) => direcaoDe(c) < 0);
+  if (foraDeEscopo.length > 0) {
+    pending = pending.filter((c) => direcaoDe(c) >= 0);
+    console.log(`
+🚫 ${foraDeEscopo.length} categoria(s) fora de escopo por direção — não entram na fila.`);
+  }
+
   const ordemDeOportunidade = await lerOportunidadePorCategoria();
   const pesoDe = (cat) => ordemDeOportunidade.get(normalizeCategoryKey(keyForCat(cat))) ?? null;
 
-  pending.sort((a, b) => {
-    const ra = rendimentoDe(a);
-    const rb = rendimentoDe(b);
-    // Nunca medida continua primeiro: descobrir vem antes de refrescar.
-    if (ra == null && rb == null) return 0;
-    if (ra == null) return -1;
-    if (rb == null) return 1;
-
-    const pa = pesoDe(a);
-    const pb = pesoDe(b);
-    if (pa != null && pb != null && pa !== pb) return pb - pa;
-    if (pa != null && pb == null) return -1;
-    if (pa == null && pb != null) return 1;
-    return rb - ra; // empate (ou sem oportunidade): mais produtiva primeiro
-  });
+  pending.sort(compararNaFila({ direcaoDe, rendimentoDe, pesoDe }));
 
   const alreadyDone = catalog.length - pending.length;
   const nuncaMedidas = pending.filter((c) => rendimentoDe(c) == null).length;
