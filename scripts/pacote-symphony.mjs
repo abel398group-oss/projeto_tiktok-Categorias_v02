@@ -13,7 +13,10 @@
  * A ORDEM DE ESCOLHA, do mais forte ao mais fraco:
  *   1. direção do dono (`npm run direcao`) — fora de escopo nem entra
  *   2. curadoria (`npm run curadoria`) — `gastar_credito` decide
- *   3. delta7d — o que está a esquentar
+ *   3. ritmo recente (delta7d ÷ dias reais) — o que está a esquentar. Ritmo,
+ *      não total: a janela varia entre 7 e 14 dias conforme a cadência da
+ *      coleta, e ordenar pelo delta bruto premiaria quem foi medido sobre
+ *      mais dias sem ser melhor produto.
  *   4. vendas totais — o que já provou que vende
  *
  * ESCRITA ATÓMICA: cada pacote é montado em `<pasta>_nova` e renomeado no
@@ -67,7 +70,7 @@ async function escolher(quantos) {
     where: { hiddenAt: null, enrichStatus: "ok", name: { not: null } },
     select: {
       productId: true, name: true, rotuloCurto: true, especie: true,
-      categoryUrl: true, productUrl: true, delta7d: true,
+      categoryUrl: true, productUrl: true, delta7d: true, delta7dDias: true,
       snapshots: {
         orderBy: { capturedAt: "desc" }, take: 30,
         select: { capturedAt: true, salesCount: true, ratingAverage: true, ratingTotal: true, price: true, pdpImages: true }
@@ -101,6 +104,16 @@ async function escolher(quantos) {
       nota: atual?.ratingAverage ?? null,
       avaliacoes: atual?.ratingTotal ?? null,
       delta7d: p.delta7d ?? null,
+      delta7dDias: p.delta7dDias ?? null,
+      /*
+       * Ritmo, não total: a janela varia entre 7 e 14 dias conforme a
+       * cadência da coleta. Ordenar pelo delta bruto premiaria quem foi
+       * medido sobre um período maior — mais dias, mais vendas, sem ser
+       * melhor produto.
+       */
+      ritmoDia: Number.isFinite(p.delta7d) && Number.isFinite(p.delta7dDias) && p.delta7dDias > 0
+        ? p.delta7d / p.delta7dDias
+        : null,
       fotos: soHttp(comGaleria.pdpImages),
       fotosDeOutroRun: comGaleria !== atual,
       fotosEm: comGaleria.capturedAt,
@@ -113,7 +126,7 @@ async function escolher(quantos) {
   linhas.sort((a, b) =>
     (b.prioridade - a.prioridade) ||
     (Number(b.curadoPara) - Number(a.curadoPara)) ||
-    ((b.delta7d ?? -1) - (a.delta7d ?? -1)) ||
+    ((b.ritmoDia ?? -1) - (a.ritmoDia ?? -1)) ||
     ((b.vendas ?? 0) - (a.vendas ?? 0))
   );
   return linhas.slice(0, quantos);
@@ -240,6 +253,8 @@ async function principal() {
         nota: p.nota,
         avaliacoes: p.avaliacoes,
         delta7d: p.delta7d,
+        delta7dDias: p.delta7dDias,
+        vendasPorDiaRecente: p.ritmoDia == null ? null : Math.round(p.ritmoDia * 10) / 10,
         medidoEm: p.medidoEm,
         fotos: escolhidas,
         fotosDeOutroRun: p.fotosDeOutroRun,
