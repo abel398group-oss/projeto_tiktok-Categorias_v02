@@ -58,6 +58,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createAntiBanPolicy } from "../src/scrape/anti-ban.mjs";
 import { normalizeCategoryKey } from "./analytics/lib/categories-catalog.mjs";
+import { travar, CHAVE_COLETA } from "./lib/trava-instancia.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(__dirname, "..");
@@ -703,6 +704,19 @@ async function main() {
     return 3;
   }
 
+  /*
+   * Trava ANTES do doctor: duas coletas em paralelo batem no TikTok pelo
+   * mesmo IP e o disjuntor de captcha de uma não vê a outra. Ver
+   * `scripts/lib/trava-instancia.mjs`.
+   */
+  const trava = await travar(CHAVE_COLETA);
+  if (!trava.ok) {
+    console.log("[trava] " + trava.motivo + ".");
+    console.log("[trava] Duas coletas ao mesmo tempo pelo mesmo IP acabam em captcha.");
+    console.log("[trava] Pare a outra (crie o ficheiro PARAR) antes de subir esta.");
+    return 3;
+  }
+
   // A pausa da corrida anterior, essa sim, é limpa: serve só para "chega por hoje".
   try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
 
@@ -1114,6 +1128,8 @@ async function main() {
       console.log(`[pós] consolidação falhou (código ${c1.status}) — import não executado.`);
     }
   }
+
+  await trava.soltar();
 
   return exitCode;
 }
