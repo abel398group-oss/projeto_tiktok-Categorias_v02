@@ -49,6 +49,21 @@
  *   VIEW_MORE_MAX_CLICKS=30             cliques em "Ver mais" por categoria (padrão do scraper: 8)
  *   PDP_GALLERY=1 / PDP_GALLERY_MAX=25  ativa galeria de PDP
  *   HEADED=1                            navegador visível
+ *
+ * ┌─ CONTRATO DE SAÍDA — regra do repo ──────────────────────────────────
+ * │   0  fez trabalho (ou não havia nada por fazer e terminou limpo)
+ * │   3  nada a fazer: PARAR presente, ou outra instância já a correr
+ * │   4  banco fora — NÃO é falha de coleta
+ * │   *  falha de coleta
+ * │
+ * │ O 4 existe porque banco fora e coleta falhada são problemas de dono
+ * │ diferente, e tratá-los igual custa caro nos dois sentidos: o lançador
+ * │ insiste contra um Postgres em baixo (e o retry não cura nada), ou
+ * │ desiste de uma falha que era transitória.
+ * │
+ * │ O 3 também não é falha: um lançador que religa não pode tratar
+ * │ «o dono mandou parar» como crash.
+ * └──────────────────────────────────────────────────────────────────────
  */
 
 import path from "node:path";
@@ -735,7 +750,7 @@ async function main() {
       running: false, completedCount: 0, totalCount: CATALOG.length,
       lastError: "banco indisponível no healthcheck inicial (npm run db:check)"
     });
-    return 1;
+    return 4;
   }
 
   if (args.includes("--reset")) {
@@ -1114,6 +1129,26 @@ async function main() {
   // 3/212 sem deixar erro nenhum (08/08/2026). Com o pós-processamento aqui, a
   // coleta é dona do próprio ciclo e sobrevive à API inteira.
   if (process.argv.includes("--depois-importa")) {
+    /*
+     * O doctor correu HORAS atrás, antes da fila. O Postgres pode ter caído
+     * no meio — foi o que aconteceu em 30/08/2026, com o Docker Desktop em
+     * baixo. Sem esta reconferência o import falha e o código de saída diz
+     * "falha de coleta", que é mentira: a coleta correu bem e o consolidado
+     * está no disco, à espera de uma base viva.
+     */
+    const doctorPos = spawnSync(process.execPath, ["scripts/check-database-connection.mjs"], {
+      cwd: ROOT,
+      stdio: "ignore"
+    });
+    if (doctorPos.status !== 0) {
+      console.log("\n[pós] o banco não respondeu — a coleta acabou bem, o import fica para depois.");
+      console.log("[pós] Nada se perdeu. Quando a base voltar:");
+      console.log("[pós]   node scripts/consolidate-category-outputs.mjs");
+      console.log("[pós]   npm run db:import:output\n");
+      await trava.soltar();
+      return 4;
+    }
+
     console.log("\n[pós] a consolidar categorias…");
     const c1 = spawnSync(process.execPath, ["scripts/consolidate-category-outputs.mjs"], { cwd: ROOT, stdio: "inherit" });
     if (c1.status === 0) {
