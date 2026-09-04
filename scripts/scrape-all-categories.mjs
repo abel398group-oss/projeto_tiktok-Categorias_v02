@@ -65,6 +65,23 @@ export const OUTPUT_ROOT = path.join(ROOT, "output");
 export const CHECKPOINT_FILE = path.join(OUTPUT_ROOT, "scrape-checkpoint.json");
 export const PROGRESS_FILE = path.join(OUTPUT_ROOT, "scrape-all-progress.json");
 export const STOP_FLAG_FILE = path.join(OUTPUT_ROOT, "scrape-all.stop");
+/*
+ * DUAS SENTINELAS, DE PROPÓSITO — e a diferença é o religamento automático.
+ *
+ * `output/scrape-all.stop`  PAUSA esta corrida. É limpa no fim, e a corrida
+ *                           seguinte arranca normalmente. Serve para "chega
+ *                           por hoje".
+ *
+ * `PARAR` (raiz do repo)    PARA E CONTINUA PARADO. Não é limpa por ninguém
+ *                           além de quem a apagou, e o arranque RECUSA
+ *                           enquanto ela existir.
+ *
+ * A segunda existe porque a Tarefa Agendada religa a coleta ao logon e o
+ * lançador insiste a cada queda. Uma sentinela que o arranque apaga não para
+ * nada nesse mundo: mata-se o processo, o lançador sobe outro, e a coleta
+ * volta sozinha contra a vontade do dono.
+ */
+export const PARAR_FILE = path.join(ROOT, "PARAR");
 export const BASE = "https://shop.tiktok.com";
 const Q = "source=ecommerce_sitemap&enter_method=category_directory&first_entrance=ecommerce_category&first_entrance_position=bread_crumbs&first_entrance_tt_scene=seo";
 
@@ -611,7 +628,14 @@ export function buildRun(cat) {
 }
 
 function stopRequested() {
-  return existsSync(STOP_FLAG_FILE);
+  return existsSync(STOP_FLAG_FILE) || existsSync(PARAR_FILE);
+}
+
+/** Qual das duas pediu a parada — a mensagem final depende disso. */
+function motivoDaParada() {
+  if (existsSync(PARAR_FILE)) return "PARAR";
+  if (existsSync(STOP_FLAG_FILE)) return "pausa";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -667,7 +691,19 @@ async function main() {
     return 0;
   }
 
-  // Sempre limpa flag de parada de execuções anteriores ao iniciar.
+  /*
+   * `PARAR` bloqueia o arranque e NÃO é apagada aqui — é o que a torna
+   * durável contra o lançador (ver PARAR_FILE). Código 3 = "nada a fazer",
+   * não é falha: o lançador não deve tratar isto como crash e insistir.
+   */
+  if (existsSync(PARAR_FILE)) {
+    console.log("\n[parar] existe um ficheiro PARAR na raiz do repositório.");
+    console.log("[parar] A coleta não arranca enquanto ele existir — foi pedido assim.");
+    console.log(`[parar] Para voltar a coletar:  del "${PARAR_FILE}"\n`);
+    return 3;
+  }
+
+  // A pausa da corrida anterior, essa sim, é limpa: serve só para "chega por hoje".
   try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
 
   // Healthcheck ANTES de abrir Chrome nenhum: banco fora é problema de dono
@@ -1037,6 +1073,8 @@ async function main() {
       ? `Sessão bloqueada pelo TikTok (${captchasSeguidos} captchas seguidos). As categorias barradas voltam à fila sem perder tentativa — espere um tempo e recomece.`
       : ""
   });
+  // Só a pausa é limpa. O `PARAR` fica onde está — é essa a diferença entre
+  // "chega por hoje" e "não voltes a subir".
   try { await fs.unlink(STOP_FLAG_FILE); } catch { /* ok */ }
 
   if (paradoPorBloqueio) {
