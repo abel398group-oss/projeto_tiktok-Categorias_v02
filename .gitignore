@@ -36,3 +36,6 @@ frontend/.playwright/
 # Scripts temporários de sessão (vigias, testes pontuais)
 *.tmp.sh
 *.tmp.mjs
+
+# sentinela de parada (runtime, nunca versionada)
+PARAR

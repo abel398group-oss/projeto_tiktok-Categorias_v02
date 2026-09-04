@@ -1,0 +1,4 @@
+
+# ficheiros do Windows precisam de CRLF — cmd.exe parte linhas com LF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
