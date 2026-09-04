@@ -79,6 +79,19 @@ model Product {
   /// para sempre, sem ninguém perceber que nunca dá certo.
   ///
   /// null = nunca tentado. Valores: ok | sem_galeria | captcha | url_invalida | erro
+  /// A palavra que diz O QUE é o produto — ver `src/scrape/nucleo.mjs`.
+  /// Derivada do título, sem rede e sem modelo. Alimenta o rótulo curto, a
+  /// espécie e o veredito contra a categoria.
+  nucleo String? @map("nucleo")
+
+  /// `recompra` (o produto É consumível) · `acessorio` (acompanha outro) ·
+  /// `produto`. Derivada do núcleo, não de julgamento por ficha.
+  especie String? @map("especie")
+
+  /// Nome curto e legível: o que vai para o prompt do Symphony e para o nome
+  /// da pasta do pacote. Curadoria humana vence isto (ver ProductCuration).
+  rotuloCurto String? @map("rotulo_curto")
+
   enrichStatus    String?   @map("enrich_status")
   /// Quando foi a última tentativa — inclusive as falhadas.
   enrichCheckedAt DateTime? @map("enrich_checked_at")
@@ -232,4 +245,35 @@ model CategoriaDirecao {
 
   @@index([prioridade])
   @@map("categoria_direcao")
+}
+
+/// Curadoria humana sobre um produto: o rótulo certo, e se vale gastar crédito.
+///
+/// Curado VENCE o derivado e nunca é sobrescrito por processo automático. É a
+/// mesma regra do `gondola_termo` do product-seeker: julgamento humano que um
+/// re-import apaga não é curadoria, é rascunho.
+///
+/// Esparsa de propósito: só existe linha para produto curado.
+model ProductCuration {
+  /// `productId` do TikTok. Chave natural, e não FK: um produto pode ser
+  /// curado antes de a coleta seguinte o trazer de volta.
+  productId String @id @map("product_id")
+
+  /// O nome que vai para o prompt e para a pasta do pacote. Vence o
+  /// `rotuloCurto` derivado.
+  rotulo String?
+
+  /// `true` = pode gastar geração no Symphony. `false` = tira do pacote sem
+  /// tirar da base. NULL = sem opinião, decide o ranking.
+  gastarCredito Boolean? @map("gastar_credito")
+
+  /// Por que o curador decidiu assim. Opcional, mas é o que evita
+  /// redecidir do zero daqui a seis meses.
+  nota String?
+
+  curadoEm   DateTime @default(now()) @map("curado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  @@index([gastarCredito])
+  @@map("product_curation")
 }

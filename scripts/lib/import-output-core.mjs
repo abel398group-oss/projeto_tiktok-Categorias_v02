@@ -7,6 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import { hasAtLeastHttpPdpImages } from "./extract-image-urls.mjs";
+import { nucleoDoTitulo, especieDoTitulo, rotuloCurto } from "../../src/scrape/nucleo.mjs";
 
 /**
  * Concatenação determinística para import idempotente (SHA-256).
@@ -293,6 +294,19 @@ export async function importOutputFromStrings(prisma, opts) {
       sellerRefId = s?.id ?? null;
     }
 
+    /*
+     * Núcleo, espécie e rótulo saem do título por regra pura (nucleo.mjs) —
+     * sem rede, sem modelo. Derivados aqui, no import, porque é o único sítio
+     * por onde todo produto passa: calcular na leitura repetiria o trabalho
+     * a cada consulta, e um script à parte esqueceria os produtos novos.
+     */
+    const nucleo = nucleoDoTitulo(item.nome);
+    const derivados = {
+      nucleo,
+      especie: nucleo ? especieDoTitulo(item.nome) : null,
+      rotuloCurto: rotuloCurto(item.nome)
+    };
+
     const row = await prisma.product.upsert({
       where: { productId },
       create: {
@@ -302,6 +316,7 @@ export async function importOutputFromStrings(prisma, opts) {
         categoryUrl: item.categoria_url ?? null,
         currency: item.moeda ?? null,
         sellerRefId,
+        ...derivados,
         firstSeenAt: t,
         lastSeenAt: t
       },
@@ -311,6 +326,7 @@ export async function importOutputFromStrings(prisma, opts) {
         categoryUrl: item.categoria_url ?? null,
         currency: item.moeda ?? null,
         sellerRefId,
+        ...derivados,
         lastSeenAt: t
       }
     });

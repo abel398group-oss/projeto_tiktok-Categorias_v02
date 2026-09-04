@@ -71,7 +71,9 @@
     "coleta:todas:reset": "node scripts/scrape-all-categories.mjs --reset",
     "coleta:todas:list": "node scripts/scrape-all-categories.mjs --list",
     "db:inventario": "node --import ./scripts/load-root-env.mjs scripts/db-inventario.mjs",
-    "direcao": "node --import ./scripts/load-root-env.mjs scripts/direcao.mjs"
+    "direcao": "node --import ./scripts/load-root-env.mjs scripts/direcao.mjs",
+    "nucleo:preencher": "node --import ./scripts/load-root-env.mjs scripts/preencher-nucleo.mjs",
+    "curadoria": "node --import ./scripts/load-root-env.mjs scripts/curadoria.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
