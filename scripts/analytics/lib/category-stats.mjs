@@ -16,6 +16,11 @@
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { getLatestAndBaselineRun } from "../_common.mjs";
+import { CATALOG } from "../../scrape-all-categories.mjs";
+import { vereditoNaCategoria } from "../../../src/scrape/nucleo.mjs";
+
+/** Nome em português de cada subcategoria, do CATALOG (a fonte da verdade). */
+const ROTULO_PT_POR_ID = new Map(CATALOG.map((c) => [c.id, c.label]));
 
 /** Mediana de uma lista já filtrada de números. */
 export function mediana(valores) {
@@ -226,11 +231,47 @@ export async function getCategoryStatsReport(prisma, obterLinhas) {
   }
 
   const categorias = [...porCategoria.entries()]
-    .map(([rotulo, grupo]) => ({
-      categoria: rotulo,
-      estatisticas: calcularEstatisticas(grupo),
-      quadrantes: classificarQuadrantes(grupo)
-    }))
+    .map(([rotulo, grupo]) => {
+      /*
+       * ACESSÓRIO SAI DAS MEDIANAS, mas continua na base e na contagem.
+       *
+       * "Suporte para vara de pesca" numa categoria de varas é outro produto
+       * e outro preço — deixá-lo dentro puxa a mediana para baixo e a
+       * categoria parece mais barata do que é. Só sai quem tem evidência
+       * POSITIVA de ser outra coisa (`fora`): o núcleo da categoria aparece
+       * adiante no título. `indefinido` fica — na dúvida não exclui.
+       */
+      /*
+       * O rótulo é "Grupo · Slug-Em-Ingles · 842888". Nem o slug nem o id
+       * servem: o slug está em inglês ("Women S Underwear") e os títulos dos
+       * produtos estão em português — nunca casariam. O id é um número, e
+       * `nucleoDoTitulo` devolve null para números.
+       *
+       * A primeira versão usava `.pop()` e apanhava o id: o veredito nunca
+       * disparava, e a exclusão de acessório era um `if` morto. Medido antes
+       * de corrigir: 0 de 206 categorias com algum "fora".
+       *
+       * O nome em português vive no CATALOG, chaveado pelo id do fim.
+       */
+      const idCategoria = (rotulo.match(/(\d{4,})\s*$/) ?? [])[1] ?? "";
+      const nomeCategoria = ROTULO_PT_POR_ID.get(idCategoria) ?? "";
+      const vereditos = grupo.map((l) => vereditoNaCategoria(l?.nome, nomeCategoria));
+      const doProduto = grupo.filter((_, i) => vereditos[i] !== "fora");
+      const contagem = {
+        confere: vereditos.filter((v) => v === "confere").length,
+        indefinido: vereditos.filter((v) => v === "indefinido").length,
+        fora: vereditos.filter((v) => v === "fora").length
+      };
+
+      return {
+        categoria: rotulo,
+        estatisticas: calcularEstatisticas(doProduto),
+        quadrantes: classificarQuadrantes(doProduto),
+        // O `n` de cada classe viaja junto: uma mediana calculada sobre 40 de
+        // 50 produtos tem de dizer que 10 saíram, e porquê.
+        vereditos: { ...contagem, usadosNaMediana: doProduto.length, total: grupo.length }
+      };
+    })
     .sort((a, b2) => (b2.estatisticas.vendasPorDia.totalMedido ?? 0) - (a.estatisticas.vendasPorDia.totalMedido ?? 0));
 
   classificarOportunidadeDeCategoria(categorias);
