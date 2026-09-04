@@ -224,6 +224,17 @@ passavam, foram só esquecidas ao serem criadas. Passou a `node --test
 Suíte: 118 → 152. A conta: 118 a correr antes, +21 das suites órfãs religadas,
 +13 escritos hoje (roteiro e candidatos).
 
+### product-seeker — rodada 2 (30/08/2026)
+
+O alvo mudou: o scraper passa a alimentar o **Symphony Creative Studio**
+(80 créditos), não um gerador de vídeo. Plano completo, com ordem e critérios
+de aceite, em `docs/IMPLEMENTACAO-PRODUCT-SEEKER-RODADA-2.md`. Resumo: Fase A
+operação 24/7 (PARAR, trava de instância, contrato de saída com «banco fora»,
+doc + lançador) · B direção como dado (`prioridade` com motivo obrigatório) ·
+C núcleo do título / espécie / rótulo curto / veredito vs categoria · D curadoria
+em mutirão · E pacote para o Symphony (vitrine derivada e descartável) +
+`delta7d` · F decisão em aberto sobre a coluna `oportunidade`.
+
 ### Auditoria do `product-seeker` (23/08/2026) — o que entrou e o que ficou
 
 Leitura completa do repo irmão (`lib/`, `db/`, front e docs) cruzada com o nosso
