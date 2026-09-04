@@ -90,6 +90,12 @@ model Product {
   /// "não vendeu" são coisas diferentes.
   delta7d Int? @map("delta_7d")
 
+  /// Sobre quantos dias o `delta7d` foi realmente medido. A coleta corre a
+  /// cada ~7 dias mas em dias irregulares, então o intervalo varia entre 7 e
+  /// 14. Sem este número, comparar um delta de 7 dias com um de 13 seria
+  /// comparar coisas diferentes sem dizer.
+  delta7dDias Float? @map("delta_7d_dias")
+
   /// Quando o `delta7d` foi calculado — sem isto, um delta velho parece novo.
   delta7dEm DateTime? @map("delta_7d_em")
 

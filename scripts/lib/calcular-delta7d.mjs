@@ -18,9 +18,23 @@
  * folga, uma coleta que atrasou um dia deixaria toda a base sem delta.
  */
 
-/** Dias da janela, e a folga que a torna robusta a atraso de coleta. */
+/**
+ * Dias da janela, e a folga que a torna robusta à cadência real da coleta.
+ *
+ * A folga era 3 e não servia. Medido em 04/09/2026: a coleta corre a cada
+ * ~7 dias mas em dias irregulares — havia leituras a 22/08 e 29/08, e a
+ * janela de 25 a 28/08 estava vazia. Resultado: **0 de 33.790 produtos com
+ * delta**, e nada denunciava, porque `null` é um valor legítimo aqui.
+ *
+ * Com folga de 7 a janela passa a ser "entre 7 e 14 dias atrás", que apanha
+ * a leitura anterior mesmo com a cadência a variar. O preço é o delta poder
+ * cobrir períodos diferentes — por isso `calcularDelta` devolve `dias`, o
+ * intervalo REAL, e quem ordena normaliza por ele. Comparar um delta de 7
+ * dias com um de 13 sem dizer que são diferentes seria pior do que não ter
+ * delta nenhum.
+ */
 export const DIAS = 7;
-export const FOLGA_DIAS = 3;
+export const FOLGA_DIAS = 7;
 
 /**
  * O delta de um produto, dado os seus snapshots ordenados do mais recente
@@ -71,7 +85,9 @@ export function calcularDelta({ snapshots, agora = new Date(), dias = DIAS, folg
    */
   if (delta < 0) return { delta: null, motivo: "contador desceu — leitura suspeita" };
 
-  return { delta, motivo: "ok", baseEm: new Date(base.capturedAt) };
+  // `dias` já é o parâmetro da janela pedida; isto é o intervalo REAL medido.
+  const diasReais = Math.round(((agora.getTime() - new Date(base.capturedAt).getTime()) / msDia) * 10) / 10;
+  return { delta, dias: diasReais, motivo: "ok", baseEm: new Date(base.capturedAt) };
 }
 
 /**
@@ -85,30 +101,60 @@ export async function recalcularDelta7d(prisma, { agora = new Date() } = {}) {
   const msDia = 24 * 60 * 60 * 1000;
   const desde = new Date(agora.getTime() - (DIAS + FOLGA_DIAS + 1) * msDia);
 
-  const produtos = await prisma.product.findMany({
-    where: { hiddenAt: null, snapshots: { some: { capturedAt: { gte: desde } } } },
-    select: {
-      id: true,
-      snapshots: {
-        where: { capturedAt: { gte: desde } },
-        orderBy: { capturedAt: "desc" },
-        select: { capturedAt: true, salesCount: true }
-      }
-    }
-  });
-
+  /*
+   * EM LOTES, e não de uma vez.
+   *
+   * A primeira versão pedia todos os produtos com snapshots recentes numa
+   * `findMany` só. Rebentou com «too many bind variables in prepared
+   * statement, expected maximum of 32767, received 32768» — o Postgres tem
+   * teto de 32.767 parâmetros por consulta, e o join dos snapshots aninhados
+   * ultrapassa-o com facilidade nesta base.
+   *
+   * Pior: no import isto corre dentro de um `try/catch` que não derruba nada.
+   * A coluna ficaria sempre por preencher e ninguém daria por isso, porque
+   * `null` é um valor legítimo aqui ("sem leitura de 7 dias").
+   */
+  const LOTE = 500;
   let comDelta = 0;
   let semJanela = 0;
+  let avaliados = 0;
+  let cursor;
 
-  for (const p of produtos) {
-    const { delta } = calcularDelta({ snapshots: p.snapshots, agora });
-    if (delta == null) semJanela++;
-    else comDelta++;
-    await prisma.product.update({
-      where: { id: p.id },
-      data: { delta7d: delta, delta7dEm: delta == null ? null : agora }
+  for (;;) {
+    const produtos = await prisma.product.findMany({
+      where: { hiddenAt: null, snapshots: { some: { capturedAt: { gte: desde } } } },
+      select: {
+        id: true,
+        snapshots: {
+          where: { capturedAt: { gte: desde } },
+          orderBy: { capturedAt: "desc" },
+          select: { capturedAt: true, salesCount: true }
+        }
+      },
+      orderBy: { id: "asc" },
+      take: LOTE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
     });
+    if (produtos.length === 0) break;
+
+    for (const p of produtos) {
+      const { delta, dias } = calcularDelta({ snapshots: p.snapshots, agora });
+      if (delta == null) semJanela++;
+      else comDelta++;
+      await prisma.product.update({
+        where: { id: p.id },
+        data: {
+          delta7d: delta,
+          delta7dDias: delta == null ? null : dias,
+          delta7dEm: delta == null ? null : agora
+        }
+      });
+    }
+
+    avaliados += produtos.length;
+    cursor = produtos[produtos.length - 1].id;
+    if (produtos.length < LOTE) break;
   }
 
-  return { avaliados: produtos.length, comDelta, semJanela };
+  return { avaliados, comDelta, semJanela };
 }
