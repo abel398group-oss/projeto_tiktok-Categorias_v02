@@ -84,6 +84,15 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
 
   const current = ANALYTICS_REPORT_TABS.find((t) => t.id === tab);
 
+  /**
+   * O modo faz parte do pedido de Opportunities (`?mode=`), não é filtro de ecrã:
+   * trocar de modo torna o que está em `cache.opp` respostas a outra pergunta.
+   * Sem esta linha, o cache acima devolveria a lista do modo anterior.
+   */
+  useEffect(() => {
+    setCache((c) => (c.opp == null ? c : { ...c, opp: null }));
+  }, [opportunityMode]);
+
   const load = useCallback(async () => {
     if (!current) return;
     setLoading(true);
@@ -104,9 +113,22 @@ export function AnalyticsDashboardCacheProvider({ children, categoryUrl = null }
   /**
    * Carrega o separador activo ao abrir a vista ou ao mudar de separador (global e por categoria).
    * «Carregar dados» refresca apenas o separador actual.
+   *
+   * Voltar a um separador já carregado NÃO refaz o pedido: o `cache` existe
+   * exactamente para isso e estava a ser preenchido e ignorado. Cada relatório
+   * custa segundos no servidor (medido em 04/09/2026: 8–24 s por separador), por
+   * isso alternar entre abas repetia o mesmo trabalho pesado a cada clique. O
+   * `cache` é limpo sempre que `filterKey` muda e por `load()`, que continua a
+   * ser a forma de forçar dados novos.
    */
   useEffect(() => {
     if (!current) return;
+    // Já temos este relatório em memória para o filtro actual — mostrar já.
+    if (cache[current.key] != null) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);

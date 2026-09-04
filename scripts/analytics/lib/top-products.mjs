@@ -12,6 +12,7 @@ import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
+import { SNAPSHOT_REPORT_SELECT, SNAPSHOT_REPORT_SELECT_WITH_RUN } from "./snapshot-select.mjs";
 
 export const TOP_PRODUCTS_DEFAULT_LIMIT = 20;
 export const TOP_PRODUCTS_MAX_LIMIT = 10000;
@@ -103,9 +104,7 @@ export async function getTopProductsReport(prisma, opts = {}) {
 
     const rows = await prisma.productSnapshot.findMany({
       where: whereGlobal,
-      include: {
-        product: { include: { seller: true } }
-      },
+      select: SNAPSHOT_REPORT_SELECT,
       orderBy: { salesCount: "desc" },
       take: limit
     });
@@ -167,10 +166,7 @@ export async function getTopProductsReport(prisma, opts = {}) {
       productRefId: { in: inCategoryIds },
       salesCount: { not: null }
     },
-    include: {
-      product: { include: { seller: true } },
-      scrapeRun: { select: { id: true, collectedAt: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT_WITH_RUN
   });
 
   /** @type {Map<string, (typeof snaps)[number]>} */

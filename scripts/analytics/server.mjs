@@ -42,6 +42,7 @@ import { listImportedCategories } from "./lib/categories-catalog.mjs";
 import { hideProduct, unhideProduct, hideProductsBatch, listHiddenProducts } from "./lib/product-hide.mjs";
 import { listEnrichedProducts } from "./lib/enriched-products.mjs";
 import { getCoverageReport } from "./lib/coverage.mjs";
+import { criarCacheDeRelatorios } from "./lib/report-cache.mjs";
 
 requireDatabaseUrl();
 
@@ -96,6 +97,8 @@ if (!APENAS_LOCAL.has(host)) {
 }
 
 const prisma = new PrismaClient();
+/** Relatórios são leitura pura: a mesma pergunta no mesmo ScrapeRun dá a mesma resposta. */
+const relatorios = criarCacheDeRelatorios(prisma);
 const fastify = Fastify({ logger: false });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,10 +149,12 @@ fastify.get("/analytics/top-products", async (req) => {
         ? limRaw[0]
         : undefined
   );
-  return getTopProductsReport(prisma, {
-    ...(categoryUrl !== "" ? { categoryUrl } : {}),
-    limit
-  });
+  return relatorios.comCache(`top|${categoryUrl}|${limit}`, () =>
+    getTopProductsReport(prisma, {
+      ...(categoryUrl !== "" ? { categoryUrl } : {}),
+      limit
+    })
+  );
 });
 
 fastify.get("/analytics/opportunities", async (req) => {
@@ -176,11 +181,13 @@ fastify.get("/analytics/opportunities", async (req) => {
         ? modeRaw[0]
         : ""
   );
-  return getOpportunitiesReport(prisma, {
-    ...(categoryUrl !== "" ? { categoryUrl } : {}),
-    limit,
-    mode
-  });
+  return relatorios.comCache(`opp|${categoryUrl}|${limit}|${mode}`, () =>
+    getOpportunitiesReport(prisma, {
+      ...(categoryUrl !== "" ? { categoryUrl } : {}),
+      limit,
+      mode
+    })
+  );
 });
 
 
@@ -192,10 +199,14 @@ fastify.get("/analytics/product-score", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getProductScoreReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  return relatorios.comCache(`score|${categoryUrl}`, () =>
+    getProductScoreReport(prisma, categoryUrl !== "" ? { categoryUrl } : {})
+  );
 });
 
-fastify.get("/analytics/new-products", async () => getNewProductsReport(prisma));
+fastify.get("/analytics/new-products", async () =>
+  relatorios.comCache("new-products", () => getNewProductsReport(prisma))
+);
 
 fastify.get("/analytics/growth", async (req) => {
   const raw = req.query?.categoryUrl;
@@ -205,7 +216,9 @@ fastify.get("/analytics/growth", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getGrowthReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  return relatorios.comCache(`growth|${categoryUrl}`, () =>
+    getGrowthReport(prisma, categoryUrl !== "" ? { categoryUrl } : {})
+  );
 });
 
 async function scalableProductsFromQuery(req) {
@@ -216,7 +229,9 @@ async function scalableProductsFromQuery(req) {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getScalableProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  return relatorios.comCache(`scale|${categoryUrl}`, () =>
+    getScalableProductsReport(prisma, categoryUrl !== "" ? { categoryUrl } : {})
+  );
 }
 
 fastify.get("/analytics/scalable-products", scalableProductsFromQuery);
@@ -230,15 +245,23 @@ fastify.get("/analytics/category-map", async (req) => {
       : Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string"
         ? raw[0].trim()
         : "";
-  return getCategoryMapReport(prisma, categoryUrl !== "" ? { categoryUrl } : {});
+  return relatorios.comCache(`map|${categoryUrl}`, () =>
+    getCategoryMapReport(prisma, categoryUrl !== "" ? { categoryUrl } : {})
+  );
 });
 
-fastify.get("/analytics/categories", async () => listImportedCategories(prisma));
+fastify.get("/analytics/categories", async () =>
+  relatorios.comCache("categories", () => listImportedCategories(prisma))
+);
 
-fastify.get("/analytics/sellers", async () => getSellersReport(prisma));
+fastify.get("/analytics/sellers", async () =>
+  relatorios.comCache("sellers", () => getSellersReport(prisma))
+);
 
 fastify.get("/analytics/category-stats", async () =>
-  getCategoryStatsReport(prisma, (p) => getProductScoreFull(p, {}))
+  relatorios.comCache("category-stats", () =>
+    getCategoryStatsReport(prisma, (p) => getProductScoreFull(p, {}))
+  )
 );
 
 fastify.get("/analytics/search", async (req) => {
@@ -247,9 +270,15 @@ fastify.get("/analytics/search", async (req) => {
   return buscarTudo(prisma, q);
 });
 
-fastify.get("/analytics/coverage", async () => getCoverageReport(prisma));
+// Media 5,8-9,6 s para devolver 1 KB (medido no painel Ranking em 04/09/2026):
+// o custo esta em varrer a coleta inteira, nao no tamanho da resposta.
+fastify.get("/analytics/coverage", async () =>
+  relatorios.comCache("coverage", () => getCoverageReport(prisma))
+);
 
-fastify.get("/analytics/hidden-products", async () => listHiddenProducts(prisma));
+fastify.get("/analytics/hidden-products", async () =>
+  relatorios.comCache("hidden-products", () => listHiddenProducts(prisma))
+);
 
 // Candidatos a vídeo: produtos com galeria no banco, de QUALQUER coleta.
 // Ver o cabeçalho de lib/enriched-products.mjs para o porquê de não bastar
@@ -260,14 +289,18 @@ fastify.get("/analytics/enriched-products", async (req) => {
     const n = Number(bruto);
     return Number.isFinite(n) ? n : undefined;
   };
-  return listEnrichedProducts(prisma, {
-    minFotos: num(req.query?.minFotos),
-    limit: num(req.query?.limit)
-  });
+  const minFotos = num(req.query?.minFotos);
+  const limit = num(req.query?.limit);
+  return relatorios.comCache(`enriched|${minFotos}|${limit}`, () =>
+    listEnrichedProducts(prisma, { minFotos, limit })
+  );
 });
 
 fastify.post("/analytics/product-hide/:productId", async (req, reply) => {
   const result = await hideProduct(prisma, req.params.productId);
+  // Esconder um produto muda as listas sem criar ScrapeRun novo:
+  // sem isto, o cache dos relatórios continuaria a mostrá-lo.
+  relatorios.invalidar();
   if (!result.ok) {
     return reply.code(result.error === "not_found" ? 404 : 400).send(result);
   }
@@ -276,6 +309,9 @@ fastify.post("/analytics/product-hide/:productId", async (req, reply) => {
 
 fastify.post("/analytics/product-unhide/:productId", async (req, reply) => {
   const result = await unhideProduct(prisma, req.params.productId);
+  // Esconder um produto muda as listas sem criar ScrapeRun novo:
+  // sem isto, o cache dos relatórios continuaria a mostrá-lo.
+  relatorios.invalidar();
   if (!result.ok) {
     return reply.code(result.error === "not_found" ? 404 : 400).send(result);
   }
@@ -285,6 +321,9 @@ fastify.post("/analytics/product-unhide/:productId", async (req, reply) => {
 fastify.post("/analytics/product-hide-batch", async (req, reply) => {
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const result = await hideProductsBatch(prisma, body.productIds);
+  // Esconder um produto muda as listas sem criar ScrapeRun novo:
+  // sem isto, o cache dos relatórios continuaria a mostrá-lo.
+  relatorios.invalidar();
   if (!result.ok) {
     return reply.code(400).send(result);
   }

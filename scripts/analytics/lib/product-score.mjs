@@ -9,6 +9,7 @@ import { getLatestAndPreviousRun, getLatestAndBaselineRun } from "../_common.mjs
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
+import { SNAPSHOT_REPORT_SELECT, SNAPSHOT_REPORT_SELECT_WITH_RUN } from "./snapshot-select.mjs";
 
 const TOP_LIMIT = 30;
 
@@ -76,9 +77,7 @@ async function buildLatestRunScoreRows(prisma) {
 
   const snaps = await prisma.productSnapshot.findMany({
     where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
-    include: {
-      product: { include: { seller: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT
   });
 
   if (snaps.length === 0) {
@@ -194,10 +193,7 @@ export async function fetchSnapshotsWithScoreCtxForNormalizedCategory(prisma, fi
 
   const snaps = await prisma.productSnapshot.findMany({
     where: { productRefId: { in: inCategoryIds } },
-    include: {
-      product: { include: { seller: true } },
-      scrapeRun: { select: { id: true, collectedAt: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT_WITH_RUN
   });
 
   if (snaps.length === 0) {

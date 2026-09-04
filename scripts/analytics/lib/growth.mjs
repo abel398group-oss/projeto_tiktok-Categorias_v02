@@ -7,6 +7,7 @@
 import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
+import { SNAPSHOT_REPORT_SELECT } from "./snapshot-select.mjs";
 
 const TOP_LIMIT = 20;
 
@@ -93,9 +94,7 @@ export async function getGrowthReport(prisma, opts = {}) {
       product: { hiddenAt: null },
       ...snapWhereBase
     },
-    include: {
-      product: { include: { seller: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT
   });
 
   /** @type {Array<{delta: number, deltaPctLabel: string, s: (typeof latestSnaps)[number], prevSales: number}>} */

@@ -2,6 +2,7 @@
  * Produtos novos no último run — lógica partilhada CLI / API.
  */
 import { getLatestAndPreviousRun } from "../_common.mjs";
+import { SNAPSHOT_REPORT_SELECT } from "./snapshot-select.mjs";
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
@@ -58,9 +59,7 @@ export async function getNewProductsReport(prisma) {
       scrapeRunId: latest.id,
       productRefId: { in: [...ids] }
     },
-    include: {
-      product: { include: { seller: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT
   });
 
   const byPid = new Map(snaps.map((s) => [s.product.productId, s]));

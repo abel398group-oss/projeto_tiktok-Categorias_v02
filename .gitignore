@@ -45,3 +45,5 @@ curadoria/
 
 # pacotes gerados para o Symphony (derivados, descartaveis)
 exportado/
+backups/
+*.err

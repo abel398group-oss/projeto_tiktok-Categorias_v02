@@ -10,6 +10,7 @@ import {
   rotuloScore
 } from "./lib/product-score.mjs";
 import { parseCategory } from "./lib/parse-category.mjs";
+import { SNAPSHOT_REPORT_SELECT } from "./lib/snapshot-select.mjs";
 
 const TOP_PRODUCTS_PER_SUB = 5;
 
@@ -163,9 +164,7 @@ async function getCategoryMapReportGlobal(prisma) {
 
   const snaps = await prisma.productSnapshot.findMany({
     where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
-    include: {
-      product: { include: { seller: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT
   });
 
   if (snaps.length === 0) {

@@ -34,8 +34,61 @@ function parseImportLogDetail(combinedLog, opts) {
 /**
  * @param {import("fastify").FastifyInstance} fastify
  */
+/**
+ * O import em curso, se houver.
+ *
+ * PORQUE EXISTE: esta rota lançava um `npm run db:import:output` novo a CADA
+ * chamada, sem olhar se já havia um a correr. Clicar duas vezes no painel, ou o
+ * painel de coleta pedir import a cada categoria terminada, empilhava processos
+ * que escrevem ~21 mil snapshots cada um — todos na mesma tabela, ao mesmo tempo.
+ *
+ * Medido em 04/09/2026: 8 imports abertos entre as 14:56 e as 15:36, cada um com
+ * 620–800 s de CPU queimados e NENHUM concluído; só 4 coletas gravadas nessa
+ * hora. A máquina ficou a 100% de CPU com 1 GB de 16 GB livres, e um teste de
+ * CPU que corre em 0,75 s passou a levar 11,1 s — tudo, incluindo o painel,
+ * ficou ~15x mais lento. Empilhar imports não importa mais depressa: importa
+ * mais devagar e leva o resto da máquina atrás.
+ *
+ * Quem chegar durante um import em curso passa a esperar por ESSE, em vez de
+ * abrir outro. O resultado é o mesmo — a base fica igualmente sincronizada.
+ *
+ * @type {Promise<any> | null}
+ */
+let importEmCurso = null;
+
+/**
+ * @param {import("fastify").FastifyInstance} fastify
+ */
 export function registerImportOutputRoute(fastify) {
   fastify.post("/analytics/import-output", async (_req, reply) => {
+    if (importEmCurso) {
+      console.log("[import-output] Já havia um import a correr — este pedido espera por esse.");
+      const resultado = await importEmCurso;
+      return reply.code(resultado.status).send(resultado.corpo);
+    }
+
+    let terminar;
+    importEmCurso = new Promise((r) => { terminar = r; });
+    try {
+      return await correrImport(reply, terminar);
+    } finally {
+      importEmCurso = null;
+    }
+  });
+}
+
+/**
+ * @param {import("fastify").FastifyReply} reply
+ * @param {(v: { status: number, corpo: any }) => void} terminar
+ */
+async function correrImport(reply, terminar) {
+  /** Guarda a resposta para quem ficou à espera deste mesmo import. */
+  const responder = (status, corpo) => {
+    terminar({ status, corpo });
+    return reply.code(status).send(corpo);
+  };
+
+  {
     /** @type {string} */
     let combinedLog = "";
     const t0 = Date.now();
@@ -84,7 +137,7 @@ export function registerImportOutputRoute(fastify) {
               (detail.inputHash ?? "").slice(0, 16)
             );
           }
-          return reply.send({
+          return responder(200, {
             ok: true,
             skipped: true,
             message:
@@ -96,7 +149,7 @@ export function registerImportOutputRoute(fastify) {
         if (detail.scrapeRunId) {
           console.log("[import-output] Detalhe: novo scrapeRunId=%s", detail.scrapeRunId);
         }
-        return reply.send({
+        return responder(200, {
           ok: true,
           skipped: false,
           message: "Importação concluída (JSON → base de dados).",
@@ -107,14 +160,14 @@ export function registerImportOutputRoute(fastify) {
       const tail =
         combinedLog.length > 3800 ? `…${combinedLog.slice(-3700)}` : combinedLog.trim() || `exit ${exitCode}`;
       console.error("[import-output] Falha exitCode=%s · tail:\n%s", exitCode, tail.slice(0, 1200));
-      return reply.code(502).send({
+      return responder(502, {
         ok: false,
         message: tail || `Import falhou com código ${exitCode}.`
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[import-output] Excepção:", msg);
-      return reply.code(500).send({ ok: false, message: msg });
+      return responder(500, { ok: false, message: msg });
     }
-  });
+  }
 }

@@ -102,14 +102,23 @@ export function ExcelSortTh({
     [colFilters, colKey, filterMode, rangeMinKey, rangeMaxKey]
   );
 
+  /**
+   * A lista de valores distintos só é lida dentro do menu (`{open ? ... }`), mas
+   * era calculada sempre — em TODAS as colunas, sobre o dataset INTEIRO, a cada
+   * render. Com `limit=5000` no Top Products isso são ~10 colunas a varrer 5000
+   * linhas e a ordenar milhares de strings; medido em 04/09/2026, cada troca
+   * para o separador Top Products bloqueava o browser 9,3 s para mostrar 20
+   * linhas, sem um único pedido à rede. Calcular só com o menu aberto é o mesmo
+   * resultado pelo custo de quem realmente abre o filtro.
+   */
   const rowsForDistinct = useMemo(
-    () => datasetRows.filter((r) => rowMatches(/** @type {Record<string, unknown>} */ (r), relaxedForDistinct)),
-    [datasetRows, relaxedForDistinct, rowMatches]
+    () => (open ? datasetRows.filter((r) => rowMatches(/** @type {Record<string, unknown>} */ (r), relaxedForDistinct)) : LISTA_VAZIA),
+    [open, datasetRows, relaxedForDistinct, rowMatches]
   );
 
   const distinctValues = useMemo(
-    () => oppDistinctSortedForColumn(rowsForDistinct, dField),
-    [rowsForDistinct, dField]
+    () => (open ? oppDistinctSortedForColumn(rowsForDistinct, dField) : LISTA_VAZIA),
+    [open, rowsForDistinct, dField]
   );
 
   const filteredDistinct = useMemo(() => {
@@ -435,10 +444,22 @@ export function excelRelaxColumnFilters(f, omitColKey, omitMode, rkMin, rkMax) {
   return o;
 }
 
+/**
+ * Um só Collator para todas as ordenações.
+ *
+ * `a.localeCompare(b, "pt-BR", {...})` constrói as regras de comparação a cada
+ * par comparado. Numa coluna como `nome`, com milhares de valores distintos,
+ * isso são dezenas de milhares de construções para uma ordenação só.
+ */
+/** Mesma referência sempre: um `[]` novo a cada render invalidaria os `useMemo` a jusante. */
+const LISTA_VAZIA = [];
+
+const COLLATOR_PT = new Intl.Collator("pt-BR", { sensitivity: "base" });
+
 export function oppDistinctSortedForColumn(rows, columnKey) {
   const set = new Set();
   for (const row of rows) { const v = String(row[columnKey] ?? "").trim(); if (v) set.add(v); }
-  return [...set].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+  return [...set].sort(COLLATOR_PT.compare);
 }
 
 export function oppMatchTextAllowlist(cellRaw, allow) {

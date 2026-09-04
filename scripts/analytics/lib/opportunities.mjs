@@ -11,6 +11,7 @@ import { getLatestAndPreviousRun } from "../_common.mjs";
 import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
+import { SNAPSHOT_REPORT_SELECT, SNAPSHOT_REPORT_SELECT_WITH_RUN } from "./snapshot-select.mjs";
 
 export const OPPORTUNITIES_DEFAULT_LIMIT = 20;
 export const OPPORTUNITIES_MAX_LIMIT = 10000;
@@ -430,9 +431,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
 
       const rows = await prisma.productSnapshot.findMany({
         where: whereGlobal,
-        include: {
-          product: { include: { seller: true } }
-        },
+        select: SNAPSHOT_REPORT_SELECT,
         orderBy:
           mode === "no_sales"
             ? [{ capturedAt: "desc" }]
@@ -459,9 +458,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
 
     const allRun = await prisma.productSnapshot.findMany({
       where: { scrapeRunId: latest.id, product: { hiddenAt: null } },
-      include: {
-        product: { include: { seller: true } }
-      }
+      select: SNAPSHOT_REPORT_SELECT
     });
     const candidates = allRun.filter((s) => predicate(s));
     candidates.sort(compareOpportunitySnapshots);
@@ -540,10 +537,7 @@ export async function getOpportunitiesReport(prisma, opts = {}) {
 
   const snaps = await prisma.productSnapshot.findMany({
     where: { productRefId: { in: inCategoryIds } },
-    include: {
-      product: { include: { seller: true } },
-      scrapeRun: { select: { id: true, collectedAt: true } }
-    }
+    select: SNAPSHOT_REPORT_SELECT_WITH_RUN
   });
 
   const latestByProd = pickLatestSnapshotPerProductRef(snaps);

@@ -74,7 +74,8 @@
     "direcao": "node --import ./scripts/load-root-env.mjs scripts/direcao.mjs",
     "nucleo:preencher": "node --import ./scripts/load-root-env.mjs scripts/preencher-nucleo.mjs",
     "curadoria": "node --import ./scripts/load-root-env.mjs scripts/curadoria.mjs",
-    "pacote:symphony": "node --import ./scripts/load-root-env.mjs scripts/pacote-symphony.mjs"
+    "pacote:symphony": "node --import ./scripts/load-root-env.mjs scripts/pacote-symphony.mjs",
+    "db:backup": "node scripts/db-backup.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
