@@ -23,6 +23,24 @@ product-seeker (23/08/2026)*.
 
 ---
 
+## ESTADO — implementado em 04/09/2026
+
+Todas as fases feitas, em 8 commits. O que o plano não previu, e mudou:
+
+| planeado | o que aconteceu |
+|---|---|
+| A1 sentinela `PARAR` | já existia uma sentinela, mas era **apagada no arranque** — inútil com religamento automático. Passou a persistir e a bloquear o arranque com código 3. |
+| B1 colunas em `Category` | **não existe `model Category`** — o catálogo vive no CATALOG do orquestrador. Criei `CategoriaDirecao`, esparsa, chaveada por `slug-id`. |
+| C4 veredito nas medianas | ligado, e **duas vezes não disparava**: primeiro apanhava o id numérico em vez do nome; depois, o nome era slug em inglês contra títulos em português. Corrigido pelo CATALOG. |
+| E1 excluir imagem de texto | **impossível sem dano.** A tabela de medidas (74% branco / 0,086 sat) é indistinguível de uma foto real do Pro3Magnésio (62% / 0,088). Passou a assinalar, não excluir. |
+
+Números medidos no fim: 208 testes a passar · 57.105 de 57.305 produtos com
+núcleo · 809 acessórios fora das medianas em 78 categorias · pacote gera 5
+pastas completas em segundos.
+
+**Não testado, e precisa da máquina do dono:** o reboot e o teste do cabo da
+fase A4. São os únicos que provam a BIOS e o logon automático.
+
 ## 0 · Já entrou — não repetir
 
 Parâmetros, sinais aditivos, higiene estatística (mediana, p25–p75, `n`
