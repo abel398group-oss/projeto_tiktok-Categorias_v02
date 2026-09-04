@@ -42,3 +42,6 @@ PARAR
 
 # lotes de curadoria (entram e saem, nao sao codigo)
 curadoria/
+
+# pacotes gerados para o Symphony (derivados, descartaveis)
+exportado/

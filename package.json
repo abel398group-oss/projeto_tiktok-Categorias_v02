@@ -73,7 +73,8 @@
     "db:inventario": "node --import ./scripts/load-root-env.mjs scripts/db-inventario.mjs",
     "direcao": "node --import ./scripts/load-root-env.mjs scripts/direcao.mjs",
     "nucleo:preencher": "node --import ./scripts/load-root-env.mjs scripts/preencher-nucleo.mjs",
-    "curadoria": "node --import ./scripts/load-root-env.mjs scripts/curadoria.mjs"
+    "curadoria": "node --import ./scripts/load-root-env.mjs scripts/curadoria.mjs",
+    "pacote:symphony": "node --import ./scripts/load-root-env.mjs scripts/pacote-symphony.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -79,6 +79,20 @@ model Product {
   /// para sempre, sem ninguém perceber que nunca dá certo.
   ///
   /// null = nunca tentado. Valores: ok | sem_galeria | captcha | url_invalida | erro
+  /// Vendas ganhas nos últimos ~7 dias: `salesCount` de agora menos o de há
+  /// 7 dias. É a resposta a "esquentando?" e um dos critérios do pacote.
+  ///
+  /// Uma coluna, não uma série: medido em 23/08/2026, `salesCount` é
+  /// monotónico (0 quedas em 18.005 pares), logo o delta é uma subtração no
+  /// fim do import. Guardar a série custaria GB para responder o mesmo.
+  ///
+  /// NULL = não há leitura de 7 dias atrás. Não é zero: "não medimos" e
+  /// "não vendeu" são coisas diferentes.
+  delta7d Int? @map("delta_7d")
+
+  /// Quando o `delta7d` foi calculado — sem isto, um delta velho parece novo.
+  delta7dEm DateTime? @map("delta_7d_em")
+
   /// A palavra que diz O QUE é o produto — ver `src/scrape/nucleo.mjs`.
   /// Derivada do título, sem rede e sem modelo. Alimenta o rótulo curto, a
   /// espécie e o veredito contra a categoria.
