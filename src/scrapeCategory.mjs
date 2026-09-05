@@ -48,6 +48,24 @@ import {
   extractHttpImageUrlsDeep
 } from "./scrape/image-utils.mjs";
 import { medirCompletude, avaliarCompletude } from "./scrape/completude.mjs";
+import { rolarComoGente, digitarBusca, escolherTermo, pareceMuroDeBot } from "./scrape/humanizar.mjs";
+
+/**
+ * O que se digita no Google antes de entrar no Shop.
+ *
+ * Tem de ser plausível para quem está prestes a abrir categorias de
+ * marketplace: buscar "tênis" e a seguir abrir uma bomba d'água é uma
+ * sequência que não fecha. Genérico de propósito — não usamos o nome da
+ * categoria a coletar, porque isso ligaria a busca ao alvo e daria ao
+ * Google um registo do que andamos a levantar.
+ */
+const TERMOS_DE_AQUECIMENTO = [
+  "ofertas do dia",
+  "frete grátis brasil",
+  "comprar online barato",
+  "promoção fim de semana",
+  "cupom desconto loja"
+];
 import {
   pickString,
   pickNumber,
@@ -3524,11 +3542,58 @@ async function main() {
      * `mousemove` e `scroll`, e a ausência dos dois é tão informativa quanto a
      * presença. Falhar aqui não importa — é disfarce, não coleta — por isso
      * cada passo engole o próprio erro.
+     *
+     * A ROLAGEM SOZINHA AINDA ERA UMA VISITA SEM GESTO. Medido no
+     * product-seeker em 21/08/2026 (ver src/scrape/humanizar.mjs): quem
+     * procura DIGITA. Aterrar, rolar e sair pela barra de endereços não é o
+     * que ninguém faz — e o `Referer` da navegação seguinte passa a vir de
+     * uma página de RESULTADOS, não da home, que é o par busca→destino que
+     * o padrão espera. Nada aqui pode derrubar a coleta: cada passo engole
+     * o erro e o resultado vai para o log, para se saber quando a leitura
+     * seguinte partiu sem disfarce.
      */
-    for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
-      await page.mouse.move(200 + Math.random() * 800, 200 + Math.random() * 400).catch(() => {});
-      await page.evaluate((dy) => window.scrollBy(0, dy), 120 + Math.random() * 260).catch(() => {});
-      await sleepMs(400 + Math.random() * 900);
+    await rolarComoGente(page);
+
+    const termoBusca = escolherTermo(TERMOS_DE_AQUECIMENTO);
+    const digitou = await digitarBusca(page, termoBusca, [
+      'textarea[name="q"]',
+      'input[name="q"]',
+      'textarea[title="Pesquisar"]',
+      'input[title="Pesquisar"]'
+    ]);
+
+    if (digitou) {
+      await page
+        .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30_000 })
+        .catch(() => {});
+
+      /*
+       * MEDIDO EM 05/09/2026: com este stack (puppeteer-extra + Stealth +
+       * Chrome instalado), o Google responde à busca com /sorry/index —
+       * headless E com janela. Sair de um CAPTCHA para o TikTok é pior que
+       * não ter aquecido: o Referer passaria a dizer "venho de um muro".
+       * Então detecta-se e volta-se à home, que essa passa.
+       */
+      if (pareceMuroDeBot(page.url())) {
+        console.warn(
+          "[scrape] aquecimento: o Google respondeu com muro de anti-automação " +
+          "(/sorry). A voltar à home para não sujar o Referer. " +
+          "Ver docs/IMPLEMENTACAO-PRODUCT-SEEKER-RODADA-3.md §A."
+        );
+        await page
+          .goto("https://www.google.com", { waitUntil: "domcontentloaded", timeout: 30_000 })
+          .catch(() => {});
+        await sleepMs(1200 + Math.random() * 1800);
+      } else {
+        await sleepMs(1500 + Math.random() * 2000);
+        await rolarComoGente(page);
+        console.log(`[scrape] aquecimento: busca "${termoBusca}" digitada no Google.`);
+      }
+    } else {
+      console.warn(
+        "[scrape] aquecimento: não achei a caixa de busca do Google — " +
+        "a coleta segue, mas sem o par busca→destino. Confira os selectores."
+      );
     }
   }
   
