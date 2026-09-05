@@ -357,10 +357,14 @@ Cinco histórias. **D saiu** — ver o número na secção D.
 | A1–A3 sequência humana | **feito** — `src/scrape/humanizar.mjs`, 12 testes |
 | A4 modo CDP | **feito** — `CDP=1`, com A/B a comprovar |
 | B1 limiares fora dos `if` | **feito** — `score-parametros.mjs`, 8 testes de caracterização |
-| B2 parâmetros por API + tabela | por fazer |
+| B2 parâmetros por API + tabela | **feito** — `GET/PUT/DELETE /analytics/parametros`, 7 testes |
 | C1 restrição ligante | **feito** — `restricao.mjs`, 9 testes, e visível no painel |
 
-Suite: de 208 para **237 testes**, 0 falhas.
+Suite: de 208 para **244 testes**, 0 falhas. **As cinco histórias fecharam.**
+
+O B2 foi verificado de ponta a ponta com a API a correr: mudar
+`oportunidade_vendas_max` de 300 para 1000 fez o score máximo passar de 85
+para 90, **sem reiniciar nada**, e apagar a linha trouxe-o de volta a 85.
 
 **A vai primeiro** porque é a única que protege a coleta: sem dados, o resto
 não tem sobre o que correr. E porque a configuração que eles mediram a falhar
