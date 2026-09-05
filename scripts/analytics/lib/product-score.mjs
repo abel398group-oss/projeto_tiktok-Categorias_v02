@@ -10,6 +10,14 @@ import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 import { SNAPSHOT_REPORT_SELECT, SNAPSHOT_REPORT_SELECT_WITH_RUN } from "./snapshot-select.mjs";
+import {
+  FAIXAS_VENDAS,
+  FAIXAS_AVALIACAO,
+  FAIXAS_CRESCIMENTO,
+  FAIXAS_ROTULO,
+  ROTULO_MINIMO,
+  corte
+} from "./score-parametros.mjs";
 
 const TOP_LIMIT = 30;
 
@@ -371,37 +379,39 @@ export async function getProductScoreFull(prisma, opts = {}) {
 
 function pontosVendas(sc) {
   if (sc == null) return 0;
-  if (sc >= 1000) return 35;
-  if (sc >= 300) return 25;
-  if (sc >= 100) return 15;
-  if (sc >= 10) return 8;
+  for (const [minimo, pontos] of FAIXAS_VENDAS) {
+    if (sc >= minimo) return pontos;
+  }
   return 0;
 }
 
 /** @param {number | null | undefined} avg @param {number | null | undefined} tot */
 function pontosAvaliacao(avg, tot) {
   if (avg == null || tot == null) return 0;
-  if (avg >= 4.8 && tot >= 10) return 25;
-  if (avg >= 4.5 && tot >= 5) return 18;
-  if (avg >= 4.0 && tot >= 5) return 10;
+  for (const [notaMin, totalMin, pontos] of FAIXAS_AVALIACAO) {
+    if (avg >= notaMin && tot >= totalMin) return pontos;
+  }
   return 0;
 }
 
 /** @param {number | null | undefined} price */
 function pontosPreco(price) {
-  return price != null && Number(price) > 0 ? 10 : 0;
+  return price != null && Number(price) > 0 ? corte("pontos_preco") : 0;
 }
 
 /** @param {boolean} hasDiscount */
 function pontosDesconto(hasDiscount) {
-  return hasDiscount ? 5 : 0;
+  return hasDiscount ? corte("pontos_desconto") : 0;
 }
 
 /** @param {number | null | undefined} sc @param {number | null | undefined} avg @param {number | null | undefined} tot @param {number | null | undefined} price */
 function pontosOportunidade(sc, avg, tot, price) {
   if (price == null || sc == null || avg == null || tot == null) return 0;
-  if (sc >= 10 && sc <= 300 && avg >= 4.5 && tot >= 5) return 15;
-  return 0;
+  const dentroDaJanela =
+    sc >= corte("oportunidade_vendas_min") && sc <= corte("oportunidade_vendas_max");
+  const temQualidade =
+    avg >= corte("oportunidade_nota_min") && tot >= corte("oportunidade_avaliacoes_min");
+  return dentroDaJanela && temQualidade ? corte("pontos_oportunidade") : 0;
 }
 
 /**
@@ -418,17 +428,20 @@ function pontosOportunidade(sc, avg, tot, price) {
  */
 function pontosCrescimento(vendasPorDia, podeCalcular) {
   if (!podeCalcular || vendasPorDia == null) return { pts: 0, vendasPorDia: null };
-  if (vendasPorDia >= 50) return { pts: 10, vendasPorDia };
-  if (vendasPorDia >= 10) return { pts: 6, vendasPorDia };
-  if (vendasPorDia > 0) return { pts: 3, vendasPorDia };
+  for (const [ritmoMin, pontos] of FAIXAS_CRESCIMENTO) {
+    // A última faixa tem mínimo 0 e é "qualquer ritmo acima de zero":
+    // parado não é crescimento, por isso a comparação lá é estrita.
+    const bate = ritmoMin === 0 ? vendasPorDia > 0 : vendasPorDia >= ritmoMin;
+    if (bate) return { pts: pontos, vendasPorDia };
+  }
   return { pts: 0, vendasPorDia };
 }
 
 export function rotuloScore(score) {
-  if (score >= 80) return "excelente";
-  if (score >= 60) return "bom";
-  if (score >= 40) return "observar";
-  return "fraco";
+  for (const [minimo, rotulo] of FAIXAS_ROTULO) {
+    if (score >= minimo) return rotulo;
+  }
+  return ROTULO_MINIMO;
 }
 
 /**
@@ -552,7 +565,7 @@ export function computeProductScoreLine(s, ctx) {
   const { pts: gPts } = pontosCrescimento(vendasPorDia, Boolean(podeDelta) && janelaUtil);
 
   let totalPts = vPts + rPts + pPts + dPts + oPts + gPts;
-  if (totalPts > 100) totalPts = 100;
+  if (totalPts > corte("score_maximo")) totalPts = corte("score_maximo");
 
   const motivosStr = motivosLista({
     sc,
