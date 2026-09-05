@@ -178,6 +178,20 @@ no ecrã, e os dois conjuntos de cortes deixam de viver em sítios diferentes.
 mudar ao extrair — teste de caracterização primeiro). B2 uma história com
 migração de uma tabela.
 
+**Estado: B1 feito** (`scripts/analytics/lib/score-parametros.mjs`, 8 testes
+de caracterização escritos antes da extracção). B2 por fazer.
+
+**O que o teste de caracterização revelou, e ninguém sabia:** o score **nunca
+chega a 100**. O eixo de oportunidade (15 pontos) só pontua entre 10 e 300
+vendas, portanto é mutuamente exclusivo com o topo do eixo de vendas — um
+campeão de volume nunca é «oportunidade», por definição já foi descoberto. O
+máximo real é **85**, e o `Math.min(100)` do código é decorativo.
+
+Não é teórico: no ranking de agora, **6 dos 30 produtos estão exactamente em
+85** — no tecto — apresentados como se lhes faltassem 15 pontos de qualidade.
+Faltam-lhes 15 pontos de ainda-não-ser-óbvio, que é o contrário. Corrigir a
+escala é decisão de produto; fica registado em `CORTES.score_maximo`.
+
 **Nota:** isto **não** é o `score_final` composto que o autor deles rejeitou
 por escrito e que nós recusámos duas vezes. É só tirar constantes de dentro
 de `if`.
