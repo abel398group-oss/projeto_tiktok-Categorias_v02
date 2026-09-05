@@ -43,6 +43,7 @@ import { hideProduct, unhideProduct, hideProductsBatch, listHiddenProducts } fro
 import { listEnrichedProducts } from "./lib/enriched-products.mjs";
 import { getCoverageReport } from "./lib/coverage.mjs";
 import { criarCacheDeRelatorios } from "./lib/report-cache.mjs";
+import { registerParametrosRoute, carregarParametros } from "./parametros-route.mjs";
 
 requireDatabaseUrl();
 
@@ -132,6 +133,8 @@ fastify.get("/health", async () => ({
   ok: true,
   service: "analytics-api"
 }));
+
+registerParametrosRoute(fastify, prisma, relatorios);
 
 fastify.get("/analytics/top-products", async (req) => {
   const raw = req.query?.categoryUrl;
@@ -950,6 +953,11 @@ const graceful = async () => {
 
 process.on("SIGINT", graceful);
 process.on("SIGTERM", graceful);
+
+// Os cortes gravados entram em vigor ANTES de a API aceitar pedidos: subir a
+// servir com os padrões e só depois aplicar os ajustes daria respostas
+// diferentes nos primeiros segundos de vida do processo.
+await carregarParametros(prisma);
 
 await fastify.listen({ port, host });
 // eslint-disable-next-line no-console

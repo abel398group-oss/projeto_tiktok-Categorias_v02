@@ -260,7 +260,7 @@ model CategoriaDirecao {
   /// vira medo de mexer.
   nota String
 
-  definidaEm DateTime @default(now()) @map("definida_em")
+  definidaEm   DateTime @default(now()) @map("definida_em")
   atualizadaEm DateTime @updatedAt @map("atualizada_em")
 
   @@index([prioridade])
@@ -291,9 +291,28 @@ model ProductCuration {
   /// redecidir do zero daqui a seis meses.
   nota String?
 
-  curadoEm   DateTime @default(now()) @map("curado_em")
+  curadoEm     DateTime @default(now()) @map("curado_em")
   atualizadoEm DateTime @updatedAt @map("atualizado_em")
 
   @@index([gastarCredito])
   @@map("product_curation")
+}
+
+/// Cortes do score editáveis sem deploy.
+///
+/// PORQUÊ UMA TABELA E NÃO localStorage: os cortes dos SINAIS do Ranking
+/// vivem no navegador de quem os ajusta, e isso é honesto — são preferência
+/// de leitura. Estes são outra coisa: decidem o que a API devolve a toda a
+/// gente, incluindo ao MoneyPrinter, que não tem navegador nenhum. Um valor
+/// que muda o que o robô gera não pode viver no localStorage de um browser.
+///
+/// `fonte` é a coluna que se esquece e a que mais vale: sem ela, daqui a
+/// três meses ninguém sabe se 300 veio de uma medição ou de um palpite, e
+/// por isso ninguém se atreve a mexer. Copiado do product-seeker.
+model Parametro {
+  chave        String   @id
+  valor        Float
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  @@map("parametros")
 }

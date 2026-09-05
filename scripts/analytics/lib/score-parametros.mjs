@@ -132,9 +132,58 @@ export const CORTES = {
   }
 };
 
+/**
+ * Valores que a operação mudou, por cima do catálogo.
+ *
+ * Vazio = tudo no padrão, que é exactamente o comportamento anterior a
+ * existirem parâmetros. Uma chave só entra aqui depois de alguém a gravar,
+ * e sai quando a linha é apagada — por isso `parametros` na base é esparsa.
+ *
+ * @type {Map<string, number>}
+ */
+const emVigor = new Map();
+
+/**
+ * Substitui os valores em vigor pelos que vieram da base.
+ *
+ * Substitui, não funde: se uma chave desapareceu da base, ela tem de voltar
+ * ao padrão. Fundir deixaria um valor apagado a viver na memória do processo
+ * até ao próximo reinício — e ninguém liga um reinício a um valor que já
+ * tinha apagado.
+ *
+ * Um valor que não seja número finito é ignorado, com aviso: parâmetro
+ * corrompido não pode partir o ranking inteiro.
+ *
+ * @param {Record<string, unknown> | Map<string, unknown>} valores
+ */
+export function aplicarValores(valores) {
+  emVigor.clear();
+  const pares = valores instanceof Map ? [...valores.entries()] : Object.entries(valores ?? {});
+  for (const [chave, bruto] of pares) {
+    if (!CORTES[chave]) continue; // chave que o código não conhece: ignorada
+    const n = Number(bruto);
+    if (!Number.isFinite(n)) {
+      console.warn(`[parametros] valor inválido para ${chave}: ${bruto} — a usar o padrão.`);
+      continue;
+    }
+    emVigor.set(chave, n);
+  }
+  return emVigor.size;
+}
+
+/** O que está em vigor agora, com padrão e origem de cada corte. */
+export function valoresEmVigor() {
+  return Object.values(CORTES).map((c) => ({
+    ...c,
+    valor: emVigor.has(c.chave) ? emVigor.get(c.chave) : c.valor,
+    padrao: c.valor,
+    origem: emVigor.has(c.chave) ? "ajustado" : "padrão"
+  }));
+}
+
 /** @param {string} chave */
 export function corte(chave) {
   const c = CORTES[chave];
   if (!c) throw new Error(`corte desconhecido: ${chave}`);
-  return c.valor;
+  return emVigor.has(chave) ? emVigor.get(chave) : c.valor;
 }
