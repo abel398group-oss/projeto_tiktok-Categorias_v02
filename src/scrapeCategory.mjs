@@ -1898,7 +1898,89 @@ async function applyBrazilBrowsingContext(page) {
   await syncBrazilEnvToLivePage(page);
 }
 
+/**
+ * Liga-se ao Chrome que JÁ ESTÁ ABERTO, em vez de lançar um.
+ *
+ * ┌─ PORQUE EXISTE ──────────────────────────────────────────────────────
+ * │ MEDIDO em 05/09/2026, com este mesmo stack (puppeteer-extra +
+ * │ StealthPlugin + Chrome instalado): abrir a home do Google passa, mas
+ * │ digitar uma busca e dar Enter devolve `google.com/sorry/index` — a
+ * │ página de tráfego incomum. Em headless E com janela visível. Não é o
+ * │ headless: é a assinatura de automação do navegador que nós lançamos.
+ * │
+ * │ É a mesma conclusão a que o product-seeker chegou no Mercado Livre em
+ * │ 21/08, e a saída deles é esta: "o Abel abre o Chrome DELE (o que já
+ * │ passa) com uma porta de depuração e o script CONECTA-SE a ele em vez
+ * │ de abrir um navegador novo. Fingerprint real, sessão real, zero flag
+ * │ de automação."
+ * │
+ * │ Perfil persistente e máscaras de stealth NÃO resolvem — os dois já cá
+ * │ estavam quando a medição acima foi feita.
+ * └──────────────────────────────────────────────────────────────────────
+ *
+ * Como usar (o Chrome tem de ser aberto ASSIM, e não pelo atalho normal):
+ *
+ *   "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+ *     --remote-debugging-port=9222 --user-data-dir="C:\chrome-scrape"
+ *
+ * Depois: `CDP=1 npm run coleta:uma`  (ou `CDP_PORT=9223` para outra porta)
+ *
+ * ⚠ O `--user-data-dir` tem de ser uma pasta À PARTE. Com o perfil normal,
+ *   o Chrome já em execução ignora a flag de depuração em silêncio e a
+ *   ligação falha sem dizer porquê.
+ *
+ * NÃO fechamos o browser no fim: ele é do utilizador, não nosso. Quem
+ * chama tem de respeitar isso — ver `browser.disconnect()` no encerramento.
+ */
+async function connectToUserChrome() {
+  const porta = Number(process.env.CDP_PORT || 9222);
+  const url = `http://127.0.0.1:${porta}`;
+  try {
+    const browser = await puppeteer.connect({
+      browserURL: url,
+      defaultViewport: { width: 1600, height: 900, deviceScaleFactor: 1 }
+    });
+    console.log(
+      `[scrape] CDP: ligado ao Chrome já aberto em ${url} — fingerprint real, sem flag de automação.`
+    );
+    return browser;
+  } catch (e) {
+    const msg = e?.message ?? String(e);
+    throw new Error(
+      `CDP=1 mas não consegui ligar-me ao Chrome em ${url} (${msg}).
+` +
+      `Abra o Chrome assim, numa pasta de perfil À PARTE:
+` +
+      `  chrome.exe --remote-debugging-port=${porta} --user-data-dir="C:\chrome-scrape"
+` +
+      `Com o perfil normal a flag é ignorada em silêncio. Para não usar CDP, tire CDP=1.`
+    );
+  }
+}
+
+/**
+ * Encerra o browser — mas NUNCA fecha o do utilizador.
+ *
+ * Em CDP o navegador é dele, não nosso: fechá-lo no fim de uma coleta
+ * mataria as abas que ele tem abertas. `disconnect()` larga o controlo e
+ * deixa tudo como estava. Este detalhe é a diferença entre uma ferramenta
+ * que se pode deixar a correr e uma que se tem de vigiar.
+ *
+ * @param {import("puppeteer").Browser | null | undefined} browser
+ */
+async function encerrarBrowser(browser) {
+  if (!browser) return;
+  try {
+    if (process.env.CDP === "1") await browser.disconnect();
+    else await browser.close();
+  } catch { /* encerramento nunca deve rebentar a saída */ }
+}
+
 async function launchTikTokBrowser() {
+  // O modo CDP curto-circuita tudo o que vem a seguir: não há opções de
+  // lançamento a montar quando não se lança nada.
+  if (process.env.CDP === "1") return connectToUserChrome();
+
   const fresh = process.env.FRESH_SESSION === "1";
   let userDataDir = process.env.CHROME_USER_DATA?.trim() || null;
   if (!userDataDir && !fresh) {
@@ -3350,7 +3432,7 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
     if (browser && browser.isConnected && browser.isConnected()) return browser;
     // eslint-disable-next-line no-console
     console.warn("[scrape] navegador desconectado — relançando…");
-    try { if (browser) await browser.close().catch(() => {}); } catch { /* ok */ }
+    await encerrarBrowser(browser);
     // Pequena espera para o perfil liberar o lock antes de reabrir.
     await new Promise((res) => setTimeout(res, 2500));
     browser = await launchTikTokBrowser();
@@ -3391,7 +3473,7 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
           // eslint-disable-next-line no-console
           console.error(`[scrape] categoria ${i + 1}/${runs.length} falhou (tentativa ${attempt}/2): ${e?.message ?? e}`);
           exitCode = Math.max(exitCode, 1);
-          try { if (browser) await browser.close().catch(() => {}); } catch { /* ok */ }
+          await encerrarBrowser(browser);
           browser = null;
           if (attempt < 2) await new Promise((res) => setTimeout(res, 3000));
         } finally {
@@ -3440,7 +3522,7 @@ export async function scrapeCategoriesSequentialSharedBrowser(runs, opts = {}) {
       }
     }
   } finally {
-    try { if (browser) await browser.close(); } catch { /* ok */ }
+    await encerrarBrowser(browser);
   }
   return exitCode;
 }
@@ -3627,7 +3709,9 @@ async function main() {
         browser.on("disconnected", resolve);
       });
     } else {
-      await browser.close();
+      // Em CDP isto faz `disconnect()`, nao `close()`: o navegador e do
+      // utilizador e fecha-lo mataria as abas dele. Ver `encerrarBrowser`.
+      await encerrarBrowser(browser);
     }
   }
 }
