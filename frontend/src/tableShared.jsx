@@ -408,6 +408,20 @@ export const CW_SCALE  = [48, 124, 70, 70, 50, 64, 66, 52, 68, 66, 50];
 export const TOP_PRODUCTS_VISIBLE_DEFAULT = 20;
 export const OPPORTUNITIES_VISIBLE_DEFAULT = 20;
 
+/**
+ * "SKU em destaque", no Mapa — a única tabela do painel que desenhava tudo.
+ *
+ * São 1007 linhas (medido em 04/09/2026), e cada uma traz 13 células, um botão
+ * `SendToAnalysisButton` e um link externo. Abrir a aba bloqueava o browser
+ * ~1,7 s só a construir esse DOM, com os dados já em cache — era o último
+ * custo de cliente que restava no painel. As outras tabelas já mostravam 20
+ * linhas com "Ver mais"; esta passa a fazer o mesmo.
+ *
+ * Não muda o que os filtros e a ordenação veem: continuam a correr sobre a
+ * lista inteira, e só o corte de visualização é que é aplicado no fim.
+ */
+export const MAP_TOP_VISIBLE_DEFAULT = 20;
+
 export const OPP_MODE_OPTIONS = /** @type {const} */ ([
   { id: "classic", label: "Clássico", description: "Produtos com bom rating, avaliações mínimas e vendas em faixa de oportunidade.", titleTip: "API: mode=classic — faixa de vendas com sinais de qualidade (ver docs)." },
   { id: "low_sales", label: "Pouca venda", description: "Produtos com poucas vendas, mas sinais positivos de avaliação.", titleTip: "API: mode=low_sales — volume de vendas reduzido na regra do servidor." },

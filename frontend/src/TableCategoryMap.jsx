@@ -13,7 +13,7 @@ import {
   IntroCard, positionThTitle, tdPosStyle, tdEllipsis,
   introLabel, introBullet, introLogicBox, introLogicLabel, introLogicUl, introWarn,
   toggleSort, asArray, isInteractiveTableCellClick, catCellPt,
-  CW_MAP_SUB, CW_MAP_TOP, SORT_MAP_SUB_DESC, SORT_MAP_TOP_DESC,
+  CW_MAP_SUB, CW_MAP_TOP, SORT_MAP_SUB_DESC, SORT_MAP_TOP_DESC, MAP_TOP_VISIBLE_DEFAULT,
   MAP_SUB_FILTERS_INITIAL, MAP_TOP_FILTERS_INITIAL,
   mapSubRowMatchesColFilters, mapTopRowMatchesColFilters,
   mapSubAnyColumnFiltersExcelActive, mapTopAnyColumnFiltersExcelActive
@@ -118,6 +118,19 @@ export default function TableCategoryMap({ data }) {
   const sortedSubcats = useMemo(() => flatSubFiltered.length === 0 ? [] : sortMapSubcatsByColumn(flatSubFiltered, sortSub.key, sortSub.dir), [flatSubFiltered, sortSub]);
   const sortedTops = useMemo(() => flatTopFiltered.length === 0 ? [] : sortMapTopProductsByColumn(flatTopFiltered, sortTop.key, sortTop.dir), [flatTopFiltered, sortTop]);
 
+  /**
+   * A tabela "SKU em destaque" mostra 20 linhas por defeito — ver
+   * `MAP_TOP_VISIBLE_DEFAULT`. O corte é só de visualização: `sortedTops` (já
+   * filtrado e ordenado sobre a lista inteira) é que alimenta os menus das
+   * colunas e a contagem, por isso filtrar e ordenar continua a ver tudo.
+   */
+  const [expandedTop, setExpandedTop] = useState(false);
+  useEffect(() => { setExpandedTop(false); }, [data?.scrapeRun?.id]);
+  const displayTops = useMemo(
+    () => (expandedTop || sortedTops.length <= MAP_TOP_VISIBLE_DEFAULT ? sortedTops : sortedTops.slice(0, MAP_TOP_VISIBLE_DEFAULT)),
+    [sortedTops, expandedTop]
+  );
+
   const onSortSub = useCallback((k) => { setSortSub((s) => toggleSort(s.key, s.dir, k, SORT_MAP_SUB_DESC)); }, []);
   const onSortTop = useCallback((k) => { setSortTop((s) => toggleSort(s.key, s.dir, k, SORT_MAP_TOP_DESC)); }, []);
   const onMapSubApplySort = useCallback((key, dir) => { setSortSub({ key, dir }); setMapSubMenuKey(null); }, []);
@@ -212,7 +225,7 @@ export default function TableCategoryMap({ data }) {
           {sortedTops.length === 0 ? (
             <tr><td colSpan={13} style={{ ...tdStyle, padding: "0.75rem 0.45rem" }}>Nenhuma linha com os filtros ▾.{" "}<button type="button" className="tk-btn-soft" onClick={() => setMapTopColFilters({ ...MAP_TOP_FILTERS_INITIAL })}>Limpar filtros</button></td></tr>
           ) : (
-            sortedTops.map((row, i) => {
+            displayTops.map((row, i) => {
               const { mestre, categoria } = mapCategoryTableLabelsPt(row.masterName, row.subName);
               const pid = String(row.productId ?? "").trim();
               return (
@@ -242,6 +255,19 @@ export default function TableCategoryMap({ data }) {
           )}
         </tbody>
       </table>
+      {sortedTops.length > MAP_TOP_VISIBLE_DEFAULT ? (
+        <p style={{ marginTop: "0.6rem", display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" className="tk-btn-soft" onClick={() => setExpandedTop((v) => !v)}>
+            {expandedTop
+              ? `Mostrar só os primeiros ${MAP_TOP_VISIBLE_DEFAULT}`
+              : `Ver mais (${(sortedTops.length - MAP_TOP_VISIBLE_DEFAULT).toLocaleString("pt-BR")} seguintes)`}
+          </button>
+          <span style={{ fontSize: "0.72rem", opacity: 0.78 }}>
+            {displayTops.length.toLocaleString("pt-BR")} de {sortedTops.length.toLocaleString("pt-BR")} linha(s).
+            {" "}Filtros ▾ e ordenação continuam a usar as {sortedTops.length.toLocaleString("pt-BR")}.
+          </span>
+        </p>
+      ) : null}
     </>
   );
 }
