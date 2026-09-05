@@ -101,6 +101,31 @@ export default function TableScore({ data }) {
   const filtersScoreExcelActive = useMemo(() => scoreExcelAnyColumnFiltersActive(scoreExcelColFilters), [scoreExcelColFilters]);
   const rows = useMemo(() => { if (scoreExcelFiltered.length === 0) return []; return sortScoreRowsByColumn(scoreExcelFiltered, sort.key, sort.dir); }, [scoreExcelFiltered, sort]);
 
+  /**
+   * O que trava a maioria — a fila de trabalho que a ordenação escondia.
+   *
+   * Um score de 62 não diz o que fazer a seguir. Agrupar pela restrição que
+   * morde primeiro diz: medido em 05/09/2026, 27 dos 30 produtos do ranking
+   * travavam todos em `sem_galeria`, e um comando destravava-os. Isso não
+   * aparecia em lado nenhum — cada linha mostrava só a sua nota.
+   *
+   * Só se mostra quando a restrição domina (≥ 1/3 das linhas): abaixo disso
+   * não é uma tarefa, é dispersão, e o aviso vira ruído.
+   */
+  const travaDominante = useMemo(() => {
+    const comTrava = rows.filter((r) => r.restricaoLigante);
+    if (comTrava.length === 0) return null;
+    const contagem = new Map();
+    for (const r of comTrava) {
+      const atual = contagem.get(r.restricaoLigante) ?? { n: 0, rotulo: r.rotuloRestricao, gatilho: r.gatilho };
+      atual.n += 1;
+      contagem.set(r.restricaoLigante, atual);
+    }
+    const [chave, info] = [...contagem.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+    if (info.n < Math.max(3, Math.ceil(rows.length / 3))) return null;
+    return { chave, ...info, total: rows.length };
+  }, [rows]);
+
   const onApplyFilters = useCallback(() => { setFilterApplied({ ...filterDraft }); }, [filterDraft]);
   const onClearFilters = useCallback(() => { setFilterDraft({ ...INITIAL_FILTER_STATE }); setFilterApplied({ ...INITIAL_FILTER_STATE }); }, []);
   const onSort = useCallback((k) => { setSort((s) => toggleSort(s.key, s.dir, k, SORT_SCORE_DESC)); }, []);
@@ -124,6 +149,25 @@ export default function TableScore({ data }) {
       </p>
       {filtersScoreExcelActive && scoreTicketFiltered.length > 0 ? (
         <p style={{ fontSize: "0.72rem", opacity: 0.78, marginBottom: "0.5rem" }}>Filtros ▾: <strong>{scoreExcelFiltered.length}</strong> de {scoreTicketFiltered.length} linha{scoreTicketFiltered.length !== 1 ? "s" : ""}.</p>
+      ) : null}
+      {travaDominante ? (
+        <p
+          style={{
+            fontSize: "0.78rem",
+            lineHeight: 1.5,
+            marginBottom: "0.6rem",
+            padding: "0.5rem 0.7rem",
+            borderRadius: 8,
+            border: "1px solid var(--tk-border)",
+            background: "var(--tk-surface-2, transparent)"
+          }}
+        >
+          <strong>
+            {travaDominante.n} de {travaDominante.total} produtos travam na mesma coisa:
+          </strong>{" "}
+          {travaDominante.rotulo}.{" "}
+          <span style={{ opacity: 0.85 }}>Para destravar: {travaDominante.gatilho}.</span>
+        </p>
       ) : null}
       {filteredRows.length === 0 ? (
         <p style={{ opacity: 0.88 }}>Nenhum produto corresponde aos filtros — ajuste os limites ou clique em Limpar.</p>
@@ -191,7 +235,32 @@ export default function TableScore({ data }) {
                       </span>
                     ) : null}
                   </td>
-                  <td>{row.classific}</td>
+                  <td>
+                    {row.classific}
+                    {/*
+                      A restrição que morde primeiro. Fica junto da
+                      classificação de propósito: "bom" e "trava em galeria"
+                      são a mesma frase — o produto presta, o que falta é
+                      nosso. Separá-los faria o leitor ler só o elogio.
+                    */}
+                    {row.restricaoLigante ? (
+                      <span
+                        title={`Trava: ${row.rotuloRestricao}. Para destravar: ${row.gatilho}`}
+                        style={{
+                          display: "block",
+                          fontSize: "0.66rem",
+                          marginTop: "0.15rem",
+                          opacity: 0.72,
+                          cursor: "help",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        ⛔ {row.rotuloRestricao}
+                      </span>
+                    ) : null}
+                  </td>
                   <td style={{ verticalAlign: "middle" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
                       <Link to={`/produto/${encodeURIComponent(row.productId)}`} title="Abrir workspace" className="tk-link-workspace">{row.nome}</Link>
