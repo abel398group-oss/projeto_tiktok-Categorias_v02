@@ -135,8 +135,31 @@ Duas consequências, ambas já tratadas no código:
    browser for lançado por nós, ele é reconhecível. Ligar ao Chrome do dono
    é o que o product-seeker mediu como saída.
 
-**Estado:** A1–A3 implementados (`src/scrape/humanizar.mjs`, 12 testes).
-A4 por fazer.
+**Estado: A1–A4 implementados.** E o A/B do CDP fechou a questão — mesma
+máquina, mesmo código, mesma busca:
+
+| modo | resultado |
+|---|---|
+| browser lançado por nós (headless) | `google.com/sorry/index` |
+| browser lançado por nós (`HEADED`) | `google.com/sorry/index` |
+| **CDP, ligado ao Chrome do utilizador** | **`/search?q=…` com resultados** |
+
+Não é o headless, não é o IP, não é a sessão: é a assinatura de automação do
+navegador que **nós** lançamos. Perfil persistente e `StealthPlugin` já
+estavam ligados quando isto foi medido — não resolvem.
+
+```
+chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\chrome-scrape"
+CDP=1 npm run coleta:uma
+```
+
+O `--user-data-dir` tem de ser pasta à parte: com o perfil normal, um Chrome
+já em execução ignora a flag em silêncio. A mensagem de erro do
+`connectToUserChrome` diz isso, porque descobri-lo sozinho custa uma tarde.
+
+E o detalhe que torna isto usável: em CDP o `encerrarBrowser()` faz
+`disconnect()` e não `close()` — o navegador é do utilizador, e fechá-lo no
+fim de uma coleta mataria as abas dele.
 
 ---
 
@@ -332,10 +355,10 @@ Cinco histórias. **D saiu** — ver o número na secção D.
 | | |
 |---|---|
 | A1–A3 sequência humana | **feito** — `src/scrape/humanizar.mjs`, 12 testes |
-| A4 modo CDP | por fazer — e a medição promoveu-o de hipótese a necessário |
+| A4 modo CDP | **feito** — `CDP=1`, com A/B a comprovar |
 | B1 limiares fora dos `if` | **feito** — `score-parametros.mjs`, 8 testes de caracterização |
 | B2 parâmetros por API + tabela | por fazer |
-| C1 restrição ligante | **feito** — `restricao.mjs`, 9 testes |
+| C1 restrição ligante | **feito** — `restricao.mjs`, 9 testes, e visível no painel |
 
 Suite: de 208 para **237 testes**, 0 falhas.
 
