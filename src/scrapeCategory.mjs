@@ -3690,6 +3690,26 @@ async function main() {
      * o erro e o resultado vai para o log, para se saber quando a leitura
      * seguinte partiu sem disfarce.
      */
+    /*
+     * O MURO PODE ESTAR LOGO NA CHEGADA, não só depois da busca.
+     *
+     * Medido em 05/09/2026: numa coleta o log disse "não achei a caixa de
+     * busca do Google" — e a página tinha-a, quando havia página. O que
+     * acontecera foi o Google servir `/sorry` já no primeiro `goto`, e essa
+     * página não tem caixa nenhuma. O aviso culpava o selector; a culpa era
+     * da chegada.
+     *
+     * Dizer a coisa certa importa: um selector errado arranja-se mudando o
+     * selector, um muro não — e quem lesse o log ia procurar no sítio errado.
+     */
+    if (aqueceu && pareceMuroDeBot(page.url())) {
+      aqueceu = false;
+      console.warn(
+        "[scrape] aquecimento: o Google recebeu-nos já com o muro de anti-automação " +
+        "(/sorry na chegada, antes de qualquer busca). A coleta segue sem disfarce de origem."
+      );
+    }
+
     if (aqueceu) await rolarComoGente(page);
 
     const termoBusca = escolherTermo(TERMOS_DE_AQUECIMENTO);

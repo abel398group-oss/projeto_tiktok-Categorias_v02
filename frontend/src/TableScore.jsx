@@ -71,7 +71,7 @@ export default function TableScore({ data }) {
   const scoreIntro = (
     <IntroCard title="Product Score">
       <p style={introLead}>
-        <strong>Ranking com base em múltiplos factores.</strong> O sistema calcula uma nota de <strong>0 a 100</strong> combinando
+        <strong>Ranking com base em múltiplos factores.</strong> O sistema soma pontos de
         vendas, avaliações, preço, desconto, faixa de oportunidade e variação de vendas face ao run anterior —
         sempre sobre a <strong>última importação</strong>, apenas <strong>em memória</strong>.
       </p>
@@ -79,11 +79,18 @@ export default function TableScore({ data }) {
       <div style={introLogicBox}>
         <div style={introLogicLabel}>Como funciona (por dentro)</div>
         <ul style={introLogicUl}>
-          <li>pontua cada produto de <strong>0 a 100</strong>; ordena todos; mostra só o <strong>top 30</strong>.</li>
+          <li>pontua cada produto, ordena todos, mostra só o <strong>top 30</strong>.</li>
+          <li>
+            <strong>O máximo real é 85, não 100</strong> — e isso não é defeito. Os 15 pontos de
+            «oportunidade» só entram entre 10 e 300 vendas, por isso um campeão de vendas nunca os
+            ganha: por definição, já foi descoberto. Um produto com 85 não tem 15 pontos de
+            qualidade em falta; tem 15 pontos de <em>ainda-não-ser-óbvio</em> em falta, que é o
+            contrário.
+          </li>
           <li>Colunas <strong>Enviar</strong> (workspace) e <strong>Ações</strong> (Spaces). O <strong>nome</strong> abre <code>/produto/…</code>.</li>
         </ul>
       </div>
-      <div style={introWarn}>⚠️ Score interno — não representa lucro nem é um indicador oficial do TikTok.</div>
+      <div style={introWarn}>⚠️ Score interno — não representa lucro nem é um indicador oficial do TikTok. Serve para <strong>ordenar</strong>, não para ler como percentagem.</div>
     </IntroCard>
   );
 
