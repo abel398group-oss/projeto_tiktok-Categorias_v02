@@ -238,6 +238,17 @@ Restrições plausíveis no nosso domínio (a confirmar com o dono, não inventa
 **Porque vale:** o painel hoje ordena; isto faz o painel **dizer o que fazer
 a seguir**. É o mesmo salto que o `faltando` deu.
 
+**Estado: feito** (`scripts/analytics/lib/restricao.mjs`, 9 testes). E o
+resultado deles reproduziu-se: dos 30 produtos do ranking, **27 travam na
+mesma restrição** — `sem_galeria`. Um comando (`npm run pdp:enrich`) destrava
+27 dos 30 melhores produtos. Era isto que estava invisível numa lista
+ordenada por score.
+
+```
+ 27  sem_galeria
+  3  (nada trava)
+```
+
 ---
 
 ### D · Procedência: guardar todas as fontes, seguir a de maior precedência
@@ -315,6 +326,18 @@ B2 parâmetros por API+tabela 1 história   migração
 ```
 
 Cinco histórias. **D saiu** — ver o número na secção D.
+
+### Estado em 05/09/2026
+
+| | |
+|---|---|
+| A1–A3 sequência humana | **feito** — `src/scrape/humanizar.mjs`, 12 testes |
+| A4 modo CDP | por fazer — e a medição promoveu-o de hipótese a necessário |
+| B1 limiares fora dos `if` | **feito** — `score-parametros.mjs`, 8 testes de caracterização |
+| B2 parâmetros por API + tabela | por fazer |
+| C1 restrição ligante | **feito** — `restricao.mjs`, 9 testes |
+
+Suite: de 208 para **237 testes**, 0 falhas.
 
 **A vai primeiro** porque é a única que protege a coleta: sem dados, o resto
 não tem sobre o que correr. E porque a configuração que eles mediram a falhar
