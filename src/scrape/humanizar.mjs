@@ -38,11 +38,6 @@
  * browser, e por isso não decidem nada.
  */
 
-/** @param {number} min @param {number} max */
-export function aleatorioEntre(min, max) {
-  return min + Math.random() * (max - min);
-}
-
 /**
  * Plano de rolagem: quantos passos, cada um com direcção e distância.
  *
