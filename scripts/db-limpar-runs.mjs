@@ -115,8 +115,13 @@ const migradas = await prisma.$executeRawUnsafe(
    update product_snapshots ps
       set pdp_images    = f.pdp_images,
           review_images = coalesce(f.review_images, ps.review_images),
+          -- data_quality pode ser JSON null (nao SQL NULL). coalesce nao apanha esse
+          -- caso, e 'null'::jsonb || '{...}'::jsonb devolve [null,{...}] em vez de um
+          -- merge — 7 linhas ficaram assim em 04/09/2026. Testar o TIPO e o correcto.
           data_quality  = case when f.enr is null then ps.data_quality
-                               else coalesce(ps.data_quality, '{}'::jsonb) || jsonb_build_object('enrichment', f.enr) end
+                               else (case when jsonb_typeof(ps.data_quality)='object'
+                                          then ps.data_quality else '{}'::jsonb end)
+                                    || jsonb_build_object('enrichment', f.enr) end
      from fonte f join alvo a on a.product_ref_id = f.product_ref_id
     where f.rk = 1 and ps.id = a.id
       and not (jsonb_typeof(ps.pdp_images) = 'array' and jsonb_array_length(ps.pdp_images) > 0)`,

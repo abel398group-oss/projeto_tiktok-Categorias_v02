@@ -57,8 +57,13 @@ echo "exportadas $(grep -c . /tmp/_gal_fonte.tsv) galerias da fonte"
           update product_snapshots ps
              set pdp_images   = f.pdp::jsonb,
                  review_images = case when f.rev = 'null' then ps.review_images else f.rev::jsonb end,
+                 -- data_quality pode ser JSON null (nao SQL NULL): coalesce nao apanha
+                 -- esse caso e 'null'::jsonb || '{...}'::jsonb devolve [null,{...}], nao um
+                 -- merge. Aconteceu a 7 linhas em 04/09/2026. Testar o TIPO e o correcto.
                  data_quality  = case when f.enr = 'null' then ps.data_quality
-                                      else coalesce(ps.data_quality,'{}'::jsonb) || jsonb_build_object('enrichment', f.enr::jsonb) end
+                                      else (case when jsonb_typeof(ps.data_quality)='object'
+                                                 then ps.data_quality else '{}'::jsonb end)
+                                           || jsonb_build_object('enrichment', f.enr::jsonb) end
             from gal_fonte f join alvo a using (product_id)
            where ps.id = a.sid;"
     echo "select 'repostas: '||count(*) from products p where p.product_id in ($IDS) and exists (select 1 from product_snapshots s where s.product_ref_id=p.id and jsonb_typeof(s.pdp_images)='array');"
