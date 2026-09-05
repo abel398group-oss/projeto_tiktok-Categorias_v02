@@ -157,6 +157,27 @@ O `--user-data-dir` tem de ser pasta à parte: com o perfil normal, um Chrome
 já em execução ignora a flag em silêncio. A mensagem de erro do
 `connectToUserChrome` diz isso, porque descobri-lo sozinho custa uma tarde.
 
+**E há um segundo pré-requisito, que só apareceu ao correr `CDP=1` a sério
+em 05/09/2026:** o Chrome tem de ter **sessão iniciada no TikTok Shop**. A
+ligação passou, o aquecimento correu, e a coleta ficou presa em «Não estamos
+no Shop. Aguardando login manual» — indefinidamente, porque ninguém estava a
+olhar.
+
+As duas notas parecem contradizer-se e não se contradizem: a pasta é à parte
+(por causa da flag), e é **nessa pasta** que é preciso entrar no TikTok uma
+vez. Depois disso a sessão fica lá.
+
+Primeira utilização, então:
+
+1. abrir o Chrome com `--remote-debugging-port` e o `--user-data-dir` à parte;
+2. ir a `shop.tiktok.com/br` e iniciar sessão **à mão**;
+3. só depois correr `CDP=1 npm run coleta:uma`.
+
+Na mesma corrida, o `pareceMuroDeBot()` provou-se: o Google respondeu com
+`/sorry` mesmo por CDP (a máquina tinha sido usada para dezenas de buscas de
+teste nesse dia), o aviso saiu no log, a coleta **voltou à home e continuou**.
+Era exactamente para isto que existia.
+
 E o detalhe que torna isto usável: em CDP o `encerrarBrowser()` faz
 `disconnect()` e não `close()` — o navegador é do utilizador, e fechá-lo no
 fim de uma coleta mataria as abas dele.

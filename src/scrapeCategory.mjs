@@ -1947,6 +1947,21 @@ async function applyBrazilBrowsingContext(page) {
  *   o Chrome já em execução ignora a flag de depuração em silêncio e a
  *   ligação falha sem dizer porquê.
  *
+ * ⚠⚠ E TEM DE ESTAR COM SESSÃO INICIADA NO TIKTOK SHOP, NESSE Chrome.
+ *
+ *   Medido em 05/09/2026, a correr `CDP=1` a sério: a ligação passou, o
+ *   aquecimento correu, e a coleta ficou presa em «Não estamos no Shop.
+ *   Aguardando login manual» — para sempre, porque ninguém estava a olhar.
+ *
+ *   O `--user-data-dir` à parte, que a nota acima obriga, é PRECISAMENTE o
+ *   que faz o Chrome nascer sem a sessão do perfil normal. As duas notas
+ *   parecem contradizer-se e não se contradizem: a pasta é à parte, e é
+ *   nessa pasta que é preciso entrar no TikTok UMA vez. Depois disso a
+ *   sessão fica lá e as coletas seguintes já a encontram.
+ *
+ *   Primeira vez, então: abrir o Chrome com a flag, ir a
+ *   shop.tiktok.com/br, iniciar sessão à mão, e só depois correr a coleta.
+ *
  * NÃO fechamos o browser no fim: ele é do utilizador, não nosso. Quem
  * chama tem de respeitar isso — ver `browser.disconnect()` no encerramento.
  */
