@@ -10,6 +10,7 @@ import { normalizeCategoryKey } from "./categories-catalog.mjs";
 import { parseCategory } from "./parse-category.mjs";
 import { hasAtLeastHttpPdpImages } from "../../lib/extract-image-urls.mjs";
 import { SNAPSHOT_REPORT_SELECT, SNAPSHOT_REPORT_SELECT_WITH_RUN } from "./snapshot-select.mjs";
+import { restricaoLigante } from "./restricao.mjs";
 import {
   FAIXAS_VENDAS,
   FAIXAS_AVALIACAO,
@@ -29,6 +30,9 @@ function toReportShape(line) {
     confianca: line.confianca,
     confiancaPct: line.confiancaPct,
     faltando: line.faltando,
+    restricaoLigante: line.restricaoLigante ?? null,
+    rotuloRestricao: line.rotuloRestricao ?? null,
+    gatilho: line.gatilho ?? null,
     nome: line.nome,
     categoriaPrincipal: line.categoriaPrincipal ?? "—",
     subcategoria: line.subcategoria ?? "—",
@@ -596,6 +600,13 @@ export function computeProductScoreLine(s, ctx) {
     sc, avg, tot, price: s.price, crescimentoMedido: !semBaseGrowth
   });
 
+  /* O irmão do `faltando`: aquele diz o que impede MEDIR, este o que impede
+     APROVAR. Ver lib/restricao.mjs. `enriched` já foi apurado acima e é a
+     nossa leitura de "tem galeria utilizável". */
+  const trava = restricaoLigante({
+    vendas: sc, nota: avg, avaliacoes: tot, preco: s.price, temGaleria: Boolean(enriched)
+  });
+
   return {
     score: totalPts,
     classific: rotuloScore(totalPts),
@@ -604,6 +615,11 @@ export function computeProductScoreLine(s, ctx) {
     confiancaPct,
     /** Que campos faltaram. Dizer QUAL falta vale mais que dizer que faltou. */
     faltando,
+    /* O que impede APROVAR (o `faltando` diz o que impede MEDIR), e o que o
+       destrava. Null quando nada trava. Ver lib/restricao.mjs. */
+    restricaoLigante: trava.restricaoLigante,
+    rotuloRestricao: trava.rotuloRestricao,
+    gatilho: trava.gatilho,
     nome: (s.product.name ?? "—").slice(0, 40),
     categoriaPrincipal,
     subcategoria,
