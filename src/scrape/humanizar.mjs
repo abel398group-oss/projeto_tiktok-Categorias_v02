@@ -190,6 +190,21 @@ export async function digitarBusca(page, termo, seletores) {
   for (const seletor of seletores) {
     const caixa = await page.$(seletor).catch(() => null);
     if (!caixa) continue;
+
+    /*
+     * Subir até à caixa antes de olhar se ela está visível.
+     *
+     * É o gesto certo: quem rolou e depois quer procurar volta ao topo. NÃO
+     * é a explicação da falha vista em 05/09/2026 numa coleta real ("não
+     * achei a caixa de busca" numa página que a tinha) — medi depois e a
+     * home do Google não rola (`scrollY` fica a 0), por isso a caixa nunca
+     * saiu do ecrã. A causa continua por saber; ver o diagnóstico abaixo,
+     * que existe para a próxima falha trazer a resposta em vez de um
+     * palpite.
+     */
+    await caixa.scrollIntoView().catch(() => {});
+    await dormir(400 + Math.random() * 700);
+
     const visivel = await caixa
       .isIntersectingViewport()
       .catch(() => false);
@@ -201,6 +216,31 @@ export async function digitarBusca(page, termo, seletores) {
     await dormir(500 + Math.random() * 900);
     await page.keyboard.press("Enter").catch(() => {});
     return true;
+  }
+
+  /*
+   * NENHUM SELECTOR CASOU — e "não achei" não é diagnóstico.
+   *
+   * Uma coleta real falhou aqui numa página que tinha a caixa, e a única
+   * coisa que ficou no log foi o aviso. Sem saber em que página estávamos,
+   * nem quais dos selectores existiam no DOM, não há como decidir se o
+   * problema é o selector, a página ou o momento. Isto custa uma linha de
+   * log e poupa uma tarde de adivinhação.
+   */
+  try {
+    const diag = await page.evaluate((sels) => ({
+      url: location.href,
+      titulo: document.title,
+      existemNoDom: sels.filter((s) => document.querySelector(s)),
+      textoInicial: (document.body?.innerText ?? "").slice(0, 120).replace(/\s+/g, " ")
+    }), seletores);
+    console.warn(
+      `[humanizar] caixa de busca não usável. url=${diag.url} · título="${diag.titulo}" · ` +
+      `selectores presentes no DOM=[${diag.existemNoDom.join(", ") || "nenhum"}] · ` +
+      `texto="${diag.textoInicial}"`
+    );
+  } catch {
+    console.warn("[humanizar] caixa de busca não usável, e a página nem respondeu ao diagnóstico.");
   }
   return false;
 }

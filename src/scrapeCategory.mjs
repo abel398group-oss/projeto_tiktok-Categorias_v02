@@ -3634,7 +3634,30 @@ async function main() {
 
   if (!assistedMode) {
     console.log("[scrape] Aquecendo navegador no Google...");
-    await page.goto("https://www.google.com", { waitUntil: "networkidle2" });
+    /*
+     * O ACESSO AO GOOGLE NÃO PODE MATAR A COLETA.
+     *
+     * Este `goto` estava sem protecção — e o comentário logo abaixo já
+     * prometia que "cada passo engole o próprio erro", promessa que o
+     * primeiro passo não cumpria. Em 05/09/2026 uma coleta real morreu aqui
+     * com `Navigation timeout of 30000 ms exceeded`, antes de tocar no
+     * TikTok: o aquecimento é DISFARCE, e disfarce que falha deve ser
+     * reportado, não fatal.
+     *
+     * `networkidle2` também saiu: a home do Google mantém ligações abertas
+     * (sugestões, telemetria) e pode nunca ficar "quieta". Para aquecer basta
+     * o documento — o que interessa a seguir é a rolagem e a digitação.
+     */
+    let aqueceu = true;
+    try {
+      await page.goto("https://www.google.com", { waitUntil: "domcontentloaded", timeout: 45_000 });
+    } catch (e) {
+      aqueceu = false;
+      console.warn(
+        `[scrape] aquecimento: não consegui abrir o Google (${e?.message ?? e}). ` +
+        "A coleta segue sem disfarce de origem."
+      );
+    }
     /*
      * O aquecimento era `goto` + 2 s parado — um bounce perfeito, que é
      * exactamente o que ninguém faz. Rolar e mexer o rato custa uns segundos e
@@ -3652,10 +3675,10 @@ async function main() {
      * o erro e o resultado vai para o log, para se saber quando a leitura
      * seguinte partiu sem disfarce.
      */
-    await rolarComoGente(page);
+    if (aqueceu) await rolarComoGente(page);
 
     const termoBusca = escolherTermo(TERMOS_DE_AQUECIMENTO);
-    const digitou = await digitarBusca(page, termoBusca, [
+    const digitou = aqueceu && await digitarBusca(page, termoBusca, [
       'textarea[name="q"]',
       'input[name="q"]',
       'textarea[title="Pesquisar"]',
@@ -3689,7 +3712,7 @@ async function main() {
         await rolarComoGente(page);
         console.log(`[scrape] aquecimento: busca "${termoBusca}" digitada no Google.`);
       }
-    } else {
+    } else if (aqueceu) {
       console.warn(
         "[scrape] aquecimento: não achei a caixa de busca do Google — " +
         "a coleta segue, mas sem o par busca→destino. Confira os selectores."
