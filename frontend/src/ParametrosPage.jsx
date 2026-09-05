@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Painel } from "./ui.jsx";
+import CortesDoMotor from "./CortesDoMotor.jsx";
 import {
   CATALOGO_PARAMETROS,
   getParametrosSinais,
@@ -50,8 +51,10 @@ export default function ParametrosPage() {
       <div className="tk-content-wrap" style={{ color: "var(--tk-text)", maxWidth: "46rem" }}>
         <h1>Parâmetros</h1>
         <p style={{ opacity: 0.8, marginTop: "0.25rem", fontSize: "0.85rem", lineHeight: 1.5 }}>
-          Os cortes que definem as etiquetas do Ranking («em ascensão», «demanda provada»…).
-          Valem para <strong>este navegador</strong> e aplicam-se na hora — sem reiniciar nada.
+          Dois conjuntos, e a diferença importa. Os primeiros definem as etiquetas do Ranking
+          («em ascensão», «demanda provada»…) e valem para <strong>este navegador</strong>.
+          Os segundos são do <strong>motor de score</strong>: valem no servidor, para toda a
+          gente, e alimentam também o MoneyPrinter. Os dois aplicam-se na hora.
         </p>
 
         <Painel titulo="Cortes dos sinais" nota="Cada número traz a fonte: por que este valor e não outro. Ajuste, guarde, e confira o efeito no Ranking.">
@@ -119,6 +122,12 @@ export default function ParametrosPage() {
             {gravado ? <span style={{ fontSize: "0.8rem", color: "var(--tk-success, #3fb950)" }}>{gravado}</span> : null}
           </div>
         </Painel>
+
+        {/*
+          Painel separado, e não mais campos no de cima: aqueles valem neste
+          navegador, estes valem para toda a gente. Ver CortesDoMotor.jsx.
+        */}
+        <CortesDoMotor />
       </div>
     </main>
   );

@@ -48,7 +48,7 @@ import {
   extractHttpImageUrlsDeep
 } from "./scrape/image-utils.mjs";
 import { medirCompletude, avaliarCompletude } from "./scrape/completude.mjs";
-import { rolarComoGente, digitarBusca, escolherTermo, pareceMuroDeBot } from "./scrape/humanizar.mjs";
+import { rolarComoGente, digitarBusca, escolherTermo, pareceMuroDeBot, proximoIntervalo } from "./scrape/humanizar.mjs";
 
 /**
  * O que se digita no Google antes de entrar no Shop.
@@ -1144,6 +1144,8 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
     };
 
     let visited = 0;
+    /** Conta lotes para a pausa longa ter período. Ver `proximoIntervalo`. */
+    let loteIndex = 0;
     let i = 0;
     while (i < withPdp.length && visited < max) {
       const room = max - visited;
@@ -1158,13 +1160,29 @@ export async function enrichByProductIdWithPdpGallery(browser, page, byProductId
       );
       visited += outcomes.filter(Boolean).length;
       
-      // Delay anti-ban entre lotes de PDPs: muito maior que normal
-      // porque TikTok fica agressivo com múltiplas PDPs
+      /*
+       * Delay anti-ban entre lotes de PDPs: muito maior que normal, porque o
+       * TikTok fica agressivo com múltiplas PDPs.
+       *
+       * A POLÍTICA DE RITMO SOZINHA NÃO TEM FORMA. `nextDelay` varia com a
+       * pressão e as falhas, mas o histograma que sai é uma nuvem sem
+       * período — e um humano que lê fichas não é uma nuvem: abre algumas
+       * seguidas e depois PÁRA, para ler o que abriu. Ver
+       * src/scrape/humanizar.mjs; é a lição da sequência, não do intervalo.
+       *
+       * `proximoIntervalo` mete essa estrutura por cima: de 6 em 6 a 9 em 9
+       * lotes cai uma pausa de 15–40 s. Nos outros usa-se o maior dos dois —
+       * a pausa longa nunca encurta o que a política de risco pediu.
+       */
       const pdpDelayMs = pdpAntiBanPolicy.nextDelay({ reason: "pdp-batch" });
-      const batchDelayMs = Math.max(pdpDelayMs, 3000); // Mínimo 3s entre lotes
-      console.log(`[pdp-anti-ban] Pausa entre lotes: ${batchDelayMs}ms...`);
+      const ritmo = proximoIntervalo(Math.max(pdpDelayMs, 3000), loteIndex, Math.random);
+      const batchDelayMs = Math.max(ritmo.ms, pdpDelayMs, 3000);
+      console.log(
+        `[pdp-anti-ban] Pausa entre lotes: ${batchDelayMs}ms${ritmo.longa ? " (pausa longa — a «ler» o que abriu)" : ""}`
+      );
       await sleepMs(batchDelayMs);
       pdpAntiBanPolicy.recordAction();
+      loteIndex += 1;
     }
     return { visited, max, eligible: withPdp.length };
   } finally {
