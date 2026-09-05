@@ -184,11 +184,17 @@ export async function listImportedCategories(prisma) {
          */
         Prisma.sql`
 WITH runs_ordenados AS (
-  SELECT id, collected_at, created_at,
+  -- Só runs COMPLETOS (>= 90% de total_products gravados): um import a meio
+  -- ganharia a posição 1 e os cartões mostrariam a coleta pela metade.
+  -- Mesma regra de runsCompletos() em _common.mjs.
+  SELECT r.id, r.collected_at, r.created_at,
          row_number() OVER (
-           ORDER BY collected_at DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+           ORDER BY r.collected_at DESC NULLS LAST, r.created_at DESC NULLS LAST, r.id DESC
          ) AS posicao
-    FROM scrape_runs
+    FROM scrape_runs r
+    JOIN (SELECT scrape_run_id, count(*) AS n FROM product_snapshots GROUP BY scrape_run_id) c
+      ON c.scrape_run_id = r.id
+   WHERE c.n >= greatest(1, 0.9 * coalesce(r.total_products, 1))
 ), melhor_run_por_produto AS (
   SELECT ps.product_ref_id AS product_internal_id, MIN(ro.posicao) AS posicao
     FROM product_snapshots ps

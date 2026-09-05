@@ -1,3 +1,4 @@
+import { runsCompletos } from "../_common.mjs";
 /**
  * Cache em memória para os relatórios analytics.
  *
@@ -42,8 +43,13 @@
  */
 const IDADE_MAXIMA_OBSOLETO_MS = 30 * 60 * 1000;
 
-/** Quanto tempo se confia no id de run já lido, para não ir à base a cada pedido. */
-const TTL_ID_DE_RUN_MS = 3000;
+/**
+ * Quanto tempo se confia no id de run já lido, para não ir à base a cada pedido.
+ * 30 s e não 3 s: descobrir o último run completo custa uma consulta real
+ * (ver `runsCompletos`), e um import leva mais de uma hora — não há coleta
+ * nova a aparecer com granularidade de segundos.
+ */
+const TTL_ID_DE_RUN_MS = 30_000;
 
 /**
  * @param {import("@prisma/client").PrismaClient} prisma
@@ -63,13 +69,10 @@ export function criarCacheDeRelatorios(prisma) {
     if (runIdVisto.promessa && agora - runIdVisto.em < TTL_ID_DE_RUN_MS) {
       return runIdVisto.promessa;
     }
-    const promessa = prisma.scrapeRun
-      .findFirst({
-        where: { productSnapshots: { some: {} } },
-        orderBy: { createdAt: "desc" },
-        select: { id: true }
-      })
-      .then((r) => r?.id ?? null)
+    // Mesma regra que os relatórios (`runsCompletos`): um import a meio não
+    // invalida o cache nem é servido como "última coleta".
+    const promessa = runsCompletos(prisma, { take: 1 })
+      .then((r) => r[0]?.id ?? null)
       .catch(() => null);
     runIdVisto = { em: agora, promessa };
     return promessa;

@@ -17,6 +17,15 @@
  * verdadeiro mas incompleto, e ficar com esse em vez do completo seria trocar o
  * dia inteiro por um pedaço dele.
  *
+ * AS GALERIAS SÃO MIGRADAS ANTES DE APAGAR. O "melhor run do dia" é o que tem
+ * mais snapshots — mas a galeria enriquecida (`pdp_images`, `review_images`,
+ * `data_quality.enrichment`) vive no snapshot em que o enriquecimento correu,
+ * que muitas vezes NÃO está nesse run. A primeira execução deste script, em
+ * 04/09/2026, apagou-as: 29 → 21 produtos com galeria (recuperadas do backup
+ * com scripts/db-recuperar-galerias.sh). Agora, para cada produto cuja galeria
+ * só exista em runs a apagar, ela é copiada para o snapshot mais recente que
+ * fica — antes do DELETE. Nada de enriquecimento se perde.
+ *
  * HOJE É POUPADO POR OMISSÃO: pode haver import a escrever neste momento, e
  * apagar por baixo de um import a decorrer é pedir sarilhos. Com as importações
  * paradas isso deixa de valer — e hoje é precisamente onde as duplicatas se
@@ -87,8 +96,36 @@ if (!APLICAR) {
   process.exit(0);
 }
 
-// Lotes pequenos: um DELETE único de ~830 mil linhas segura locks durante
-// minutos e colide com qualquer import a decorrer.
+// 1) Migrar galerias que só existem em runs a apagar — ver cabeçalho.
+const idsApagar = aApagar.map((r) => r.id);
+const migradas = await prisma.$executeRawUnsafe(
+  `with fonte as (
+     select s.product_ref_id, s.pdp_images, s.review_images, s.data_quality->'enrichment' as enr,
+            row_number() over (partition by s.product_ref_id
+                               order by jsonb_array_length(s.pdp_images) desc, s.captured_at desc) rk
+       from product_snapshots s
+      where s.scrape_run_id = any($1)
+        and jsonb_typeof(s.pdp_images) = 'array' and jsonb_array_length(s.pdp_images) > 0
+   ), alvo as (
+     select distinct on (x.product_ref_id) x.product_ref_id, x.id
+       from product_snapshots x
+      where x.scrape_run_id <> all($1)
+      order by x.product_ref_id, x.captured_at desc
+   )
+   update product_snapshots ps
+      set pdp_images    = f.pdp_images,
+          review_images = coalesce(f.review_images, ps.review_images),
+          data_quality  = case when f.enr is null then ps.data_quality
+                               else coalesce(ps.data_quality, '{}'::jsonb) || jsonb_build_object('enrichment', f.enr) end
+     from fonte f join alvo a on a.product_ref_id = f.product_ref_id
+    where f.rk = 1 and ps.id = a.id
+      and not (jsonb_typeof(ps.pdp_images) = 'array' and jsonb_array_length(ps.pdp_images) > 0)`,
+  idsApagar
+);
+console.log(`galerias migradas para snapshots que ficam: ${migradas}`);
+
+// 2) Apagar. Lotes pequenos: um DELETE único de ~830 mil linhas segura locks
+// durante minutos e colide com qualquer import a decorrer.
 const LOTE = 3;
 let feitos = 0;
 for (let i = 0; i < aApagar.length; i += LOTE) {
